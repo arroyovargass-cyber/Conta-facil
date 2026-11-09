@@ -14,3 +14,5 @@ Decisiones: servir archivos estáticos y API juntos para conservar cookies/orige
 Bloqueos externos al preparar esta evidencia: Render aún sin conexión confirmada; elección de organización Supabase pendiente. La única organización encontrada es Free y contiene ContaNova inactivo. No se debe crear proyecto sin la elección requerida por el proveedor. El plan aprobado no autoriza cobros ni upgrades.
 
 Pendiente de comprobar con infraestructura real: disponibilidad Node/runtime y aceptación del Blueprint por Render, conexión/certificado del pooler Supabase, proxy/IP de Render, SMTP y MFA sobre HTTPS, QA visual y aislamiento en la base alojada. No declarar esas verificaciones aprobadas por pasar las pruebas locales.
+
+Actualización de conexiones: GitHub está autenticado como arroyovargass-cyber, pero el proveedor rechazó `CreateRepository` por permisos. Se comprobó que `arroyovargass-cyber/conta-facil` no fue creado. La integración GitHub existente no ofrece creación de repositorios; se requiere crear un repositorio privado vacío desde la cuenta o ampliar el permiso correspondiente. No se subió código ni se eligió otro repositorio existente.
