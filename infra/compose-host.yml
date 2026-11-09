@@ -1,0 +1,52 @@
+name: conta-facil-host
+services:
+  auth:
+    image: public.ecr.aws/supabase/gotrue:v2.197.0
+    extra_hosts: ["host.docker.internal:host-gateway"]
+    environment:
+      GOTRUE_API_HOST: 0.0.0.0
+      GOTRUE_API_PORT: 9999
+      API_EXTERNAL_URL: http://localhost:54321/auth/v1
+      GOTRUE_DB_DRIVER: postgres
+      GOTRUE_DB_DATABASE_URL: postgres://supabase_auth_admin:local-only-auth@host.docker.internal:54322/postgres
+      GOTRUE_SITE_URL: http://localhost:5173
+      GOTRUE_URI_ALLOW_LIST: http://localhost:5173/**
+      GOTRUE_JWT_SECRET: ${LOCAL_JWT_SECRET}
+      GOTRUE_JWT_EXP: 3600
+      GOTRUE_JWT_AUD: authenticated
+      GOTRUE_JWT_DEFAULT_GROUP_NAME: authenticated
+      GOTRUE_JWT_ADMIN_ROLES: service_role
+      GOTRUE_DISABLE_SIGNUP: 'true'
+      GOTRUE_EXTERNAL_EMAIL_ENABLED: 'true'
+      GOTRUE_MAILER_AUTOCONFIRM: 'false'
+      GOTRUE_SMTP_HOST: mail
+      GOTRUE_SMTP_PORT: 1025
+      GOTRUE_SMTP_ADMIN_EMAIL: acceso@contafacil.test
+      GOTRUE_SMTP_SENDER_NAME: Conta Fácil
+      GOTRUE_MAILER_URLPATHS_RECOVERY: /auth/v1/verify
+      GOTRUE_MFA_ENABLED: 'true'
+      GOTRUE_MFA_TOTP_ENROLL_ENABLED: 'true'
+      GOTRUE_MFA_TOTP_VERIFY_ENABLED: 'true'
+  rest:
+    image: public.ecr.aws/supabase/postgrest:v16.5
+    extra_hosts: ["host.docker.internal:host-gateway"]
+    environment:
+      PGRST_DB_URI: postgres://authenticator:local-only-authenticator@host.docker.internal:54322/postgres
+      PGRST_DB_SCHEMAS: public
+      PGRST_DB_ANON_ROLE: anon
+      PGRST_JWT_SECRET: ${LOCAL_JWT_SECRET}
+  gateway:
+    image: public.ecr.aws/supabase/kong:2.8.1
+    environment:
+      KONG_DATABASE: 'off'
+      KONG_DECLARATIVE_CONFIG: /kong.yml
+      KONG_PROXY_LISTEN: 0.0.0.0:8000
+      KONG_LOG_LEVEL: error
+    ports: ['127.0.0.1:54321:8000']
+    volumes: ['./kong.yml:/kong.yml:ro']
+    depends_on: [auth,rest]
+  mail:
+    image: public.ecr.aws/supabase/mailpit:v1.31.3
+    ports: ['127.0.0.1:54324:8025']
+volumes:
+  conta_data:

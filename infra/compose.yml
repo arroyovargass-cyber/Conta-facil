@@ -1,0 +1,66 @@
+name: conta-facil
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_PASSWORD: postgres
+    ports: ['127.0.0.1:54322:5432']
+    volumes:
+      - conta_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ['CMD-SHELL','pg_isready -U postgres']
+      interval: 2s
+      retries: 30
+  auth:
+    image: public.ecr.aws/supabase/gotrue:v2.197.0
+    depends_on:
+      db: {condition: service_healthy}
+    environment:
+      GOTRUE_API_HOST: 0.0.0.0
+      GOTRUE_API_PORT: 9999
+      API_EXTERNAL_URL: http://localhost:54321/auth/v1
+      GOTRUE_DB_DRIVER: postgres
+      GOTRUE_DB_DATABASE_URL: postgres://supabase_auth_admin:local-only-auth@db:5432/postgres
+      GOTRUE_SITE_URL: http://localhost:5173
+      GOTRUE_URI_ALLOW_LIST: http://localhost:5173/**
+      GOTRUE_JWT_SECRET: ${LOCAL_JWT_SECRET}
+      GOTRUE_JWT_EXP: 3600
+      GOTRUE_JWT_AUD: authenticated
+      GOTRUE_JWT_DEFAULT_GROUP_NAME: authenticated
+      GOTRUE_JWT_ADMIN_ROLES: service_role
+      GOTRUE_DISABLE_SIGNUP: 'true'
+      GOTRUE_EXTERNAL_EMAIL_ENABLED: 'true'
+      GOTRUE_MAILER_AUTOCONFIRM: 'false'
+      GOTRUE_SMTP_HOST: mail
+      GOTRUE_SMTP_PORT: 1025
+      GOTRUE_SMTP_ADMIN_EMAIL: acceso@contafacil.test
+      GOTRUE_SMTP_SENDER_NAME: Conta Fácil
+      GOTRUE_MAILER_URLPATHS_RECOVERY: /auth/v1/verify
+      GOTRUE_MFA_ENABLED: 'true'
+      GOTRUE_MFA_TOTP_ENROLL_ENABLED: 'true'
+      GOTRUE_MFA_TOTP_VERIFY_ENABLED: 'true'
+  rest:
+    image: public.ecr.aws/supabase/postgrest:v16.5
+    depends_on:
+      db: {condition: service_healthy}
+    environment:
+      PGRST_DB_URI: postgres://authenticator:local-only-authenticator@db:5432/postgres
+      PGRST_DB_SCHEMAS: public
+      PGRST_DB_ANON_ROLE: anon
+      PGRST_JWT_SECRET: ${LOCAL_JWT_SECRET}
+  gateway:
+    image: public.ecr.aws/supabase/kong:2.8.1
+    environment:
+      KONG_DATABASE: 'off'
+      KONG_DECLARATIVE_CONFIG: /kong.yml
+      KONG_PROXY_LISTEN: 0.0.0.0:8000
+      KONG_LOG_LEVEL: error
+    ports: ['127.0.0.1:54321:8000']
+    volumes: ['./kong.yml:/kong.yml:ro']
+    depends_on: [auth,rest]
+  mail:
+    image: public.ecr.aws/supabase/mailpit:v1.31.3
+    ports: ['127.0.0.1:54324:8025']
+volumes:
+  conta_data:

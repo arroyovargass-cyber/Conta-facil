@@ -1,0 +1,2 @@
+import http from'node:http';
+http.createServer((req,res)=>{let port,path;if(req.url.startsWith('/auth/v1/')){port=9999;path=req.url.slice(8)}else if(req.url.startsWith('/rest/v1/')){port=54323;path=req.url.slice(8)}else{res.writeHead(404);res.end();return}const upstream=http.request({host:'127.0.0.1',port,path,method:req.method,headers:req.headers},r=>{res.writeHead(r.statusCode,r.headers);r.pipe(res)});upstream.on('error',()=>{res.writeHead(503);res.end('{"message":"Local service unavailable"}')});req.pipe(upstream)}).listen(54321,'127.0.0.1');
