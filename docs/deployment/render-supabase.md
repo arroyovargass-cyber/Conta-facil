@@ -2,7 +2,7 @@
 
 ## Estado y alcance
 
-Preparación de código aprobada por el usuario. El archivo `render.yaml` declara solo un servicio web Free, sin base de datos ni disco en Render. La publicación requiere conexión de la cuenta Render y un proyecto Supabase nuevo de la organización elegida por el usuario. El proyecto existente ContaNova no se modifica.
+Preparación de código aprobada por el usuario. El archivo `render.yaml` declara solo un servicio web Free, sin base de datos ni disco en Render. La publicación requiere conexión de la cuenta Render. El usuario eligió reutilizar el proyecto Supabase existente ContaNova (ramtbawbjqxtzcdzfiek), dentro de su organización Free. Antes de migrar se inspeccionan sus tablas, políticas y funciones para preservar información existente.
 
 El repositorio debe ser privado. No publicar `.env`, `.local`, usuarios ni respaldos sintéticos, tokens, certificados o contraseñas. Render no ofrece una shell de administración en todos sus planes gratuitos: migraciones y bootstrap se ejecutan por un canal administrativo seguro, no al arrancar cada instancia.
 
@@ -27,7 +27,7 @@ Health: `/api/health` comprueba PostgreSQL. Un build verde no demuestra desplieg
 
 ## Base de datos
 
-Aplicar las tres migraciones versionadas únicamente en el proyecto nuevo de pruebas, con historial de migración Supabase y revisión de asesores. No usar `infra/migrate.mjs` contra alojamiento: es local-only.
+Antes de aplicar migraciones en ContaNova, comprobar compatibilidad de nombres, permisos y políticas. Aplicar solo los cambios aditivos compatibles, con historial Supabase y revisión de asesores. No ejecutar una migración inicial a ciegas sobre tablas existentes. No usar `infra/migrate.mjs` contra alojamiento: es local-only.
 
 La migración `runtime_api_role` crea un rol NOLOGIN y NOINHERIT sin DDL. Se habilita LOGIN y una contraseña aleatoria solo mediante un canal protegido de provisión; esa contraseña no pertenece a las migraciones ni a Git. El rol puede seleccionar/actualizar las tablas internas necesarias para la API, pero no alterar esquema, administrar roles ni modificar/borrar auditoría. Puede hacer SET ROLE authenticated con INHERIT FALSE: las consultas ordinarias siguen ejecutando RLS de usuario. No conceder a authenticated pertenencia inversa al rol de servidor.
 
@@ -39,12 +39,12 @@ En Supabase, Site URL y redirecciones permitidas deben coincidir con el dominio 
 
 Configurar SMTP personalizado para invitar usuarios fuera del equipo del proyecto. El servicio predeterminado de Supabase tiene restricciones de destinatarios. El correo lo envía Supabase; el backend Render llama a su API HTTPS, por lo que no necesita SMTP saliente desde Render Free. Mailpit local no se despliega públicamente.
 
-El primer administrador se crea con `apps/api/scripts/bootstrap.ts` mediante un canal con permisos de migración/alta y configuración HTTPS del proyecto nuevo. No copiar el administrador local, ni publicar contraseñas predeterminadas. La aceptación de correo y MFA completan el alta.
+El primer administrador se crea con `apps/api/scripts/bootstrap.ts` mediante un canal con permisos de migración/alta y configuración HTTPS del proyecto seleccionado. No copiar el administrador local, ni publicar contraseñas predeterminadas. La aceptación de correo y MFA completan el alta.
 
 ## Criterio de publicación comprobada
 
 1. Servicio Render realmente en plan Free, proyecto Supabase de pruebas en plan Free.
-2. Migraciones y asesores verificados en proyecto correcto; ContaNova sin modificaciones.
+2. Migraciones y asesores verificados en proyecto correcto; datos anteriores de ContaNova preservados.
 3. Health devuelve 200 y la página sirve desde el mismo dominio.
 4. Invitación, contraseña, MFA, selector y permisos funcionan con dos empresas ficticias.
 5. Secretos ausentes del bundle/frontend/logs; acceso cruzado denegado.

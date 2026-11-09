@@ -1,0 +1,18 @@
+{
+  "application": "Conta F\u00e1cil",
+  "supabase": {
+    "project_name": "ContaNova",
+    "project_id": "ramtbawbjqxtzcdzfiek",
+    "api_url": "https://ramtbawbjqxtzcdzfiek.supabase.co",
+    "organization_id": "oiacegvmouqhbmphuurp",
+    "plan_verified": "free",
+    "selection": "user_requested_existing_project",
+    "schema_review": "compatible_names_reviewed_migrations_pending_explicit_approval",
+    "status_verified": "ACTIVE_HEALTHY"
+  },
+  "render": {
+    "service_name": "conta-facil-pruebas",
+    "plan": "free",
+    "status": "account_connection_required"
+  }
+}
