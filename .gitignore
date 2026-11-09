@@ -9,3 +9,5 @@ supabase/.branches/
 coverage/
 
 .local/
+
+dist-server/

@@ -6,10 +6,18 @@ import { ZodError } from "zod";
 import type { AppConfig } from "./config";
 import { HttpError } from "./db";
 import { identity } from "./modules/identity";
+import { databaseOptions } from "./database-options";
+import { hosting } from "./hosting";
 import { companyRoutes } from "./modules/companies";
 export async function createApp(config: AppConfig) {
-  const app = Fastify({ logger: false, bodyLimit: 32768, trustProxy: false });
-  const pool = new pg.Pool({ connectionString: config.DATABASE_URL, max: 10 });
+  const app = Fastify({
+    logger: false,
+    bodyLimit: 32768,
+    trustProxy: config.TRUST_PROXY_HOPS
+      ? (_address: string, hop: number) => hop < config.TRUST_PROXY_HOPS
+      : false,
+  });
+  const pool = new pg.Pool(databaseOptions(config));
   app.addHook("onSend", async (_request, reply, payload) => {
     reply.header("Cache-Control", "no-store");
     reply.header("Vary", "Cookie, Origin");
@@ -65,5 +73,6 @@ export async function createApp(config: AppConfig) {
     await pool.query("select 1");
     return { name: "Conta Fácil", phase: 1, status: "ok" };
   });
+  if (config.STATIC_DIRECTORY) await hosting(app, config.STATIC_DIRECTORY);
   return app;
 }

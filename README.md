@@ -59,3 +59,7 @@ Las pruebas **no deben ejecutarse contra producción**. No hay pruebas tributari
 - [Respaldo y recuperación](docs/runbooks/backup-restore.md)
 
 No se publicó una interfaz aislada: el despliegue funcional necesita API Node, Supabase, SMTP, HTTPS y gestión de secretos configurados. No se crearon recursos externos ni servicios de pago.
+
+## Despliegue de pruebas aprobado
+
+La preparación para **Render Free + Supabase Free** está en [esta guía](docs/deployment/render-supabase.md) y `render.yaml`. El build genera web y backend; `npm start` sirve ambos desde el mismo dominio. Se añadió una tercera migración para el rol limitado del backend. La publicación solo se declara completada después de verificar el servicio remoto y su URL; el build local no la sustituye.

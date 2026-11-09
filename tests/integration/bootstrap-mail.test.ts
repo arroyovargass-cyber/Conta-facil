@@ -1,3 +1,4 @@
+import { runtimeConfig } from "../support/runtime-config";
 import { it, expect } from "vitest";
 import { spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
@@ -5,7 +6,7 @@ import { createApp } from "../../apps/api/src/app";
 import { loadConfig } from "../../apps/api/src/config";
 it("bootstraps a first administrator through the actual emailed verification link", async () => {
   const config = loadConfig(),
-    app = await createApp(config),
+    app = await createApp(await runtimeConfig(config)),
     tag = randomBytes(6).toString("hex"),
     email = "bootstrap-" + tag + "@example.test";
   try {

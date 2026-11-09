@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "concurrently -k \"tsx watch apps/api/src/server.ts\" \"vite --config apps/web/vite.config.ts\"",
-    "build": "tsc --noEmit && vite build --config apps/web/vite.config.ts",
+    "build": "tsc --noEmit && vite build --config apps/web/vite.config.ts && esbuild apps/api/src/server.ts --platform=node --format=esm --packages=external --bundle --outfile=dist-server/server.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:db": "node infra/test-db.mjs",
@@ -16,11 +16,13 @@
     "local:up": "node infra/local-env.mjs && docker compose --env-file .env -f infra/compose.yml up -d",
     "local:down": "docker compose --env-file .env -f infra/compose.yml down",
     "db:migrate": "node infra/migrate.mjs",
-    "format": "prettier --write apps packages tests infra/*.mjs"
+    "format": "prettier --write apps packages tests infra/*.mjs",
+    "start": "node dist-server/server.mjs"
   },
   "dependencies": {
     "@fastify/cookie": "11.1.5",
     "@fastify/helmet": "13.2.0",
+    "@fastify/static": "10.1.10",
     "@supabase/supabase-js": "2.119.0",
     "fastify": "5.12.8",
     "lucide-react": "1.70.0",
@@ -37,6 +39,7 @@
     "@types/react-dom": "19.3.0",
     "@vitejs/plugin-react": "6.3.0",
     "concurrently": "10.0.7",
+    "esbuild": "0.28.2",
     "prettier": "3.9.10",
     "supabase": "3.1.0",
     "tailwindcss": "4.3.5",
@@ -44,5 +47,8 @@
     "typescript": "7.0.2",
     "vite": "8.3.7",
     "vitest": "5.1.0"
+  },
+  "engines": {
+    "node": "24.x"
   }
 }

@@ -1,3 +1,4 @@
+import { runtimeConfig } from "../support/runtime-config";
 import { it, expect } from "vitest";
 import { createClient } from "@supabase/supabase-js";
 import { randomUUID, randomBytes } from "node:crypto";
@@ -8,7 +9,7 @@ import { hash } from "../../apps/api/src/security/crypto";
 it("accepts only matching verified email and prevents replay or expired invitations", async () => {
   const c = loadConfig(),
     pool = new pg.Pool({ connectionString: c.DATABASE_URL }),
-    app = await createApp(c),
+    app = await createApp(await runtimeConfig(c)),
     admin = createClient(c.SUPABASE_URL, c.SUPABASE_SERVICE_KEY, {
       auth: { persistSession: false },
     }),

@@ -1,3 +1,4 @@
+import { runtimeConfig } from "../support/runtime-config";
 import { it, expect } from "vitest";
 import { createClient } from "@supabase/supabase-js";
 import { randomBytes } from "node:crypto";
@@ -5,7 +6,7 @@ import { createApp } from "../../apps/api/src/app";
 import { loadConfig } from "../../apps/api/src/config";
 it("completes recovery with provider-issued recovery session and revokes it", async () => {
   const config = loadConfig(),
-    app = await createApp(config);
+    app = await createApp(await runtimeConfig(config));
   try {
     const admin = createClient(
         config.SUPABASE_URL,

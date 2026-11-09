@@ -1,3 +1,4 @@
+import { runtimeConfig } from "../support/runtime-config";
 import { beforeAll, afterAll, it, expect } from "vitest";
 import { createClient } from "@supabase/supabase-js";
 import pg from "pg";
@@ -84,7 +85,7 @@ const request = (url: string, method = "GET", payload?: any) =>
     payload,
   });
 beforeAll(async () => {
-  app = await createApp(config);
+  app = await createApp(await runtimeConfig(config));
   adminId = await user("admin-" + tag, "Administrador de prueba");
   workerId = await user("worker-" + tag, "Operativo de prueba");
   tenantA = (

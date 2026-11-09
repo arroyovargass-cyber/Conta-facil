@@ -1,0 +1,32 @@
+# One Free web service; persistence and Auth live in the separate Supabase project.
+# No Render database, disk, paid worker or cron is provisioned by this Blueprint.
+services:
+  - type: web
+    name: conta-facil-pruebas
+    runtime: node
+    plan: free
+    region: virginia
+    branch: feat/fase-1
+    buildCommand: npm ci --include=dev && npm run build && npm prune --omit=dev
+    startCommand: npm start
+    healthCheckPath: /api/health
+    autoDeployTrigger: "off"
+    envVars:
+      - key: NODE_VERSION
+        value: 24.22.1
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "10000"
+      - key: TRUST_PROXY_HOPS
+        value: "1"
+      - key: SESSION_KEY
+        generateValue: true
+      - key: DATABASE_URL
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_KEY
+        sync: false
