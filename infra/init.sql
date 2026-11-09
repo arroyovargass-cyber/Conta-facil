@@ -11,3 +11,6 @@ create function auth.uid() returns uuid language sql stable as $$select nullif(c
 create function auth.jwt() returns jsonb language sql stable as $$select coalesce(nullif(current_setting('request.jwt.claims',true),''),'{}')::jsonb$$;
 grant usage on schema auth to authenticated,anon,service_role;
 grant execute on function auth.uid(),auth.jwt() to authenticated,anon,service_role;
+alter role supabase_auth_admin set search_path to auth,public;
+alter function auth.uid() owner to supabase_auth_admin;
+alter function auth.jwt() owner to supabase_auth_admin;

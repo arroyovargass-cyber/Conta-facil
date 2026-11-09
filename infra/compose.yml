@@ -21,6 +21,7 @@ services:
       GOTRUE_API_PORT: 9999
       API_EXTERNAL_URL: http://localhost:54321/auth/v1
       GOTRUE_DB_DRIVER: postgres
+      GOTRUE_DB_NAMESPACE: auth
       GOTRUE_DB_DATABASE_URL: postgres://supabase_auth_admin:local-only-auth@db:5432/postgres
       GOTRUE_SITE_URL: http://localhost:5173
       GOTRUE_URI_ALLOW_LIST: http://localhost:5173/**
@@ -37,6 +38,8 @@ services:
       GOTRUE_SMTP_ADMIN_EMAIL: acceso@contafacil.test
       GOTRUE_SMTP_SENDER_NAME: Conta Fácil
       GOTRUE_MAILER_URLPATHS_RECOVERY: /auth/v1/verify
+      GOTRUE_MAILER_URLPATHS_INVITE: /auth/v1/verify
+      GOTRUE_MAILER_URLPATHS_CONFIRMATION: /auth/v1/verify
       GOTRUE_MFA_ENABLED: 'true'
       GOTRUE_MFA_TOTP_ENROLL_ENABLED: 'true'
       GOTRUE_MFA_TOTP_VERIFY_ENABLED: 'true'
