@@ -34,8 +34,12 @@ import {
 import { apiRequest, post, setCsrf, onSessionExpired } from "./api/client";
 import { MembershipFields } from "./features/users/membership-fields";
 import { CompanyScope } from "./features/companies/scope";
+import { BillingWorkspace } from "./features/billing/BillingWorkspace";
 type Row = Record<string, any>;
 const nav = [
+  { id: "customers", name: "Clientes", icon: Users },
+  { id: "catalog", name: "Productos y servicios", icon: FolderTree },
+  { id: "drafts", name: "Borradores", icon: FileText },
   { id: "home", name: "Inicio", icon: LayoutDashboard },
   { id: "company", name: "Mi empresa", icon: Building2 },
   { id: "users", name: "Usuarios y permisos", icon: Users },
@@ -44,6 +48,15 @@ const nav = [
   { id: "audit", name: "Auditoría", icon: ShieldCheck },
 ];
 const headings: Record<string, [string, string]> = {
+  customers: ["Clientes", "Los contactos comerciales de tu empresa."],
+  catalog: [
+    "Productos y servicios",
+    "Tu catálogo comercial, con precios y monedas.",
+  ],
+  drafts: [
+    "Borradores",
+    "Prepara una factura antes de su validación tributaria.",
+  ],
   home: [
     "Tu empresa, en orden.",
     "Todo lo que necesitas para preparar el siguiente paso.",
@@ -714,7 +727,7 @@ export function App() {
             <strong>{nav.find((n) => n.id === view)?.name}</strong>
           </div>
           <div className="top-actions">
-            <Badge tone="blue">Fase 1 · Configuración</Badge>
+            <Badge tone="blue">Fase 2A · Borradores</Badge>
             <button
               className="icon-button"
               title="Ayuda"
@@ -779,6 +792,14 @@ export function App() {
                 <X size={16} />
               </button>
             </div>
+          )}
+          {["customers", "catalog", "drafts"].includes(view) && (
+            <BillingWorkspace
+              key={tenant + ":" + view + ":" + session.user.id}
+              tenantId={tenant}
+              view={view as "customers" | "catalog" | "drafts"}
+              permissions={overview?.permissions ?? []}
+            />
           )}
           {view === "home" && (
             <>
@@ -1580,6 +1601,12 @@ export function App() {
                       "users.read",
                       "tax.read",
                       "audit.read",
+                      "customers.read",
+                      "customers.manage",
+                      "catalog.read",
+                      "catalog.manage",
+                      "invoices.read",
+                      "invoices.manage",
                     ].map((p) => (
                       <label className="checkbox" key={p}>
                         <input name="permissions" type="checkbox" value={p} />
@@ -1591,15 +1618,21 @@ export function App() {
                               "users.read": "Consultar usuarios",
                               "tax.read": "Consultar configuración tributaria",
                               "audit.read": "Ver auditoría",
+                              "customers.read": "Ver clientes",
+                              "customers.manage": "Gestionar clientes",
+                              "catalog.read": "Ver productos",
+                              "catalog.manage": "Gestionar productos",
+                              "invoices.read": "Ver borradores",
+                              "invoices.manage": "Gestionar borradores",
                             } as Row
                           )[p]
                         }
                       </label>
                     ))}
                     <p className="form-hint">
-                      Los roles personalizados de esta fase conceden permisos de
-                      consulta. La administración permanece reservada al
-                      administrador.
+                      La gestión de clientes, productos y borradores incluye su
+                      consulta y requiere MFA. La administración de usuarios
+                      permanece reservada al administrador.
                     </p>
                   </>
                 ) : (

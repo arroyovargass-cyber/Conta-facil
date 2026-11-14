@@ -283,3 +283,54 @@ it("returns only authorized departments and rejects reassignment to unauthorized
     ).statusCode,
   ).toBe(403);
 });
+it("supports custom billing permissions without unrelated organization permissions", async () => {
+  await f.pool.query(
+    "update public.memberships set scope='company' where tenant_id=$1 and user_id=$2",
+    [f.tenants[0], f.userId],
+  );
+  await f.pool.query(
+    "insert into public.role_permissions select tenant_id,id,'users.manage' from public.roles where tenant_id=$1 and code='billing' on conflict do nothing",
+    [f.tenants[0]],
+  );
+  const r = await request("/roles", "POST", {
+    name: "Facturación personalizada",
+    permissions: ["customers.manage", "catalog.read", "invoices.manage"],
+  });
+  expect(r.statusCode, r.body).toBe(200);
+  const role = r.json().item.id;
+  expect(
+    (
+      await f.pool.query(
+        "select permission from public.role_permissions where role_id=$1",
+        [role],
+      )
+    ).rows.map((r) => r.permission),
+  ).toEqual(
+    expect.arrayContaining([
+      "customers.read",
+      "customers.manage",
+      "invoices.read",
+      "invoices.manage",
+    ]),
+  );
+  await f.pool.query(
+    "delete from public.membership_roles where tenant_id=$1 and user_id=$2",
+    [f.tenants[0], f.userId],
+  );
+  await f.pool.query("insert into public.membership_roles values($1,$2,$3)", [
+    f.tenants[0],
+    f.userId,
+    role,
+  ]);
+  await f.pool.query(
+    "update public.memberships set scope='departments' where tenant_id=$1 and user_id=$2",
+    [f.tenants[0], f.userId],
+  );
+  const o = await request("/invoice-options");
+  expect(o.statusCode, o.body).toBe(200);
+  expect(o.json().departments.map((d: any) => d.id)).toEqual([dep]);
+  expect(
+    (await request("/customers", "POST", { name: "Cliente personalizado" }))
+      .statusCode,
+  ).toBe(200);
+});

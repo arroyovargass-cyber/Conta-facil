@@ -394,6 +394,12 @@ export function companyRoutes(
                 "users.read",
                 "tax.read",
                 "audit.read",
+                "customers.read",
+                "customers.manage",
+                "catalog.read",
+                "catalog.manage",
+                "invoices.read",
+                "invoices.manage",
               ]),
             )
             .min(1),
@@ -405,7 +411,11 @@ export function companyRoutes(
         "insert into public.roles(tenant_id,code,name) values($1,$2,$3) returning *",
         [tenantId, "custom_" + randomToken().slice(0, 12), input.name],
       );
-      for (const perm of new Set(input.permissions))
+      const permissions = new Set<string>(input.permissions);
+      for (const permission of input.permissions)
+        if (permission.endsWith(".manage"))
+          permissions.add(permission.replace(".manage", ".read"));
+      for (const perm of permissions)
         await db.query("insert into public.role_permissions values($1,$2,$3)", [
           tenantId,
           r.rows[0].id,

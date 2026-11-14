@@ -1,6 +1,6 @@
-# Conta Fácil · Fase 1
+# Conta Fácil · Fase 2A
 
-Base funcional de administración multiempresa para Costa Rica. **Desarrollo local; no está certificada ni lista para producción.** No emite comprobantes, no firma XML y no se conecta a Hacienda.
+Administración multiempresa, clientes, productos y borradores comerciales para Costa Rica. **Desarrollo local; no está certificada ni lista para producción.** No emite comprobantes, no firma XML y no se conecta a Hacienda.
 
 ## Ejecutar
 
@@ -37,9 +37,12 @@ npm run build
 
 Las pruebas integradas requieren la base y Auth locales activos, generan usuarios/empresas sintéticos únicos y dejan esos datos para inspección. `test:db` requiere pgTAP instalado en PostgreSQL; con Supabase local completo usa también `supabase test db`. La imagen PostgreSQL Alpine del Compose normal no incluye pgTAP: las pruebas HTTP/Auth/Data API sí funcionan; usa un PostgreSQL con pgTAP o el entorno restringido documentado para las nueve pruebas SQL.
 
-Las pruebas **no deben ejecutarse contra producción**. No hay pruebas tributarias porque esta fase no calcula ni emite comprobantes.
+Las pruebas **no deben ejecutarse contra producción**. Los cálculos son comerciales y exactos, antes de impuestos; no se verifica todavía emisión tributaria.
 
 ## Funciones
+
+- Clientes y productos/servicios por empresa, desactivación y control de versiones.
+- Borradores por departamento, copias históricas, subtotal decimal exacto, idempotencia, edición y archivo/restauración. Sin validez tributaria.
 
 - Identificación y contraseña con Supabase Auth, recuperación, sesiones opacas con tokens cifrados, límite compartido de intentos y TOTP administrativo.
 - Empresas autorizadas, permisos y alcance departamental con RLS, verificados en servidor y en acceso directo a Data API.
@@ -50,6 +53,9 @@ Las pruebas **no deben ejecutarse contra producción**. No hay pruebas tributari
 
 ## Documentación
 
+- [Diseño Fase 2A](docs/superpowers/specs/2026-11-14-conta-facil-fase-2a-design.md)
+- [Plan Fase 2A](docs/superpowers/plans/2026-11-14-conta-facil-fase-2a.md)
+
 - [Diseño aprobado](docs/superpowers/specs/2026-11-09-conta-facil-fase-1-design.md)
 - [Plan](docs/superpowers/plans/2026-11-09-conta-facil-fase-1.md)
 - [Evidencia y límites](docs/runbooks/phase1-evidence.md)
@@ -58,7 +64,7 @@ Las pruebas **no deben ejecutarse contra producción**. No hay pruebas tributari
 - [Entorno restringido](docs/runbooks/local-setup.md)
 - [Respaldo y recuperación](docs/runbooks/backup-restore.md)
 
-No se publicó una interfaz aislada: el despliegue funcional necesita API Node, Supabase, SMTP, HTTPS y gestión de secretos configurados. No se crearon recursos externos ni servicios de pago.
+No se publicó una interfaz aislada: el despliegue funcional necesita API Node, Supabase, SMTP, HTTPS y gestión de secretos configurados. Existe un proyecto separado de Supabase de pruebas; la aplicación todavía no está publicada en línea. No se añadieron servicios de pago en esta fase.
 
 ## Despliegue de pruebas aprobado
 

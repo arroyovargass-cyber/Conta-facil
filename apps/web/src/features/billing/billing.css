@@ -1,0 +1,146 @@
+.billing-workspace {
+  display: grid;
+  gap: 20px;
+  min-width: 0;
+}
+.billing-toolbar,
+.billing-actions {
+  display: flex;
+  gap: 12px;
+  align-items: end;
+  flex-wrap: wrap;
+}
+.billing-toolbar .field {
+  flex: 1;
+  min-width: 180px;
+}
+.billing-editor {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  padding: 24px;
+  display: grid;
+  gap: 20px;
+  min-width: 0;
+}
+.billing-editor h2,
+.billing-line h3 {
+  margin: 0;
+}
+.billing-editor fieldset {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+  display: grid;
+  gap: 18px;
+}
+.billing-editor fieldset:disabled {
+  opacity: 0.8;
+}
+.billing-editor input,
+.billing-editor select,
+.billing-toolbar input,
+.billing-toolbar select {
+  width: 100%;
+  min-width: 0;
+}
+.billing-check {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+.billing-check input {
+  width: auto;
+}
+.billing-table {
+  overflow: auto;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+}
+.billing-table table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.billing-table th,
+.billing-table td {
+  padding: 14px 18px;
+  text-align: left;
+  border-bottom: 1px solid #eef2f6;
+  overflow-wrap: anywhere;
+}
+.billing-table th {
+  color: #64748b;
+  font-size: 12px;
+}
+.billing-table td {
+  font-size: 14px;
+}
+.billing-table .button {
+  white-space: nowrap;
+}
+.billing-lookup {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+.billing-lookup small {
+  color: #64748b;
+}
+.billing-line {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 18px;
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+.billing-subtotal {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 18px;
+  background: #eff8f5;
+  border-radius: 12px;
+}
+.billing-workspace .info-box {
+  display: block;
+}
+.billing-workspace .info-box p {
+  margin-bottom: 0;
+}
+.billing-editor :focus-visible {
+  outline: 3px solid #8ac8b9;
+  outline-offset: 2px;
+}
+@media (max-width: 700px) {
+  .billing-editor {
+    padding: 16px;
+  }
+  .billing-toolbar {
+    align-items: stretch;
+  }
+  .billing-toolbar .field,
+  .billing-toolbar > .button {
+    flex-basis: 100%;
+  }
+  .billing-editor .form-grid {
+    grid-template-columns: 1fr;
+  }
+  .billing-actions > .button {
+    flex: 1;
+    min-width: 140px;
+  }
+  .billing-line {
+    padding: 12px;
+  }
+  .billing-table th,
+  .billing-table td {
+    padding: 12px;
+  }
+  .billing-table {
+    max-width: 100%;
+  }
+}
