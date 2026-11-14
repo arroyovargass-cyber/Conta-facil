@@ -111,6 +111,9 @@ test("creates catalogs and edits, archives and restores a commercial draft", asy
     await expect(page.getByLabel("Observaciones")).toHaveValue(
       "Revisar antes de emitir",
     );
+    await expect(
+      page.getByText("Cargando opciones…", { exact: true }),
+    ).toHaveCount(0);
     await page.screenshot({
       path: ".local/preview/conta-facil-phase2a-" + info.project.name + ".png",
       scale: "css",
@@ -155,6 +158,10 @@ test("retains entered values after a concurrent edit conflict", async ({
       .getByRole("button", { name: "Editar cliente", exact: true })
       .click();
     await page.getByLabel("Nombre del cliente").fill("Cambio local");
+    await page.getByLabel("Nombre del cliente").press("Tab");
+    await expect(
+      page.getByLabel("Tipo de identificación tributaria"),
+    ).toBeFocused();
     await f.pool.query(
       "update public.customers set name='Cambio remoto',version=version+1 where tenant_id=$1",
       [f.tenants[0]],
@@ -220,6 +227,189 @@ test("discards delayed catalog responses after changing company", async ({
     await expect(
       page.getByRole("cell", { name: "Dato reservado Norte", exact: true }),
     ).toHaveCount(0);
+  } finally {
+    release();
+    await f.pool.end();
+  }
+});
+test("keeps a new editor when an earlier detail response arrives late", async ({
+  page,
+}) => {
+  const f = await workspace({ role: "admin", companies: 2 });
+  let release: () => void = () => {};
+  const gate = new Promise<void>((r) => {
+    release = r;
+  });
+  try {
+    const id = (
+      await f.pool.query(
+        "insert into public.customers(tenant_id,name) values($1,'Registro anterior') returning id",
+        [f.tenants[0]],
+      )
+    ).rows[0].id;
+    await login(page, f);
+    await nav(page, "Clientes");
+    let captured: () => void = () => {};
+    const pending = new Promise<void>((r) => {
+      captured = r;
+    });
+    const url = "**/api/companies/" + f.tenants[0] + "/customers/" + id;
+    await page.route(url, async (route) => {
+      const response = await route.fetch();
+      captured();
+      await gate;
+      await route.fulfill({ response });
+    });
+    await page
+      .getByRole("button", { name: "Editar cliente", exact: true })
+      .click();
+    await pending;
+    await page
+      .getByRole("button", { name: "Nuevo cliente", exact: true })
+      .click();
+    await page.getByLabel("Nombre del cliente").fill("Formulario nuevo");
+    const responsePromise = page.waitForResponse((r) =>
+      r.url().endsWith("/customers/" + id),
+    );
+    release();
+    await (await responsePromise).finished();
+    await page.evaluate(
+      () =>
+        new Promise<void>((resolve) =>
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+        ),
+    );
+    await expect(page.getByLabel("Nombre del cliente")).toHaveValue(
+      "Formulario nuevo",
+    );
+  } finally {
+    release();
+    await f.pool.end();
+  }
+});
+test("keeps a new draft when an older draft detail arrives late", async ({
+  page,
+}) => {
+  const f = await workspace({ role: "admin", companies: 2 });
+  let release: () => void = () => {};
+  const gate = new Promise<void>((r) => {
+    release = r;
+  });
+  try {
+    const dep = (
+      await f.pool.query(
+        "insert into public.departments(tenant_id,name) values($1,'Ventas') returning id",
+        [f.tenants[0]],
+      )
+    ).rows[0].id;
+    const customer = (
+      await f.pool.query(
+        "insert into public.customers(tenant_id,name) values($1,'Cliente previo') returning id",
+        [f.tenants[0]],
+      )
+    ).rows[0].id;
+    const id = (
+      await f.pool.query(
+        "insert into public.invoice_drafts(tenant_id,customer_id,department_id,currency,customer_snapshot,created_by,updated_by,operation_id,request_hash,notes) values($1,$2,$3,'CRC','{\"name\":\"Cliente previo\"}',$4,$4,$5,'fixture','Anterior') returning id",
+        [f.tenants[0], customer, dep, f.userId, crypto.randomUUID()],
+      )
+    ).rows[0].id;
+    await f.pool.query(
+      "insert into public.invoice_draft_lines(tenant_id,draft_id,position,description,quantity,unit_price) values($1,$2,1,'Servicio',1,1)",
+      [f.tenants[0], id],
+    );
+    await login(page, f);
+    await nav(page, "Borradores");
+    let captured: () => void = () => {};
+    const pending = new Promise<void>((r) => {
+      captured = r;
+    });
+    await page.route(
+      "**/api/companies/" + f.tenants[0] + "/invoice-drafts/" + id,
+      async (route) => {
+        const response = await route.fetch();
+        captured();
+        await gate;
+        await route.fulfill({ response });
+      },
+    );
+    await page
+      .getByRole("button", { name: "Abrir borrador", exact: true })
+      .click();
+    await pending;
+    await page
+      .getByRole("button", { name: "Nuevo borrador", exact: true })
+      .click();
+    await page.getByLabel("Observaciones").fill("Borrador nuevo");
+    const responsePromise = page.waitForResponse((r) =>
+      r.url().endsWith("/invoice-drafts/" + id),
+    );
+    release();
+    await (await responsePromise).finished();
+    await page.evaluate(
+      () =>
+        new Promise<void>((resolve) =>
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+        ),
+    );
+    await expect(page.getByLabel("Observaciones")).toHaveValue(
+      "Borrador nuevo",
+    );
+  } finally {
+    release();
+    await f.pool.end();
+  }
+});
+test("blocks changing catalog records while a write is pending", async ({
+  page,
+}) => {
+  const f = await workspace({ role: "admin", companies: 2 });
+  let release: () => void = () => {};
+  const gate = new Promise<void>((r) => {
+    release = r;
+  });
+  try {
+    await f.pool.query(
+      "insert into public.customers(tenant_id,name) values($1,'Cliente existente')",
+      [f.tenants[0]],
+    );
+    await login(page, f);
+    await nav(page, "Clientes");
+    await expect(
+      page.getByRole("button", { name: "Editar cliente", exact: true }),
+    ).toBeVisible();
+    await page
+      .getByRole("button", { name: "Nuevo cliente", exact: true })
+      .click();
+    await page.getByLabel("Nombre del cliente").fill("Cliente guardado");
+    let captured: () => void = () => {};
+    const pending = new Promise<void>((r) => {
+      captured = r;
+    });
+    await page.route(
+      "**/api/companies/" + f.tenants[0] + "/customers",
+      async (route) => {
+        const response = await route.fetch();
+        captured();
+        await gate;
+        await route.fulfill({ response });
+      },
+    );
+    await page
+      .getByRole("button", { name: "Guardar cliente", exact: true })
+      .click();
+    await pending;
+    await expect(
+      page.getByRole("button", { name: "Nuevo cliente", exact: true }),
+    ).toBeDisabled();
+    await expect(
+      page.getByRole("button", { name: "Editar cliente", exact: true }),
+    ).toBeDisabled();
+    await expect(
+      page.getByRole("button", { name: "Cerrar formulario", exact: true }),
+    ).toBeDisabled();
+    release();
+    await expect(page.getByRole("status")).toContainText("Cliente guardado");
   } finally {
     release();
     await f.pool.end();

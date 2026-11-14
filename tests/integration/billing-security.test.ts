@@ -99,6 +99,47 @@ it("denies catalog writes without permission and draft writes without MFA", asyn
     ),
   ).resolves.toMatchObject({ rowCount: 0 });
 });
+it("requires restoring an archived draft before changing its commercial header through direct SQL", async () => {
+  await scoped(f.pool, claims, (db) =>
+    db.query("update public.invoice_drafts set archived_at=now() where id=$1", [
+      draft,
+    ]),
+  );
+  await expect(
+    scoped(f.pool, claims, (db) =>
+      db.query(
+        "update public.invoice_drafts set notes='Cambio archivado' where id=$1",
+        [draft],
+      ),
+    ),
+  ).rejects.toMatchObject({ code: "23514" });
+  await expect(
+    scoped(f.pool, claims, (db) =>
+      db.query(
+        "update public.invoice_drafts set archived_at=null,notes='Restauración con cambio' where id=$1",
+        [draft],
+      ),
+    ),
+  ).rejects.toMatchObject({ code: "23514" });
+  await scoped(f.pool, claims, (db) =>
+    db.query("update public.invoice_drafts set archived_at=null where id=$1", [
+      draft,
+    ]),
+  );
+  expect(
+    await scoped(
+      f.pool,
+      claims,
+      async (db) =>
+        (
+          await db.query(
+            "update public.invoice_drafts set notes='Cambio restaurado' where id=$1",
+            [draft],
+          )
+        ).rowCount,
+    ),
+  ).toBe(1);
+});
 it("denies reassignment to unauthorized department and revoked sessions", async () => {
   await expect(
     scoped(f.pool, claims, (db) =>

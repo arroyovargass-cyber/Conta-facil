@@ -62,11 +62,13 @@ async function validateReferences(
           [tenant, line.catalog_item_id],
         )
       ).rows[0];
+      const historical =
+        old?.currency === v.currency &&
+        old.lines.some((l: any) => l.catalog_item_id === line.catalog_item_id);
       if (
         !p ||
-        (!p.active &&
-          !old?.lines.some((l: any) => l.catalog_item_id === p.id)) ||
-        p.currency !== v.currency
+        (!p.active && !historical) ||
+        (p.currency !== v.currency && !historical)
       )
         throw new HttpError(
           400,

@@ -12,6 +12,8 @@ export function Drafts({ base, options }: { base: string; options: Row }) {
   const list = useListing(base + "/invoice-drafts", "archived", "false"),
     alive = useAlive(),
     operation = useRef("");
+  const editorGeneration = useRef(0),
+    writing = useRef(false);
   const [editing, setEditing] = useState<Row | null>(null),
     [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
@@ -24,9 +26,11 @@ export function Drafts({ base, options }: { base: string; options: Row }) {
     !editing.archived_at &&
     (editing.id ? manageable(editing.department_id) : options.canManage);
   function change(k: string, v: any) {
+    editorGeneration.current++;
     setEditing((old) => ({ ...old, [k]: v }));
   }
   function lineChange(index: number, key: string, value: any) {
+    editorGeneration.current++;
     setEditing((old) => ({
       ...old,
       lines: old!.lines.map((l: Row, i: number) =>
@@ -35,6 +39,8 @@ export function Drafts({ base, options }: { base: string; options: Row }) {
     }));
   }
   function create() {
+    if (writing.current) return;
+    editorGeneration.current++;
     operation.current = crypto.randomUUID();
     setEditing({
       customer_id: "",
@@ -48,14 +54,18 @@ export function Drafts({ base, options }: { base: string; options: Row }) {
     setConflict(false);
   }
   async function open(id: string) {
+    if (writing.current) return;
+    const generation = ++editorGeneration.current;
     setError("");
     setNotice("");
     setConflict(false);
     try {
       const r = await apiRequest(base + "/invoice-drafts/" + id);
-      if (alive.current) setEditing(r.item);
+      if (alive.current && editorGeneration.current === generation)
+        setEditing(r.item);
     } catch (e: any) {
-      if (alive.current) setError(e.message);
+      if (alive.current && editorGeneration.current === generation)
+        setError(e.message);
     }
   }
   async function save(e: React.FormEvent) {
@@ -79,7 +89,9 @@ export function Drafts({ base, options }: { base: string; options: Row }) {
     await write(value, "Borrador guardado.");
   }
   async function write(value: Row, message: string) {
-    if (!editing || busy) return;
+    if (!editing || writing.current) return;
+    writing.current = true;
+    const generation = ++editorGeneration.current;
     setBusy(true);
     setError("");
     setNotice("");
@@ -89,17 +101,18 @@ export function Drafts({ base, options }: { base: string; options: Row }) {
         value,
         editing.id ? "PATCH" : "POST",
       );
-      if (!alive.current) return;
+      if (!alive.current || editorGeneration.current !== generation) return;
       setEditing(null);
       setConflict(false);
       setNotice(message);
       list.refresh();
     } catch (e: any) {
-      if (alive.current) {
+      if (alive.current && editorGeneration.current === generation) {
         setError(e.message);
         setConflict(e.status === 409);
       }
     } finally {
+      writing.current = false;
       if (alive.current) setBusy(false);
     }
   }
@@ -240,6 +253,7 @@ export function Drafts({ base, options }: { base: string; options: Row }) {
                   }
                   compatible={(r) => r.currency === editing.currency}
                   onChange={(id, row) => {
+                    editorGeneration.current++;
                     setEditing((old) => ({
                       ...old,
                       lines: old!.lines.map((line: Row, i: number) =>
@@ -350,6 +364,7 @@ export function Drafts({ base, options }: { base: string; options: Row }) {
               className="button secondary"
               disabled={busy}
               onClick={() => {
+                editorGeneration.current++;
                 setEditing(null);
                 setError("");
                 setConflict(false);
@@ -361,6 +376,7 @@ export function Drafts({ base, options }: { base: string; options: Row }) {
               <button
                 type="button"
                 className="button secondary"
+                disabled={busy}
                 onClick={() => void open(editing.id)}
               >
                 Recargar registro
@@ -396,6 +412,7 @@ export function Drafts({ base, options }: { base: string; options: Row }) {
                 <td>
                   <button
                     className="button secondary"
+                    disabled={busy}
                     onClick={() => void open(r.id)}
                   >
                     Abrir borrador

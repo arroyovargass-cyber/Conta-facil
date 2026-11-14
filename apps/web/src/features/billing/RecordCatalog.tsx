@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import { apiRequest, post } from "../../api/client";
 import { Field, useAlive, useListing, type Row } from "./common";
 export function RecordCatalog({
@@ -13,6 +13,8 @@ export function RecordCatalog({
   const customer = kind === "customer",
     list = useListing(base, "active"),
     alive = useAlive();
+  const editorGeneration = useRef(0),
+    writing = useRef(false);
   const [editing, setEditing] = useState<Row | null>(null),
     [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
@@ -39,22 +41,29 @@ export function RecordCatalog({
         active: true,
       };
   function change(key: string, value: any) {
+    editorGeneration.current++;
     setEditing((v) => ({ ...v, [key]: value }));
   }
   async function open(id: string) {
+    if (writing.current) return;
+    const generation = ++editorGeneration.current;
     setError("");
     setNotice("");
     setConflict(false);
     try {
       const r = await apiRequest(base + "/" + id);
-      if (alive.current) setEditing(r.item);
+      if (alive.current && editorGeneration.current === generation)
+        setEditing(r.item);
     } catch (e: any) {
-      if (alive.current) setError(e.message);
+      if (alive.current && editorGeneration.current === generation)
+        setError(e.message);
     }
   }
   async function save(e: React.FormEvent) {
     e.preventDefault();
-    if (!editing || busy) return;
+    if (!editing || writing.current) return;
+    writing.current = true;
+    const generation = ++editorGeneration.current;
     setBusy(true);
     setError("");
     setNotice("");
@@ -68,17 +77,18 @@ export function RecordCatalog({
         payload,
         editing.id ? "PATCH" : "POST",
       );
-      if (!alive.current) return;
+      if (!alive.current || editorGeneration.current !== generation) return;
       setEditing(null);
       setConflict(false);
       setNotice(customer ? "Cliente guardado." : "Producto guardado.");
       list.refresh();
     } catch (e: any) {
-      if (alive.current) {
+      if (alive.current && editorGeneration.current === generation) {
         setError(e.message);
         setConflict(e.status === 409 && Boolean(editing.id));
       }
     } finally {
+      writing.current = false;
       if (alive.current) setBusy(false);
     }
   }
@@ -115,7 +125,10 @@ export function RecordCatalog({
         {canManage && (
           <button
             className="button primary"
+            disabled={busy}
             onClick={() => {
+              if (writing.current) return;
+              editorGeneration.current++;
               setEditing({ ...defaults });
               setError("");
               setNotice("");
@@ -254,6 +267,7 @@ export function RecordCatalog({
               className="button secondary"
               disabled={busy}
               onClick={() => {
+                editorGeneration.current++;
                 setEditing(null);
                 setConflict(false);
                 setError("");
@@ -265,6 +279,7 @@ export function RecordCatalog({
               <button
                 type="button"
                 className="button secondary"
+                disabled={busy}
                 onClick={() => void open(editing.id)}
               >
                 Recargar registro
@@ -300,6 +315,7 @@ export function RecordCatalog({
                 <td>
                   <button
                     className="button secondary"
+                    disabled={busy}
                     onClick={() => void open(r.id)}
                   >
                     {canManage

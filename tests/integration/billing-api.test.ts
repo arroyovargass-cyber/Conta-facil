@@ -334,3 +334,37 @@ it("supports custom billing permissions without unrelated organization permissio
       .statusCode,
   ).toBe(200);
 });
+it("preserves a historical product reference after its catalog currency changes", async () => {
+  await f.pool.query(
+    "update public.catalog_items set currency='USD' where id=$1",
+    [product.id],
+  );
+  const { operation_id, ...edit } = payload();
+  const r = await request("/invoice-drafts/" + draft.id, "PATCH", {
+    ...edit,
+    version: draft.version,
+    notes: "Conservar moneda histórica",
+  });
+  expect(r.statusCode, r.body).toBe(200);
+  expect(r.json().item.currency).toBe("CRC");
+  expect(r.json().item.lines[0].catalog_item_id).toBe(product.id);
+  expect((await request("/invoice-drafts", "POST", payload())).statusCode).toBe(
+    400,
+  );
+});
+it("persists the full hundred-line commercial draft beyond the default request body size", async () => {
+  const input = {
+    ...payload(),
+    lines: Array.from({ length: 100 }, () => ({
+      catalog_item_id: null,
+      description: "漢".repeat(160),
+      quantity: "0.1",
+      unit_price: "0.2",
+    })),
+  };
+  expect(Buffer.byteLength(JSON.stringify(input))).toBeGreaterThan(32768);
+  const r = await request("/invoice-drafts", "POST", input);
+  expect(r.statusCode, r.body).toBe(200);
+  expect(r.json().item.lines).toHaveLength(100);
+  expect(r.json().item.subtotal).toBe("2");
+});
