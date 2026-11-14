@@ -1,4 +1,6 @@
-# ContaNova · revisión previa a enlace con Conta Fácil
+# ContaNova · revisión histórica de enlace descartado
+
+**Decisión vigente (2026-11-14): propuesta descartada por el usuario. No aplicar estas migraciones en ContaNova. Continuar en proyecto separado de Conta Fácil; usar ContaNova solo como referencia de estructura.**
 
 Proyecto: `ramtbawbjqxtzcdzfiek`, nombre ContaNova, organización Free. Fecha: 2026-11-09.
 

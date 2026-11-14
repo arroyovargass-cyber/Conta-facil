@@ -2,7 +2,7 @@
 
 ## Estado y alcance
 
-Preparación de código aprobada por el usuario. El archivo `render.yaml` declara solo un servicio web Free, sin base de datos ni disco en Render. La publicación requiere conexión de la cuenta Render. El usuario eligió reutilizar el proyecto Supabase existente ContaNova (ramtbawbjqxtzcdzfiek), dentro de su organización Free. Antes de migrar se inspeccionan sus tablas, políticas y funciones para preservar información existente.
+Preparación de código aprobada por el usuario. El archivo `render.yaml` declara solo un servicio web Free, sin base de datos ni disco en Render. La publicación requiere conexión de la cuenta Render. La decisión vigente del usuario es crear un proyecto separado «Conta Fácil Pruebas». ContaNova se conserva como referencia de estructura y no es un destino de despliegue ni de migraciones.
 
 El repositorio debe ser privado. No publicar `.env`, `.local`, usuarios ni respaldos sintéticos, tokens, certificados o contraseñas. Render no ofrece una shell de administración en todos sus planes gratuitos: migraciones y bootstrap se ejecutan por un canal administrativo seguro, no al arrancar cada instancia.
 
@@ -27,7 +27,7 @@ Health: `/api/health` comprueba PostgreSQL. Un build verde no demuestra desplieg
 
 ## Base de datos
 
-Antes de aplicar migraciones en ContaNova, comprobar compatibilidad de nombres, permisos y políticas. Aplicar solo los cambios aditivos compatibles, con historial Supabase y revisión de asesores. No ejecutar una migración inicial a ciegas sobre tablas existentes. No usar `infra/migrate.mjs` contra alojamiento: es local-only.
+Aplicar las migraciones únicamente en el proyecto nuevo de Conta Fácil, una vez identificado y verificado. Inspeccionar primero el esquema del destino; registrar historial Supabase y revisar asesores. No ejecutar estas migraciones en ContaNova. No usar `infra/migrate.mjs` contra alojamiento: es local-only.
 
 La migración `runtime_api_role` crea un rol NOLOGIN y NOINHERIT sin DDL. Se habilita LOGIN y una contraseña aleatoria solo mediante un canal protegido de provisión; esa contraseña no pertenece a las migraciones ni a Git. El rol puede seleccionar/actualizar las tablas internas necesarias para la API, pero no alterar esquema, administrar roles ni modificar/borrar auditoría. Puede hacer SET ROLE authenticated con INHERIT FALSE: las consultas ordinarias siguen ejecutando RLS de usuario. No conceder a authenticated pertenencia inversa al rol de servidor.
 
@@ -44,7 +44,7 @@ El primer administrador se crea con `apps/api/scripts/bootstrap.ts` mediante un 
 ## Criterio de publicación comprobada
 
 1. Servicio Render realmente en plan Free, proyecto Supabase de pruebas en plan Free.
-2. Migraciones y asesores verificados en proyecto correcto; datos anteriores de ContaNova preservados.
+2. Migraciones y asesores verificados en proyecto correcto; proyecto nuevo identificado, independiente de ContaNova.
 3. Health devuelve 200 y la página sirve desde el mismo dominio.
 4. Invitación, contraseña, MFA, selector y permisos funcionan con dos empresas ficticias.
 5. Secretos ausentes del bundle/frontend/logs; acceso cruzado denegado.
