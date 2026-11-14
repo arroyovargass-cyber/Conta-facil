@@ -31,3 +31,7 @@ También se añadió `Cache-Control: no-store` en API, con prueba que falló ant
 - Bootstrap con email existente o fallo SMTP deja empresa/invitación pendientes y aún no hay comando de reenvío/recuperación. Revisar resultado antes de repetir; no asumir rollback externo de Auth/correo.
 
 El revisor no juzgó QA visual, Docker Compose completo, seguridad productiva ni normativa tributaria. No hubo segunda revisión: se comprobaron las correcciones con pruebas y la batería completa.
+
+## Actualización 2026-11-14
+
+Se corrigieron los pendientes de CSRF entre pestañas, salida tras sesión vencida y búsqueda en servidor. La revisión visual inicial pendiente se amplió con pruebas Chromium de escritorio/móvil emulado y capturas del panel; no es una auditoría completa de accesibilidad. La captura de respuestas de empresas de una sesión anterior se reprodujo y corrigió como problema importante. Se mantienen pendientes la prueba concurrente con dos actores distintos y la recuperación/reenvío de bootstrap. Detalles en [cierre funcional](../development/phase1-closure-evidence.md).

@@ -67,3 +67,9 @@ La preparación para **Render Free + Supabase Free** está en [esta guía](docs/
 El proyecto independiente **Conta Fácil Pruebas** ya está creado en Supabase Free y su esquema está instalado. Ver [evidencia remota](docs/deployment/supabase-provisioning-evidence.md). La aplicación web aún requiere publicación en Render y configuración de secretos.
 
 El README inicial del repositorio GitHub se conserva en [esta referencia](docs/reference/github-initial-readme.md). Su commit original permanece en el historial integrado.
+
+## Mejoras funcionales y pruebas de navegador
+
+Se cerraron los pendientes de sesión entre pestañas, logout vencido y búsqueda de servidor. Las actividades se actualizan después de guardar y las respuestas tardías se descartan al cambiar de vista, empresa o usuario. Ver [evidencia](docs/development/phase1-closure-evidence.md).
+
+`npm run test:browser` ejecuta Chromium contra la aplicación compilada y servicios locales reales. Requiere Chromium en `/usr/bin/chromium`, otro ejecutable indicado por `CHROMIUM_PATH`, o el navegador instalado de Playwright. El runner no usa datos remotos y guarda resultados/capturas en `.local/`. Última batería: 50 pruebas de aplicación, 9 SQL y 10 de navegador aprobadas.

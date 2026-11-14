@@ -31,7 +31,7 @@ import {
   KeyRound,
   PanelLeftClose,
 } from "lucide-react";
-import { apiRequest, post, setCsrf } from "./api/client";
+import { apiRequest, post, setCsrf, onSessionExpired } from "./api/client";
 import { MembershipFields } from "./features/users/membership-fields";
 import { CompanyScope } from "./features/companies/scope";
 type Row = Record<string, any>;
@@ -127,13 +127,67 @@ export function App() {
     [notice, setNotice] = useState(""),
     [mobile, setMobile] = useState(false),
     [query, setQuery] = useState(""),
+    [search, setSearch] = useState(""),
+    [statusFilter, setStatusFilter] = useState("all"),
+    [listLoading, setListLoading] = useState(false),
+    [activitiesVersion, setActivitiesVersion] = useState(0),
     [next, setNext] = useState<any>(null),
     [qr, setQr] = useState<Row | null>(null),
     [recovery, setRecovery] = useState(false);
   const scope = useRef(new CompanyScope()),
-    initialized = useRef(false);
+    initialized = useRef(false),
+    sessionGeneration = useRef(0);
+  const listContextKey = JSON.stringify([
+    tenant,
+    view,
+    tab,
+    search,
+    statusFilter,
+  ]);
+  const listContext = useRef(listContextKey),
+    listSequence = useRef(0),
+    previousView = useRef("");
+  listContext.current = listContextKey;
+  useEffect(() => {
+    const timer = setTimeout(() => setSearch(query.trim()), 300);
+    return () => clearTimeout(timer);
+  }, [query]);
+  function clearLocalSession(message = "") {
+    sessionGeneration.current++;
+    scope.current.clear();
+    setSession(null);
+    setCompanies([]);
+    setTenant("");
+    setOverview(null);
+    setRows([]);
+    setRoles([]);
+    setDepartments([]);
+    setBranches([]);
+    setModal(null);
+    setQr(null);
+    setQuery("");
+    setSearch("");
+    setStatusFilter("all");
+    setNext(null);
+    setView("home");
+    setError("");
+    setNotice(message);
+    setMobile(false);
+    setCsrf("");
+  }
+  useEffect(
+    () =>
+      onSessionExpired(() =>
+        clearLocalSession(
+          "Tu sesión terminó. Ingresa nuevamente para continuar.",
+        ),
+      ),
+    [],
+  );
   const refreshSession = async () => {
+    const generation = sessionGeneration.current;
     const data = await apiRequest("/auth/session");
+    if (generation !== sessionGeneration.current) return null;
     setCsrf(data.csrf);
     setSession(data);
     return data;
@@ -148,12 +202,21 @@ export function App() {
   const mfaNeeded = session?.mfaRequired && session?.aal !== "aal2";
   useEffect(() => {
     if (!session || mfaNeeded) return;
+    let active = true;
+    const generation = sessionGeneration.current;
     apiRequest("/companies")
       .then((data) => {
+        if (!active || generation !== sessionGeneration.current) return;
         setCompanies(data.items);
         if (data.items.length === 1) choose(data.items[0].id);
       })
-      .catch((e) => setError(e.message));
+      .catch((e) => {
+        if (active && generation === sessionGeneration.current)
+          setError(e.message);
+      });
+    return () => {
+      active = false;
+    };
   }, [session?.user?.id, session?.aal]);
   function choose(id: string) {
     scope.current.select(id);
@@ -171,20 +234,26 @@ export function App() {
   }
   const base = "/companies/" + tenant;
   async function loadData(append = false) {
-    if (!tenant || scope.current.active !== tenant) return;
-    const token = scope.current.capture();
+    if (
+      !tenant ||
+      scope.current.active !== tenant ||
+      listContext.current !== listContextKey
+    )
+      return;
+    const token = scope.current.capture(),
+      sequence = ++listSequence.current;
     setError("");
+    setListLoading(true);
     try {
       const current = await scope.current.load(async () => {
         const info = await apiRequest(base + "/overview");
         let data: Row = { items: [] };
-        if (view === "organization")
-          data = await apiRequest(
-            base +
-              "/" +
-              tab +
-              (append && next !== null ? "?cursor=" + next : ""),
-          );
+        if (view === "organization") {
+          const params = new URLSearchParams({ search });
+          if (statusFilter !== "all") params.set("active", statusFilter);
+          if (append && next !== null) params.set("cursor", String(next));
+          data = await apiRequest(base + "/" + tab + "?" + params);
+        }
         if (view === "users") data = await apiRequest(base + "/memberships");
         if (view === "audit")
           data = await apiRequest(
@@ -195,24 +264,48 @@ export function App() {
         if (view === "tax") data = await apiRequest(base + "/tax-settings");
         return { info, data };
       }, tenant);
-      if (!current) return;
+      if (
+        !current ||
+        sequence !== listSequence.current ||
+        listContext.current !== listContextKey
+      )
+        return;
       setOverview(current.info);
       setRows((prev) =>
         append ? [...prev, ...current.data.items] : current.data.items,
       );
       setNext(current.data.nextCursor ?? null);
     } catch (e: any) {
-      if (!scope.current.matches(token)) return;
+      if (
+        !scope.current.matches(token) ||
+        sequence !== listSequence.current ||
+        listContext.current !== listContextKey
+      )
+        return;
       setError(e.message);
       setRows([]);
+    } finally {
+      if (
+        sequence === listSequence.current &&
+        listContext.current === listContextKey
+      )
+        setListLoading(false);
     }
   }
   useEffect(() => {
+    const current = JSON.stringify([tenant, view, tab]),
+      changed = previousView.current !== current;
+    previousView.current = current;
     setRows([]);
     setNext(null);
-    setQuery("");
+    if (changed && (query || search || statusFilter !== "all")) {
+      setQuery("");
+      setSearch("");
+      setStatusFilter("all");
+      if (search || statusFilter !== "all") return;
+    }
     void loadData();
-  }, [tenant, view, tab]);
+  }, [tenant, view, tab, search, statusFilter]);
   async function act(fn: () => Promise<any>) {
     const token = scope.current.capture();
     setBusy(true);
@@ -241,13 +334,7 @@ export function App() {
   async function logout() {
     await act(async () => {
       await post("/auth/logout", {});
-      scope.current.clear();
-      setSession(null);
-      setCompanies([]);
-      setTenant("");
-      setOverview(null);
-      setRows([]);
-      setCsrf("");
+      clearLocalSession();
     });
   }
   async function openModal(kind: string, row?: Row) {
@@ -303,6 +390,7 @@ export function App() {
       }
       if (!scope.current.matches(token)) return;
       setModal(null);
+      if (kind === "economic-activities") setActivitiesVersion((v) => v + 1);
       setNotice("Cambios guardados correctamente.");
       await loadData();
     });
@@ -311,9 +399,7 @@ export function App() {
     overview?.permissions?.includes(permission);
   const company = overview?.company ?? companies.find((c) => c.id === tenant),
     counts = overview?.counts ?? {},
-    filtered = rows.filter((r) =>
-      JSON.stringify(r).toLowerCase().includes(query.toLowerCase()),
-    );
+    filtered = rows;
   if (loading)
     return (
       <div className="loading">
@@ -1045,6 +1131,16 @@ export function App() {
                         : "Terminales"}{" "}
                   <span className="count-pill">{rows.length}</span>
                 </h3>
+                <select
+                  aria-label="Filtrar por estado"
+                  className="status-filter"
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                >
+                  <option value="all">Todos los estados</option>
+                  <option value="true">Activos</option>
+                  <option value="false">Inactivos</option>
+                </select>
                 <div className="search">
                   <Search size={16} />
                   <input
@@ -1055,7 +1151,11 @@ export function App() {
                   />
                 </div>
               </div>
-              {filtered.length ? (
+              {listLoading ? (
+                <div className="empty" role="status">
+                  Buscando registros…
+                </div>
+              ) : filtered.length ? (
                 <div className="table-scroll">
                   <table>
                     <thead>
@@ -1314,7 +1414,10 @@ export function App() {
                     </button>
                   )}
                 </div>
-                <Activities tenant={tenant} />
+                <Activities
+                  tenant={tenant}
+                  refreshVersion={activitiesVersion}
+                />
               </section>
             </>
           )}
@@ -1611,7 +1714,7 @@ function Empty({ icon: Icon, title, text }: any) {
     </div>
   );
 }
-function Activities({ tenant }: any) {
+function Activities({ tenant, refreshVersion = 0 }: any) {
   const [items, setItems] = useState<Row[]>([]),
     [error, setError] = useState("");
   useEffect(() => {
@@ -1626,7 +1729,7 @@ function Activities({ tenant }: any) {
     return () => {
       live = false;
     };
-  }, [tenant]);
+  }, [tenant, refreshVersion]);
   return error ? (
     <p className="alert">{error}</p>
   ) : items.length ? (

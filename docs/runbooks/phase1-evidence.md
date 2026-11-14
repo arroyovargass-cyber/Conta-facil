@@ -21,3 +21,7 @@ Sin prueba visual/teclado en navegador: falta cua_repl.js y la ruta de preview r
 No se validaron XML/XSD/firma, cálculos tributarios ni comunicación con Hacienda. No existen módulos fiscales operativos ni contabilidad. Actividades y configuración se guardan como borrador, sin certificación de catálogo oficial. Roles personalizados limitados a consulta; administración y cambios estructurales requieren el rol administrativo y MFA. Datos de prueba son sintéticos y los conteos de interfaz no representan actividad fiscal.
 
 Pendientes de operación productiva: proyecto/hosting/SMTP, secretos, roles DB mínimos, retención validada, exportación externa de auditoría, limpieza programada de temporales y QA de navegador. Los centros de costos y departamentos ya existen; no hay reparto de comprobantes porque aún no se implementaron documentos.
+
+## Actualización posterior: navegador y pendientes de sesión
+
+El bloqueo inicial de navegador quedó superado usando Chromium instalado y Playwright, según la guía Cloud actual y el destino Render elegido. Se verificaron 10 casos de escritorio/móvil emulado, junto con 50 pruebas de aplicación y 9 SQL. Ver [evidencia del cierre funcional](../development/phase1-closure-evidence.md). La aplicación continúa sin publicación online.

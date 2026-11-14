@@ -4,6 +4,7 @@ import type pg from "pg";
 import { z } from "zod";
 import type { AppConfig } from "../config";
 import { hash, randomToken, seal, unseal } from "../security/crypto";
+import { csrfForSession } from "../security/csrf";
 import { HttpError, type Claims } from "../db";
 import { normalizeIdentification } from "../../../../packages/domain/src/identity";
 export type Principal = {
@@ -60,7 +61,7 @@ export function identity(pool: pg.Pool, config: AppConfig) {
   ) {
     const c = claims(tokens.access_token),
       sid = randomToken(),
-      csrf = randomToken();
+      csrf = csrfForSession(sid, config.SESSION_KEY);
     await pool.query(
       `insert into private.sessions(id,user_id,auth_session_id,encrypted_tokens,csrf_hash,expires_at) values($1,$2,$3,$4,$5,now()+interval '8 hours')`,
       [
@@ -152,7 +153,18 @@ export function identity(pool: pg.Pool, config: AppConfig) {
           "/api/auth/invitations/accept",
         ];
         if (!publicRoutes.includes(req.url.split("?")[0])) {
-          const p = await authenticate(req);
+          let p: Principal;
+          try {
+            p = await authenticate(req);
+          } catch (error) {
+            if (
+              req.url.split("?")[0] === "/api/auth/logout" &&
+              error instanceof HttpError &&
+              error.statusCode === 401
+            )
+              return;
+            throw error;
+          }
           if (
             typeof req.headers["x-csrf-token"] !== "string" ||
             hash(req.headers["x-csrf-token"]) !== p.csrf
@@ -214,11 +226,12 @@ export function identity(pool: pg.Pool, config: AppConfig) {
         "select name from public.profiles where id=$1",
         [p.userId],
       );
-      const csrf = randomToken();
-      await pool.query("update private.sessions set csrf_hash=$2 where id=$1", [
-        p.sessionId,
-        hash(csrf),
-      ]);
+      const csrf = csrfForSession(req.cookies.cf_session!, config.SESSION_KEY);
+      if (p.csrf !== hash(csrf))
+        await pool.query(
+          "update private.sessions set csrf_hash=$2 where id=$1",
+          [p.sessionId, hash(csrf)],
+        );
       const isAdmin = await pool.query(
         `select exists(select 1 from public.membership_roles mr join public.roles r on r.id=mr.role_id join public.memberships m on m.tenant_id=mr.tenant_id and m.user_id=mr.user_id where mr.user_id=$1 and m.active and r.code='admin') or exists(select 1 from private.platform_operators where user_id=$1) required`,
         [p.userId],
@@ -235,7 +248,16 @@ export function identity(pool: pg.Pool, config: AppConfig) {
       };
     });
     app.post("/api/auth/logout", async (req, reply) => {
-      const p = req.principal!;
+      const p = req.principal;
+      if (!p) {
+        if (req.cookies.cf_session)
+          await pool.query(
+            "update private.sessions set revoked_at=now() where id=$1",
+            [hash(req.cookies.cf_session)],
+          );
+        reply.clearCookie("cf_session", { path: "/" });
+        return { ok: true };
+      }
       await pool.query(
         "update private.sessions set revoked_at=now() where user_id=$1",
         [p.userId],

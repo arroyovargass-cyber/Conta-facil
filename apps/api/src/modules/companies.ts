@@ -136,12 +136,21 @@ export function companyRoutes(
       const p = await auth.authenticate(req),
         { tenantId } = params(req.params),
         query = z
-          .object({ cursor: z.coerce.number().int().min(0).default(0) })
+          .object({
+            cursor: z.coerce.number().int().min(0).default(0),
+            search: z.string().trim().max(100).default(""),
+            active: z.enum(["true", "false"]).optional(),
+          })
           .parse(req.query);
       return scoped(pool, p.claims, async (db) => {
         const result = await db.query(
-          `select * from public.${entity.table} where tenant_id=$1 order by id limit 51 offset $2`,
-          [tenantId, query.cursor],
+          `select * from public.${entity.table} where tenant_id=$1 and name ilike $3 and ($4::boolean is null or active=$4) order by name,id limit 51 offset $2`,
+          [
+            tenantId,
+            query.cursor,
+            "%" + query.search.replace(/[\\%_]/g, "\\$&") + "%",
+            query.active === undefined ? null : query.active === "true",
+          ],
         );
         return {
           items: result.rows.slice(0, 50),
