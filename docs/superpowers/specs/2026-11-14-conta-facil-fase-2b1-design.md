@@ -1,6 +1,6 @@
 # Fase 2B1 — preparación y vista previa del IVA
 
-Fecha:2026-11-14. Estado: aprobado por el usuario al responder «Continuar»; pendiente de ejecución del plan.
+Fecha:2026-11-14. Estado: aprobado por el usuario al responder «Continuar»; implementado y verificado localmente según el plan.
 
 ## Intención y enfoque elegido
 

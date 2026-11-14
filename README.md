@@ -57,6 +57,7 @@ Las pruebas **no deben ejecutarse contra producción**. Los cálculos son comerc
 
 - [Diseño Fase 2B1](docs/superpowers/specs/2026-11-14-conta-facil-fase-2b1-design.md)
 - [Plan Fase 2B1](docs/superpowers/plans/2026-11-14-conta-facil-fase-2b1.md)
+- [Evidencia Fase 2B1](docs/development/phase2b1-evidence.md)
 - [Diseño Fase 2A](docs/superpowers/specs/2026-11-14-conta-facil-fase-2a-design.md)
 - [Plan Fase 2A](docs/superpowers/plans/2026-11-14-conta-facil-fase-2a.md)
 - [Evidencia y límites Fase 2A](docs/development/phase2a-evidence.md)
