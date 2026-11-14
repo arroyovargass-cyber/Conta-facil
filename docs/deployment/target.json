@@ -32,6 +32,8 @@
     "visibility": "public",
     "visibility_authorization": "explicit_user_approval",
     "deployment_branch": "main",
-    "status": "upload_prepared"
+    "status": "upload_blocked_by_github_write_permissions_403",
+    "remote_main_verified": "8fc87456b8ac9dc0bb1c553b3ad9607998d753a1",
+    "integration_settings_url": "https://github.com/settings/installations/174563757"
   }
 }
