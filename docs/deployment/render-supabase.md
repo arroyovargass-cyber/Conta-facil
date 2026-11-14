@@ -4,7 +4,7 @@
 
 Preparación de código aprobada por el usuario. El archivo `render.yaml` declara solo un servicio web Free, sin base de datos ni disco en Render. La publicación requiere conexión de la cuenta Render. La decisión vigente del usuario es crear un proyecto separado «Conta Fácil Pruebas». ContaNova se conserva como referencia de estructura y no es un destino de despliegue ni de migraciones.
 
-El repositorio debe ser privado. No publicar `.env`, `.local`, usuarios ni respaldos sintéticos, tokens, certificados o contraseñas. Render no ofrece una shell de administración en todos sus planes gratuitos: migraciones y bootstrap se ejecutan por un canal administrativo seguro, no al arrancar cada instancia.
+El usuario autorizó expresamente el repositorio público `arroyovargass-cyber/Conta-facil`. Se despliega la rama `main`. No publicar `.env`, `.local`, usuarios ni respaldos sintéticos, tokens, certificados o contraseñas. Render no ofrece una shell de administración en todos sus planes gratuitos: migraciones y bootstrap se ejecutan por un canal administrativo seguro, no al arrancar cada instancia.
 
 ## Construcción y arranque
 

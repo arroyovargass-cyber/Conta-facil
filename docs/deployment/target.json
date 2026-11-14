@@ -25,5 +25,13 @@
     "purpose": "structural_ideas_only",
     "migrations_authorized": false,
     "copy_data": false
+  },
+  "github": {
+    "repository": "arroyovargass-cyber/Conta-facil",
+    "url": "https://github.com/arroyovargass-cyber/Conta-facil",
+    "visibility": "public",
+    "visibility_authorization": "explicit_user_approval",
+    "deployment_branch": "main",
+    "status": "upload_prepared"
   }
 }
