@@ -1,6 +1,6 @@
 # Fase 2B1 — preparación y vista previa del IVA
 
-Fecha:2026-11-14. Estado: propuesta para aprobación; no implementar antes de aprobarla.
+Fecha:2026-11-14. Estado: aprobado por el usuario al responder «Continuar»; pendiente de ejecución del plan.
 
 ## Intención y enfoque elegido
 
@@ -74,4 +74,4 @@ El implementador decide organización de helpers, nombres de componentes y forma
 
 ## Revisión del diseño
 
-Un builder check independiente leyó diseño y matriz y no encontró preguntas importantes pendientes para planificar. El diseño sigue pendiente de aprobación del usuario; las dudas normativas y bloqueos de2B2 permanecen expresos.
+Un builder check independiente leyó diseño y matriz y no encontró preguntas importantes pendientes para planificar. El usuario aprobó este diseño; las dudas normativas y bloqueos de2B2 permanecen expresos.
