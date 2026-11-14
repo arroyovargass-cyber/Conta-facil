@@ -12,6 +12,7 @@ import { companyRoutes } from "./modules/companies";
 import { customerRoutes } from "./modules/customers";
 import { catalogRoutes } from "./modules/catalog";
 import { invoicingRoutes } from "./modules/invoicing";
+import { fiscalPreparationRoutes } from "./modules/fiscal-preparation";
 export async function createApp(config: AppConfig) {
   const app = Fastify({
     logger: false,
@@ -75,6 +76,7 @@ export async function createApp(config: AppConfig) {
   customerRoutes(app, pool, auth);
   catalogRoutes(app, pool, auth);
   invoicingRoutes(app, pool, auth);
+  fiscalPreparationRoutes(app, pool, auth);
   app.get("/api/health", async () => {
     await pool.query("select 1");
     return { name: "Conta Fácil", phase: 1, status: "ok" };
