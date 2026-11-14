@@ -38,4 +38,4 @@ Esta secuencia reutiliza la arquitectura existente React/TypeScript/Fastify/Post
 
 La recuperación del paquete XSD vigente bloquea declarar conforme un generador XML; no impide diseñar catálogos y borradores. Las credenciales y certificado STAG bloquean pruebas reales de firma/transmisión; no deben solicitarse en el chat. La publicación GitHub/Render sigue pendiente de acceso de escritura, de forma independiente del desarrollo local.
 
-La siguiente decisión es aprobar el enfoque incremental antes del diseño detallado de Fase 2. Este documento es una investigación y propuesta, no un diseño aprobado.
+El enfoque incremental fue aprobado y la Fase2A se implementó. La revisión de2B encontró un XSD oficial descargable, pero con discrepancias respecto al anexo2026; ver [matriz normativa2B](phase2b-normative-matrix.md). El paquete descargado sigue inhabilitado para runtime hasta confirmar revisión y dependencias.
