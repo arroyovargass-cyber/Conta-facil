@@ -1,6 +1,6 @@
 # Conta Fácil — custodia de Hacienda y bandejas departamentales
 
-Fecha:2026-11-14. Estado: propuesta para aprobación. Complementa el circuito integral y delimita el siguiente incremento funcional.
+Fecha:2026-11-14. Estado: aprobado por el usuario al responder «Si»; pendiente de ejecución del plan. Complementa el circuito integral y delimita el siguiente incremento funcional.
 
 ## Intención, decisiones y alcance
 
@@ -100,4 +100,4 @@ Cierre de este incremento: custodia/configuración/bandejas iniciales comprobabl
 
 ## Revisión del diseño
 
-Un builder check independiente leyó el diseño y el contexto y no encontró preguntas importantes pendientes para planificar. El usuario ya eligió departamentos/bandejas sin cartera financiera; la aprobación de este diseño concreto sigue pendiente. Las comprobaciones normativas indicadas no se consideran resueltas por esa aprobación.
+Un builder check independiente leyó el diseño y el contexto y no encontró preguntas importantes pendientes para planificar. El usuario ya eligió departamentos/bandejas sin cartera financiera; el usuario aprobó este diseño concreto. Las comprobaciones normativas indicadas no se consideran resueltas por esa aprobación.
