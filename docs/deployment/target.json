@@ -2,11 +2,18 @@
   "application": "Conta Fácil",
   "supabase": {
     "project_name": "Conta Fácil Pruebas",
-    "project_id": null,
-    "api_url": null,
-    "organization_id": null,
+    "project_id": "ryobvhcarlpayqzaumdf",
+    "api_url": "https://ryobvhcarlpayqzaumdf.supabase.co",
+    "organization_id": "oiacegvmouqhbmphuurp",
     "selection": "user_requested_separate_project",
-    "status": "pending_organization_choice_and_zero_cost_check"
+    "status": "ACTIVE_HEALTHY",
+    "plan_verified": "free",
+    "quoted_monthly_cost_usd": 0,
+    "schema_review": "four_migrations_applied_and_verified",
+    "rls_tables": 21,
+    "hosted_isolation_assertions_passed": 9,
+    "security_advisories": 0,
+    "application_connection": "pending_render_and_runtime_secrets"
   },
   "render": {
     "service_name": "conta-facil-pruebas",

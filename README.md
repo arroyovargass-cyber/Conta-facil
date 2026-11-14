@@ -62,4 +62,6 @@ No se publicó una interfaz aislada: el despliegue funcional necesita API Node, 
 
 ## Despliegue de pruebas aprobado
 
-La preparación para **Render Free + Supabase Free** está en [esta guía](docs/deployment/render-supabase.md) y `render.yaml`. El build genera web y backend; `npm start` sirve ambos desde el mismo dominio. Se añadió una tercera migración para el rol limitado del backend. La publicación solo se declara completada después de verificar el servicio remoto y su URL; el build local no la sustituye.
+La preparación para **Render Free + Supabase Free** está en [esta guía](docs/deployment/render-supabase.md) y `render.yaml`. El build genera web y backend; `npm start` sirve ambos desde el mismo dominio. Se añadieron migraciones para el rol limitado del backend y el refuerzo de permisos/RLS en Supabase alojado. La publicación solo se declara completada después de verificar el servicio remoto y su URL; el build local no la sustituye.
+
+El proyecto independiente **Conta Fácil Pruebas** ya está creado en Supabase Free y su esquema está instalado. Ver [evidencia remota](docs/deployment/supabase-provisioning-evidence.md). La aplicación web aún requiere publicación en Render y configuración de secretos.

@@ -23,5 +23,5 @@ Cerrar la base multiempresa y desplegarla para pruebas. Después completar y val
 
 - No se aplicó ninguna de las tres migraciones de Conta Fácil en ContaNova; la revisión automática bloqueó el primer intento y no se reintentó por otro canal.
 - ContaNova fue reactivado durante su evaluación y se deja en su estado actual. No se pausa ni elimina como parte de este cambio de dirección.
-- El nuevo proyecto todavía no se ha creado: falta elegir la organización y comprobar el costo cero.
+- Actualización 2026-11-14: el usuario eligió la organización inicial; se creó «Conta Fácil Pruebas» (ryobvhcarlpayqzaumdf) con costo cotizado US$0 mensuales y se instalaron sus migraciones.
 - Render sigue pendiente de conexión; la sesión GitHub anterior no permitía crear el repositorio privado. Son requisitos separados de la base de datos.
