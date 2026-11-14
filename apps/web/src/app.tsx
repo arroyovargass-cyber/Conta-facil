@@ -727,7 +727,7 @@ export function App() {
             <strong>{nav.find((n) => n.id === view)?.name}</strong>
           </div>
           <div className="top-actions">
-            <Badge tone="blue">Fase 2A · Borradores</Badge>
+            <Badge tone="blue">Fase 2B1 · Vista previa</Badge>
             <button
               className="icon-button"
               title="Ayuda"

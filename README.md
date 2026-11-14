@@ -1,4 +1,4 @@
-# Conta Fácil · Fase 2A
+# Conta Fácil · Fase 2B1
 
 Administración multiempresa, clientes, productos y borradores comerciales para Costa Rica. **Desarrollo local; no está certificada ni lista para producción.** No emite comprobantes, no firma XML y no se conecta a Hacienda.
 
@@ -41,6 +41,8 @@ Las pruebas **no deben ejecutarse contra producción**. Los cálculos son comerc
 
 ## Funciones
 
+- Vista previa explícita de IVA general13% para borradores CRC, al contado, sin descuentos/exoneraciones. No modifica documentos ni confirma la tarifa legal de un CABYS. Bloquea valores que requieren redondeo y separa cifras de impedimentos fiscales.
+
 - Clientes y productos/servicios por empresa, desactivación y control de versiones.
 - Borradores por departamento, copias históricas, subtotal decimal exacto, idempotencia, edición y archivo/restauración. Sin validez tributaria.
 
@@ -53,6 +55,8 @@ Las pruebas **no deben ejecutarse contra producción**. Los cálculos son comerc
 
 ## Documentación
 
+- [Diseño Fase 2B1](docs/superpowers/specs/2026-11-14-conta-facil-fase-2b1-design.md)
+- [Plan Fase 2B1](docs/superpowers/plans/2026-11-14-conta-facil-fase-2b1.md)
 - [Diseño Fase 2A](docs/superpowers/specs/2026-11-14-conta-facil-fase-2a-design.md)
 - [Plan Fase 2A](docs/superpowers/plans/2026-11-14-conta-facil-fase-2a.md)
 - [Evidencia y límites Fase 2A](docs/development/phase2a-evidence.md)

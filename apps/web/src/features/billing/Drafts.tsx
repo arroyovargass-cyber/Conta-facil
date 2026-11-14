@@ -2,6 +2,21 @@ import React, { useRef, useState } from "react";
 import { apiRequest, post } from "../../api/client";
 import { subtotal } from "../../../../../packages/domain/src/billing";
 import { Field, Lookup, useAlive, useListing, type Row } from "./common";
+import { FiscalPreview } from "./FiscalPreview";
+function fingerprint(row: Row): string {
+  return JSON.stringify({
+    customer_id: row.customer_id,
+    department_id: row.department_id,
+    currency: row.currency,
+    notes: row.notes,
+    lines: row.lines.map((l: Row) => ({
+      catalog_item_id: l.catalog_item_id || null,
+      description: l.description,
+      quantity: l.quantity,
+      unit_price: l.unit_price,
+    })),
+  });
+}
 const blankLine = () => ({
   catalog_item_id: null,
   description: "",
@@ -18,7 +33,16 @@ export function Drafts({ base, options }: { base: string; options: Row }) {
     [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
     [notice, setNotice] = useState(""),
-    [conflict, setConflict] = useState(false);
+    [conflict, setConflict] = useState(false),
+    [previewGeneration, setPreviewGeneration] = useState(0),
+    [savedFingerprint, setSavedFingerprint] = useState(""),
+    [detailLoading, setDetailLoading] = useState(false);
+  function invalidateEditor() {
+    const generation = ++editorGeneration.current;
+    setPreviewGeneration(generation);
+    setDetailLoading(false);
+    return generation;
+  }
   const manageable = (d: string) =>
     options.departments.some((v: Row) => v.id === d && v.can_manage);
   const editable =
@@ -26,11 +50,11 @@ export function Drafts({ base, options }: { base: string; options: Row }) {
     !editing.archived_at &&
     (editing.id ? manageable(editing.department_id) : options.canManage);
   function change(k: string, v: any) {
-    editorGeneration.current++;
+    invalidateEditor();
     setEditing((old) => ({ ...old, [k]: v }));
   }
   function lineChange(index: number, key: string, value: any) {
-    editorGeneration.current++;
+    invalidateEditor();
     setEditing((old) => ({
       ...old,
       lines: old!.lines.map((l: Row, i: number) =>
@@ -40,7 +64,7 @@ export function Drafts({ base, options }: { base: string; options: Row }) {
   }
   function create() {
     if (writing.current) return;
-    editorGeneration.current++;
+    invalidateEditor();
     operation.current = crypto.randomUUID();
     setEditing({
       customer_id: "",
@@ -55,17 +79,23 @@ export function Drafts({ base, options }: { base: string; options: Row }) {
   }
   async function open(id: string) {
     if (writing.current) return;
-    const generation = ++editorGeneration.current;
+    const generation = invalidateEditor();
+    setDetailLoading(true);
     setError("");
     setNotice("");
     setConflict(false);
     try {
       const r = await apiRequest(base + "/invoice-drafts/" + id);
-      if (alive.current && editorGeneration.current === generation)
+      if (alive.current && editorGeneration.current === generation) {
+        setSavedFingerprint(fingerprint(r.item));
         setEditing(r.item);
+      }
     } catch (e: any) {
       if (alive.current && editorGeneration.current === generation)
         setError(e.message);
+    } finally {
+      if (alive.current && editorGeneration.current === generation)
+        setDetailLoading(false);
     }
   }
   async function save(e: React.FormEvent) {
@@ -91,7 +121,7 @@ export function Drafts({ base, options }: { base: string; options: Row }) {
   async function write(value: Row, message: string) {
     if (!editing || writing.current) return;
     writing.current = true;
-    const generation = ++editorGeneration.current;
+    const generation = invalidateEditor();
     setBusy(true);
     setError("");
     setNotice("");
@@ -253,7 +283,7 @@ export function Drafts({ base, options }: { base: string; options: Row }) {
                   }
                   compatible={(r) => r.currency === editing.currency}
                   onChange={(id, row) => {
-                    editorGeneration.current++;
+                    invalidateEditor();
                     setEditing((old) => ({
                       ...old,
                       lines: old!.lines.map((line: Row, i: number) =>
@@ -331,6 +361,21 @@ export function Drafts({ base, options }: { base: string; options: Row }) {
               {editing.currency} {amount}
             </strong>
           </div>
+          {editing.id && (
+            <FiscalPreview
+              key={editing.id + ":" + previewGeneration}
+              base={base}
+              draftId={editing.id}
+              version={editing.version}
+              dirty={fingerprint(editing) !== savedFingerprint}
+              disabled={busy || detailLoading}
+              generation={previewGeneration}
+              isCurrent={(generation) =>
+                editorGeneration.current === generation
+              }
+              onConflict={() => setConflict(true)}
+            />
+          )}
           <div className="billing-actions">
             {editable && (
               <button className="button primary" disabled={busy}>
@@ -364,7 +409,7 @@ export function Drafts({ base, options }: { base: string; options: Row }) {
               className="button secondary"
               disabled={busy}
               onClick={() => {
-                editorGeneration.current++;
+                invalidateEditor();
                 setEditing(null);
                 setError("");
                 setConflict(false);
