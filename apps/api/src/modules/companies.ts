@@ -400,6 +400,14 @@ export function companyRoutes(
                 "catalog.manage",
                 "invoices.read",
                 "invoices.manage",
+                "hacienda.read",
+                "hacienda.credentials.manage",
+                "hacienda.connection.test",
+                "collections.read",
+                "collections.manage",
+                "payables.read",
+                "payables.manage",
+                "document_workflow.assign",
               ]),
             )
             .min(1),
@@ -414,7 +422,11 @@ export function companyRoutes(
       const permissions = new Set<string>(input.permissions);
       for (const permission of input.permissions)
         if (permission.endsWith(".manage"))
-          permissions.add(permission.replace(".manage", ".read"));
+          permissions.add(
+            permission === "hacienda.credentials.manage"
+              ? "hacienda.read"
+              : permission.replace(".manage", ".read"),
+          );
       for (const perm of permissions)
         await db.query("insert into public.role_permissions values($1,$2,$3)", [
           tenantId,

@@ -7,7 +7,7 @@ services:
     plan: free
     region: virginia
     branch: main
-    buildCommand: npm ci --include=dev && npm run build && npm prune --omit=dev
+    buildCommand: npm ci --include=dev && npm run openssl:prepare && npm run build && npm prune --omit=dev
     startCommand: npm start
     healthCheckPath: /api/health
     autoDeployTrigger: "off"

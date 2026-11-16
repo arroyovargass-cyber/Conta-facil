@@ -1,3 +1,4 @@
+import { parseKeyring } from "./security/credential-vault";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { z } from "zod";
@@ -8,6 +9,9 @@ export function parseConfig(environment: NodeJS.ProcessEnv) {
         .string()
         .url()
         .default("postgresql://postgres:postgres@127.0.0.1:54322/postgres"),
+      HACIENDA_KEYRING: z.string().optional(),
+      HACIENDA_ACTIVE_KEY_ID: z.string().optional(),
+      HACIENDA_STAG_PROBE_ENABLED: z.enum(["true", "false"]).default("false"),
       DATABASE_CA_CERT: z.string().optional(),
       SUPABASE_URL: z.url().default("http://127.0.0.1:54321"),
       SUPABASE_ANON_KEY: z.string().min(10),
@@ -62,6 +66,11 @@ export function parseConfig(environment: NodeJS.ProcessEnv) {
   }
   if (config.STATIC_DIRECTORY)
     config.STATIC_DIRECTORY = resolve(config.STATIC_DIRECTORY);
+  parseKeyring(
+    config.HACIENDA_KEYRING,
+    config.HACIENDA_ACTIVE_KEY_ID,
+    config.SESSION_KEY,
+  );
   return config;
 }
 export function loadConfig() {

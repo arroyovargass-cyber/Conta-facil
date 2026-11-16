@@ -1607,6 +1607,14 @@ export function App() {
                       "catalog.manage",
                       "invoices.read",
                       "invoices.manage",
+                      "hacienda.read",
+                      "hacienda.credentials.manage",
+                      "hacienda.connection.test",
+                      "collections.read",
+                      "collections.manage",
+                      "payables.read",
+                      "payables.manage",
+                      "document_workflow.assign",
                     ].map((p) => (
                       <label className="checkbox" key={p}>
                         <input name="permissions" type="checkbox" value={p} />
@@ -1624,6 +1632,21 @@ export function App() {
                               "catalog.manage": "Gestionar productos",
                               "invoices.read": "Ver borradores",
                               "invoices.manage": "Gestionar borradores",
+                              "hacienda.read": "Consultar Hacienda",
+                              "hacienda.credentials.manage":
+                                "Gestionar credenciales de Hacienda",
+                              "hacienda.connection.test":
+                                "Probar acceso a Hacienda",
+                              "collections.read":
+                                "Ver bandeja de cuentas por cobrar",
+                              "collections.manage":
+                                "Gestionar bandeja de cuentas por cobrar",
+                              "payables.read":
+                                "Ver bandeja de cuentas por pagar",
+                              "payables.manage":
+                                "Gestionar bandeja de cuentas por pagar",
+                              "document_workflow.assign":
+                                "Asignar documentos a departamentos",
                             } as Row
                           )[p]
                         }

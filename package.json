@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "concurrently -k \"tsx watch apps/api/src/server.ts\" \"vite --config apps/web/vite.config.ts\"",
-    "build": "tsc --noEmit && vite build --config apps/web/vite.config.ts && esbuild apps/api/src/server.ts --platform=node --format=esm --packages=external --bundle --outfile=dist-server/server.mjs",
+    "build": "node infra/check-inspector.mjs && tsc --noEmit && vite build --config apps/web/vite.config.ts && esbuild apps/api/src/server.ts --platform=node --format=esm --packages=external --bundle --outfile=dist-server/server.mjs && esbuild apps/api/src/security/pkcs12-worker.ts --platform=node --format=esm --bundle --outfile=dist-server/pkcs12-worker.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:db": "node infra/test-db.mjs",
@@ -18,7 +18,9 @@
     "db:migrate": "node infra/migrate.mjs",
     "format": "prettier --write apps packages tests infra/*.mjs",
     "start": "node dist-server/server.mjs",
-    "test:browser": "npm run build && playwright test"
+    "test:browser": "npm run build && playwright test",
+    "openssl:prepare": "node infra/prepare-openssl.mjs",
+    "vault:local-keys": "node infra/local-vault-env.mjs"
   },
   "dependencies": {
     "@fastify/cookie": "11.1.5",

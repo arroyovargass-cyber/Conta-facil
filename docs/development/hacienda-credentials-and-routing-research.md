@@ -42,3 +42,26 @@ La carga se efectuará en el formulario protegido de la aplicación. No pedir ll
 ## Alcance confirmado por el usuario
 
 El usuario eligió «Departamentos y bandejas primero», dejando saldos, vencimientos y registro de cobros/pagos para otro incremento. Se preparan rutas y permisos documentales, no contabilidad ni cartera financiera. La configuración/custodia puede avanzar antes de resolver XSD; firma/transmisión y mensajes reales requieren cerrar las dependencias normativas y probar STAG. No declarar esas integraciones operativas por mostrar sus secciones.
+
+## Local implementation checkpoint — 2026-11-16
+
+The official OpenSSL security page describes fixes through 3.5.10, but its stable
+3.5.10 archive/checksum and release tag were unavailable (404). The local build
+uses official repository commit `84dda7853c130429210b37bee9e5b62366ca8bce`, whose
+version is **3.5.10-dev**, as a development security snapshot. It is not presented
+as a stable release or a validated production deployment. Reproduce with
+`npm run openssl:prepare`; a C compiler, Perl, Git and make are required.
+The inspector currently serves synthetic local tests only; no upload endpoint is
+registered. Deployment validation and confirmation of applicable advisory fixes
+remain prerequisites before accepting real material.
+
+The vault uses an independent, optional versioned keyring. Absence disables
+storage; no ephemeral fallback is generated. `npm run vault:local-keys` preserves
+existing local configuration and prints no keys. Preserve/back up every key
+version needed to decrypt retained credential history.
+
+The local-only migration adds encrypted credential history, metadata, route and
+minimal task tables. No departments or memberships are created automatically.
+Credential upload, IdP probes, work assignment APIs and the Hacienda/inbox UI are
+not implemented by this checkpoint. No XML, fiscal signing, transmission,
+receipt ingestion, receivables balances or payments are enabled.

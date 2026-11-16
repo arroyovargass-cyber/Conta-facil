@@ -4,11 +4,12 @@ Administración multiempresa, clientes, productos y borradores comerciales para 
 
 ## Ejecutar
 
-Requisitos: Node.js 24, npm, Docker Compose y espacio para las imágenes PostgreSQL/Supabase. Desde este directorio:
+Requisitos: Node.js 24, npm, Git, Perl, make, compilador C y Docker Compose y espacio para las imágenes PostgreSQL/Supabase. Desde este directorio:
 
 ```bash
 npm ci
 npm run local:up
+npm run openssl:prepare
 npm run db:migrate
 npm run bootstrap < empresa-inicial.json
 npm run dev
@@ -38,6 +39,17 @@ npm run build
 Las pruebas integradas requieren la base y Auth locales activos, generan usuarios/empresas sintéticos únicos y dejan esos datos para inspección. `test:db` requiere pgTAP instalado en PostgreSQL; con Supabase local completo usa también `supabase test db`. La imagen PostgreSQL Alpine del Compose normal no incluye pgTAP: las pruebas HTTP/Auth/Data API sí funcionan; usa un PostgreSQL con pgTAP o el entorno restringido documentado para las nueve pruebas SQL.
 
 Las pruebas **no deben ejecutarse contra producción**. Los cálculos son comerciales y exactos, antes de impuestos; no se verifica todavía emisión tributaria.
+
+## Base de custodia de Hacienda (avance local)
+
+Se añadieron cifrado independiente, inspector PKCS#12 aislado, tablas privadas y
+rutas documentales con permisos por destino. Este es un incremento de base:
+todavía no hay pantalla ni API de carga de credenciales o gestión de bandejas.
+El inspector usa un snapshot oficial **3.5.10-dev**, sin validación de producción;
+no cargar material real. El build exige el binario preparado localmente.
+Para pruebas sintéticas, `npm run vault:local-keys` crea claves independientes sin
+imprimirlas y preserva `.env`. Los PIN se limitan a 1023 bytes UTF-8 y no pueden
+contener NUL/CR/LF por el transporte de OpenSSL; no se recortan ni truncan.
 
 ## Funciones
 
