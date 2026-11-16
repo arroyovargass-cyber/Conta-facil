@@ -1,3 +1,4 @@
+import { haciendaConfigurationRoutes } from "./modules/hacienda-configuration";
 import Fastify from "fastify";
 import cookie from "@fastify/cookie";
 import helmet from "@fastify/helmet";
@@ -45,6 +46,10 @@ export async function createApp(config: AppConfig) {
     if (error instanceof HttpError)
       return reply.code(error.statusCode).send({ message: error.message });
     const code = (error as { code?: string }).code;
+    if (code === "FST_ERR_CTP_BODY_TOO_LARGE")
+      return reply
+        .code(413)
+        .send({ message: "El archivo supera el tamaño permitido." });
     if (code === "23505")
       return reply
         .code(409)
@@ -77,6 +82,7 @@ export async function createApp(config: AppConfig) {
   catalogRoutes(app, pool, auth);
   invoicingRoutes(app, pool, auth);
   fiscalPreparationRoutes(app, pool, auth);
+  haciendaConfigurationRoutes(app, pool, auth, config);
   app.get("/api/health", async () => {
     await pool.query("select 1");
     return { name: "Conta Fácil", phase: 1, status: "ok" };
