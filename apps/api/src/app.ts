@@ -1,5 +1,6 @@
 import { haciendaConfigurationRoutes } from "./modules/hacienda-configuration";
 import { HaciendaIdp, type IdpClient } from "./services/hacienda-idp";
+import { documentWorkflowRoutes } from "./modules/document-workflow";
 import Fastify from "fastify";
 import cookie from "@fastify/cookie";
 import helmet from "@fastify/helmet";
@@ -88,6 +89,7 @@ export async function createApp(
   catalogRoutes(app, pool, auth);
   invoicingRoutes(app, pool, auth);
   fiscalPreparationRoutes(app, pool, auth);
+  documentWorkflowRoutes(app, pool, auth);
   haciendaConfigurationRoutes(
     app,
     pool,
