@@ -2,6 +2,8 @@
 
 Administración multiempresa, clientes, productos y borradores comerciales para Costa Rica. **Desarrollo local; no está certificada ni lista para producción.** No emite comprobantes, no firma XML y no se conecta a Hacienda.
 
+Estado de publicación: [base alojada y conexiones pendientes](docs/deployment/test-publication-status.md). Todavía no hay URL pública de acceso.
+
 ## Ejecutar
 
 Requisitos: Node.js 24, npm, Git, Perl, make, compilador C y Docker Compose y espacio para las imágenes PostgreSQL/Supabase. Desde este directorio:

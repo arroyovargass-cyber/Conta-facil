@@ -2,6 +2,7 @@ import { createClient } from "@supabase/supabase-js";
 import pg from "pg";
 import { z } from "zod";
 import { loadConfig } from "../src/config";
+import { databaseOptions } from "../src/database-options";
 import { hash, randomToken } from "../src/security/crypto";
 // Reads JSON from stdin. No password or service credential accepted as a command-line argument.
 const config = loadConfig();
@@ -19,7 +20,7 @@ const input = z
   })
   .strict()
   .parse(JSON.parse(raw));
-const pool = new pg.Pool({ connectionString: config.DATABASE_URL }),
+const pool = new pg.Pool(databaseOptions(config)),
   admin = createClient(config.SUPABASE_URL, config.SUPABASE_SERVICE_KEY, {
     auth: { persistSession: false },
   }),

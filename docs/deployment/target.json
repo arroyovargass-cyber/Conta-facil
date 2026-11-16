@@ -9,16 +9,17 @@
     "status": "ACTIVE_HEALTHY",
     "plan_verified": "free",
     "quoted_monthly_cost_usd": 0,
-    "schema_review": "four_migrations_applied_and_verified",
-    "rls_tables": 21,
-    "hosted_isolation_assertions_passed": 9,
+    "schema_review": "twelve_migrations_applied_and_verified",
+    "rls_tables": 29,
+    "hosted_isolation_assertions_passed": 15,
     "security_advisories": 0,
-    "application_connection": "pending_render_and_runtime_secrets"
+    "application_connection": "pending_hosting_connection_and_secure_runtime_configuration",
+    "hosted_fixtures_rolled_back": true
   },
   "render": {
     "service_name": "conta-facil-pruebas",
     "plan": "free",
-    "status": "account_connection_required"
+    "status": "plugin_not_installed_or_connected"
   },
   "reference_only": {
     "project_name": "ContaNova",
@@ -32,8 +33,20 @@
     "visibility": "public",
     "visibility_authorization": "explicit_user_approval",
     "deployment_branch": "main",
-    "status": "upload_blocked_by_github_write_permissions_403",
+    "status": "write_rejected_403_reconnect_required",
     "remote_main_verified": "8fc87456b8ac9dc0bb1c553b3ad9607998d753a1",
-    "integration_settings_url": "https://github.com/settings/installations/174563757"
+    "integration_settings_url": "https://github.com/settings/installations"
+  },
+  "railway": {
+    "status": "trial_expired_project_creation_rejected",
+    "projects_created": 0,
+    "paid_plan_activated": false
+  },
+  "test_access": {
+    "public_url": null,
+    "administrator_email_confirmed": true,
+    "invitation_sent": false,
+    "auth_users_created": 0,
+    "checked_at_utc": "2026-11-16T16:16:58.201932+00:00"
   }
 }

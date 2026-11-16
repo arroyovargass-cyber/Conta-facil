@@ -45,3 +45,13 @@ Tras el refuerzo, list_tables confirma RLS en las 21 tablas y el asesor de segur
 ContaNova mantiene únicamente su migración previa core_contable_inicial (20260918214135); ninguna migración de Conta Fácil fue aplicada allí.
 
 La base está provisionada; la aplicación web NO está publicada aún. Render sigue sin integración conectada y el repositorio privado arroyovargass-cyber/conta-facil no existe; la sesión GitHub previa no permite crearlo. Faltan provisión segura de credenciales de runtime, Auth/SMTP/redirecciones, deploy y QA de navegador. No se solicitaron claves por chat ni se activaron planes de pago.
+
+## Actualización para publicar el entorno de pruebas — 2026-11-16
+
+El usuario solicitó trabajar en la publicación del entorno, autorizando actualizar exclusivamente Conta Fácil Pruebas. Se verificaron antes estado ACTIVE_HEALTHY, cuatro migraciones iniciales, cero usuarios/empresas y ausencia de avisos de seguridad. Se aplicaron las ocho migraciones posteriores del código verificado. El historial remoto tiene ahora doce migraciones.
+
+Resultado: 29 tablas public/private, todas con RLS, 23 códigos de permiso y ningún aviso del asesor de seguridad. anon y authenticated carecen de SELECT sobre versiones cifradas de credenciales. El rol backend conserva NOLOGIN, NOINHERIT, sin superusuario, BYPASSRLS, creación de bases ni administración de roles; falta provisionar su contraseña por un canal seguro al conectar el hosting.
+
+La prueba `supabase/tests/hosted_preflight.sql` ejecutó quince aserciones: aislamiento entre empresas/departamentos, escritura cruzada, auditoría, MFA, revocación de sesión, acceso anónimo, metadatos de Hacienda, tareas y prohibición de escritura directa/lectura de ciphertext. Pasaron 15/15. La transacción revirtió fixtures y creación temporal de pgTAP. La comprobación posterior confirmó cero usuarios, cero empresas, cero perfiles de fixture y pgTAP no persistido. No se copiaron datos locales ni se creó todavía el usuario administrador.
+
+La invitación del administrador queda pendiente del servicio web HTTPS, redirecciones de Auth, credenciales del runtime y correo. No se configuraron URLs ficticias ni se envió una invitación con destino localhost. ContaNova no recibió cambios.

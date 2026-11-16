@@ -1,5 +1,7 @@
 # Conta Fácil Pruebas · Render Free + Supabase Free
 
+Ver también [estado comprobado de publicación](test-publication-status.md).
+
 ## Estado y alcance
 
 Preparación de código aprobada por el usuario. El archivo `render.yaml` declara solo un servicio web Free, sin base de datos ni disco en Render. La publicación requiere conexión de la cuenta Render. La decisión vigente del usuario es crear un proyecto separado «Conta Fácil Pruebas». ContaNova se conserva como referencia de estructura y no es un destino de despliegue ni de migraciones.
@@ -8,7 +10,9 @@ El usuario autorizó expresamente el repositorio público `arroyovargass-cyber/C
 
 ## Construcción y arranque
 
-Build: `npm ci --include=dev && npm run build && npm prune --omit=dev`.
+Build: `npm ci --include=dev && npm run openssl:prepare && npm run build && npm prune --omit=dev`.
+
+El inspector actual es un snapshot de desarrollo; el registro de llaves reales y la prueba STAG permanecen bloqueados según las puertas del runbook.
 
 Start: `npm start` ejecuta `dist-server/server.mjs`; sirve la API y la carpeta `dist/assets` junto con `/`, `/invite` y `/reset`. Rutas desconocidas y API desconocida mantienen 404. Solo se publica la salida del frontend; los archivos de código/configuración no se sirven.
 
