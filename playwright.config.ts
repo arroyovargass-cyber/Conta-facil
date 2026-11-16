@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { defineConfig, devices } from "@playwright/test";
 import { existsSync } from "node:fs";
 if (existsSync(".env")) process.loadEnvFile(".env");
@@ -41,6 +42,11 @@ export default defineConfig({
     env: {
       ...process.env,
       NODE_ENV: "test",
+      HACIENDA_KEYRING: JSON.stringify({
+        "browser-test": randomBytes(32).toString("hex"),
+      }),
+      HACIENDA_ACTIVE_KEY_ID: "browser-test",
+      HACIENDA_STAG_PROBE_ENABLED: "false",
       PORT: "3100",
       APP_ORIGIN: "http://127.0.0.1:3100",
       STATIC_DIRECTORY: "dist",

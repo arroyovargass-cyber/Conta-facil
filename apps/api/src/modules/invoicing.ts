@@ -116,7 +116,7 @@ export function invoicingRoutes(
     return scoped(pool, p.claims, async (db) => {
       const departments = (
         await db.query(
-          "select id,name,active,private.has_access(tenant_id,'invoices.manage',id) can_manage from public.departments where tenant_id=$1 and private.has_access(tenant_id,'invoices.read',id) order by name,id",
+          "select id,name,active,private.has_access(tenant_id,'invoices.manage',id) can_manage,private.has_access(tenant_id,'document_workflow.assign',id) can_assign from public.departments where tenant_id=$1 and private.has_access(tenant_id,'invoices.read',id) order by name,id",
           [tenantId],
         )
       ).rows;

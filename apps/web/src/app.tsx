@@ -34,9 +34,14 @@ import {
 import { apiRequest, post, setCsrf, onSessionExpired } from "./api/client";
 import { MembershipFields } from "./features/users/membership-fields";
 import { CompanyScope } from "./features/companies/scope";
+import { HaciendaWorkspace } from "./features/hacienda/HaciendaWorkspace";
+import { WorkInbox } from "./features/workflow/WorkInbox";
 import { BillingWorkspace } from "./features/billing/BillingWorkspace";
 type Row = Record<string, any>;
 const nav = [
+  { id: "hacienda", name: "Hacienda", icon: ShieldCheck },
+  { id: "collections", name: "Cuentas por cobrar", icon: FileText },
+  { id: "payables", name: "Cuentas por pagar", icon: FileText },
   { id: "customers", name: "Clientes", icon: Users },
   { id: "catalog", name: "Productos y servicios", icon: FolderTree },
   { id: "drafts", name: "Borradores", icon: FileText },
@@ -48,6 +53,15 @@ const nav = [
   { id: "audit", name: "Auditoría", icon: ShieldCheck },
 ];
 const headings: Record<string, [string, string]> = {
+  hacienda: ["Hacienda", "Credenciales y preparación del ambiente de pruebas."],
+  collections: [
+    "Cuentas por cobrar",
+    "Bandeja de revisión documental por departamento.",
+  ],
+  payables: [
+    "Cuentas por pagar",
+    "Preparación de la recepción y revisión documental.",
+  ],
   customers: ["Clientes", "Los contactos comerciales de tu empresa."],
   catalog: [
     "Productos y servicios",
@@ -727,7 +741,7 @@ export function App() {
             <strong>{nav.find((n) => n.id === view)?.name}</strong>
           </div>
           <div className="top-actions">
-            <Badge tone="blue">Fase 2B1 · Vista previa</Badge>
+            <Badge tone="blue">Desarrollo · Pruebas</Badge>
             <button
               className="icon-button"
               title="Ayuda"
@@ -798,6 +812,22 @@ export function App() {
               key={tenant + ":" + view + ":" + session.user.id}
               tenantId={tenant}
               view={view as "customers" | "catalog" | "drafts"}
+              permissions={overview?.permissions ?? []}
+            />
+          )}
+          {view === "hacienda" && (
+            <HaciendaWorkspace
+              key={tenant + ":" + view + ":" + session.user.id}
+              tenantId={tenant}
+              company={company}
+              permissions={overview?.permissions ?? []}
+            />
+          )}
+          {(view === "collections" || view === "payables") && (
+            <WorkInbox
+              key={tenant + ":" + view + ":" + session.user.id}
+              tenantId={tenant}
+              flow={view}
               permissions={overview?.permissions ?? []}
             />
           )}

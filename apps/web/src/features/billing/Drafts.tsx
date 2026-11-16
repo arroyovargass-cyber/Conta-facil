@@ -146,6 +146,36 @@ export function Drafts({ base, options }: { base: string; options: Row }) {
       if (alive.current) setBusy(false);
     }
   }
+  async function assignReview() {
+    if (
+      !editing?.id ||
+      writing.current ||
+      fingerprint(editing) !== savedFingerprint
+    )
+      return;
+    const generation = editorGeneration.current;
+    writing.current = true;
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      await post(
+        base + "/invoice-drafts/" + editing.id + "/collection-review",
+        { expected_version: editing.version },
+      );
+      if (alive.current && editorGeneration.current === generation)
+        setNotice("Revisión asignada a Cuentas por cobrar.");
+    } catch (e: any) {
+      if (alive.current && editorGeneration.current === generation) {
+        setError(e.message);
+        setConflict(e.status === 409);
+      }
+    } finally {
+      writing.current = false;
+      if (alive.current && editorGeneration.current === generation)
+        setBusy(false);
+    }
+  }
   let amount = "—";
   try {
     if (editing) amount = subtotal(editing.lines);
@@ -377,6 +407,27 @@ export function Drafts({ base, options }: { base: string; options: Row }) {
             />
           )}
           <div className="billing-actions">
+            {editing.id &&
+              !editing.archived_at &&
+              options.departments.some(
+                (d: Row) =>
+                  d.id === editing.department_id &&
+                  d.can_assign &&
+                  d.can_manage,
+              ) && (
+                <button
+                  type="button"
+                  className="button secondary"
+                  disabled={
+                    busy ||
+                    detailLoading ||
+                    fingerprint(editing) !== savedFingerprint
+                  }
+                  onClick={() => void assignReview()}
+                >
+                  Asignar revisión a Cuentas por cobrar
+                </button>
+              )}
             {editable && (
               <button className="button primary" disabled={busy}>
                 {busy ? "Guardando…" : "Guardar borrador"}

@@ -1,0 +1,77 @@
+.workflow-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+}
+.workflow-route {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 18px;
+  min-width: 0;
+}
+.workflow-route fieldset,
+.hacienda-fields,
+.workflow-confirm {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+  border: 0;
+  padding: 0;
+}
+.workflow-confirm {
+  border-top: 1px solid #e2e8f0;
+  padding-top: 16px;
+}
+.credential-fingerprint {
+  overflow-wrap: anywhere;
+  font-family: monospace;
+  font-size: 13px;
+}
+.workflow-reference {
+  display: block;
+  color: #536480;
+  font-size: 12px;
+  margin-top: 4px;
+}
+.workflow-warning {
+  display: block;
+  color: #925400;
+  font-size: 13px;
+}
+.billing-table {
+  max-width: 100%;
+  overflow-x: auto;
+}
+.billing-table table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.billing-table th,
+.billing-table td {
+  padding: 14px;
+  text-align: left;
+  border-bottom: 1px solid #e2e8f0;
+  vertical-align: top;
+}
+.hacienda-fields input[type="file"] {
+  max-width: 100%;
+  white-space: normal;
+}
+.workflow-route h4 {
+  margin-bottom: 16px;
+}
+@media (max-width: 700px) {
+  .workflow-grid {
+    grid-template-columns: 1fr;
+  }
+  .workflow-route {
+    padding: 14px;
+  }
+  .workflow-confirm .button {
+    white-space: normal;
+  }
+  .billing-workspace .button {
+    max-width: 100%;
+    white-space: normal;
+  }
+}
