@@ -9,6 +9,8 @@ export async function syntheticPkcs12({
   certificateOnly = false,
   noMac = false,
   algorithm = "rsa",
+  validity = "current",
+  duplicateCertificate = false,
 }: {
   pin: string;
   bits?: number;
@@ -16,6 +18,8 @@ export async function syntheticPkcs12({
   certificateOnly?: boolean;
   noMac?: boolean;
   algorithm?: "rsa" | "ec";
+  validity?: "current" | "expired" | "future";
+  duplicateCertificate?: boolean;
 }) {
   const directory = await mkdtemp(join(tmpdir(), "conta-synthetic-"));
   const binary = resolve(".local/openssl/bin/openssl");
@@ -50,6 +54,20 @@ export async function syntheticPkcs12({
       "-subj",
       "/CN=SYNTHETIC TEST ONLY",
     ]);
+    if (validity !== "current")
+      await run([
+        "x509",
+        "-in",
+        join(directory, "cert"),
+        "-signkey",
+        join(directory, "key"),
+        "-out",
+        join(directory, "cert"),
+        "-not_before",
+        validity === "expired" ? "20200101000000Z" : "20500101000000Z",
+        "-not_after",
+        validity === "expired" ? "20200102000000Z" : "20510101000000Z",
+      ]);
     await run(
       [
         "pkcs12",
@@ -59,6 +77,7 @@ export async function syntheticPkcs12({
         ...(certificateOnly ? ["-nokeys"] : ["-inkey", join(directory, "key")]),
         "-in",
         join(directory, "cert"),
+        ...(duplicateCertificate ? ["-certfile", join(directory, "cert")] : []),
         "-out",
         join(directory, "fixture"),
         "-passout",

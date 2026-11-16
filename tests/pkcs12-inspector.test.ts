@@ -80,3 +80,15 @@ it("rejects containers without MAC integrity and PINs exceeding OpenSSL byte cap
     "Archivo o PIN",
   );
 });
+it("rejects expired, future and ambiguous matching certificates in real synthetic PKCS12 files", async () => {
+  for (const options of [
+    { validity: "expired" as const },
+    { validity: "future" as const },
+    { duplicateCertificate: true },
+  ]) {
+    const bytes = await syntheticPkcs12({ pin: "1234", ...options });
+    await expect(inspectPkcs12(bytes, "1234")).rejects.toThrow(
+      "No se pudo validar",
+    );
+  }
+});
