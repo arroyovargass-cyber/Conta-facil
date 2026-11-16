@@ -59,3 +59,40 @@ it("supports old key versions without reusing the session key", () => {
   expect(parseKeyring(undefined, undefined, "session")).toBeUndefined();
   expect(() => parseKeyring("{}", undefined, "session")).toThrow();
 });
+it("restores a serialized ciphertext backup using a separately supplied versioned keyring", () => {
+  const original = encryptCredential(
+    Buffer.from("SYNTHETIC-RESTORE-ONLY"),
+    context,
+    keys,
+  );
+  const backup = JSON.parse(
+    JSON.stringify({
+      key_id: original.keyId,
+      ciphertext_base64: original.blob.toString("base64"),
+      context,
+    }),
+  );
+  const secretKeyring = JSON.stringify({
+    v1: key.toString("hex"),
+    v2: randomBytes(32).toString("hex"),
+  });
+  const restoredKeys = parseKeyring(
+    secretKeyring,
+    "v2",
+    randomBytes(32).toString("hex"),
+  )!;
+  const restored = {
+    keyId: backup.key_id,
+    blob: Buffer.from(backup.ciphertext_base64, "base64"),
+  };
+  expect(
+    decryptCredential(restored, backup.context, restoredKeys).toString(),
+  ).toBe("SYNTHETIC-RESTORE-ONLY");
+  expect(JSON.stringify(backup)).not.toContain(key.toString("hex"));
+  expect(() =>
+    decryptCredential(restored, backup.context, {
+      active: "v2",
+      keys: { v2: restoredKeys.keys.v2 },
+    }),
+  ).toThrow();
+});

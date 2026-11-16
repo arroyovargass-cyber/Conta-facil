@@ -1,4 +1,4 @@
-# Conta Fácil · Fase 2B1
+# Conta Fácil · Hacienda y bandejas departamentales
 
 Administración multiempresa, clientes, productos y borradores comerciales para Costa Rica. **Desarrollo local; no está certificada ni lista para producción.** No emite comprobantes, no firma XML y no se conecta a Hacienda.
 
@@ -40,18 +40,28 @@ Las pruebas integradas requieren la base y Auth locales activos, generan usuario
 
 Las pruebas **no deben ejecutarse contra producción**. Los cálculos son comerciales y exactos, antes de impuestos; no se verifica todavía emisión tributaria.
 
-## Base de custodia de Hacienda (avance local)
+## Hacienda y revisión departamental
 
-Se añadieron cifrado independiente, inspector PKCS#12 aislado, tablas privadas y
-rutas documentales con permisos por destino. Este es un incremento de base:
-todavía no hay pantalla ni API de carga de credenciales o gestión de bandejas.
-El inspector usa un snapshot oficial **3.5.10-dev**, sin validación de producción;
-no cargar material real. El build exige el binario preparado localmente.
-Para pruebas sintéticas, `npm run vault:local-keys` crea claves independientes sin
-imprimirlas y preserva `.env`. Los PIN se limitan a 1023 bytes UTF-8 y no pueden
-contener NUL/CR/LF por el transporte de OpenSSL; no se recortan ni truncan.
+Incluye secciones Hacienda, Cuentas por cobrar y Cuentas por pagar. Hacienda
+permite consultar metadatos, registrar/sustituir credenciales de pruebas y
+desactivarlas localmente, con MFA y permisos propios. Las tareas de CxC parten
+de borradores guardados y conservan su departamento original; CxP muestra
+recepción pendiente, sin documentos simulados ni saldos.
+
+El inspector usa un snapshot oficial **3.5.10-dev**. Con este binario la carga
+está **bloqueada fuera de pruebas automatizadas con material sintético**. La
+conexión STAG permanece apagada por defecto y no se ha probado con credenciales
+reales. No se habilitan XML, firma fiscal, transmisión ni contabilidad.
+
+Ver [operación y recuperación de bóveda](docs/runbooks/hacienda-vault.md) y
+[evidencia del incremento](docs/development/hacienda-custody-workflow-evidence.md).
 
 ## Funciones
+
+- Custodia cifrada por empresa y ambiente, metadatos públicos del certificado,
+  identidad pendiente y estados de acceso API separados de firma/envío.
+- Rutas/responsables, asignación idempotente a CxC, revisión interna por versión
+  y bandejas por departamento, sin acceso implícito al documento original.
 
 - Vista previa explícita de IVA general13% para borradores CRC, al contado, sin descuentos/exoneraciones. No modifica documentos ni confirma la tarifa legal de un CABYS. Bloquea valores que requieren redondeo y separa cifras de impedimentos fiscales.
 

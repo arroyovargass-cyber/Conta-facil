@@ -1,6 +1,6 @@
 # Conta Fácil — custodia de Hacienda y bandejas departamentales
 
-Fecha:2026-11-14. Estado: aprobado por el usuario al responder «Si»; pendiente de ejecución del plan. Complementa el circuito integral y delimita el siguiente incremento funcional.
+Fecha:2026-11-14. Estado: aprobado por el usuario al responder «Si»; implementado y en verificación local con material sintético; puertas para llaves reales/STAG pendientes. Complementa el circuito integral y delimita el siguiente incremento funcional.
 
 ## Intención, decisiones y alcance
 

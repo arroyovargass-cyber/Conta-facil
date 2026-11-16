@@ -1,5 +1,8 @@
 # Custodia y rutas documentales: evidencia del incremento local
 
+Este informe corresponde al checkpoint de base `d72251b`. Los avances posteriores
+se documentan en [evidencia del incremento](hacienda-custody-workflow-evidence.md).
+
 Fecha: 2026-11-16. Rama: `feat/fase-1`. Base: `501c6af`.
 
 ## Implementado
