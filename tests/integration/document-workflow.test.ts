@@ -378,3 +378,80 @@ it("confirms assignment minimally for an origin actor without destination read p
   ).toBe(403);
   expect((await request("/document-routes")).statusCode).toBe(403);
 });
+it("revokes inactive departmental access to historical tasks while retaining explicit company-wide history access", async () => {
+  const target = (
+    await f.pool.query(
+      "select target_department_id from public.document_work_items where id=$1",
+      [task],
+    )
+  ).rows[0].target_department_id;
+  const role = (
+    await f.pool.query(
+      "select id from public.roles where tenant_id=$1 and code='custom_destination'",
+      [f.tenants[0]],
+    )
+  ).rows[0].id;
+  await f.pool.query(
+    "delete from public.membership_roles where tenant_id=$1 and user_id=$2",
+    [f.tenants[0], f.userId],
+  );
+  await f.pool.query("insert into public.membership_roles values($1,$2,$3)", [
+    f.tenants[0],
+    f.userId,
+    role,
+  ]);
+  await f.pool.query(
+    "delete from public.membership_departments where tenant_id=$1 and user_id=$2",
+    [f.tenants[0], f.userId],
+  );
+  await f.pool.query(
+    "insert into public.membership_departments values($1,$2,$3)",
+    [f.tenants[0], f.userId, target],
+  );
+  const before = (await request("/document-work-items?flow=collections")).json()
+    .items[0];
+  const unassigned = await request("/document-work-items/" + task, "PATCH", {
+    expected_version: before.version,
+    expected_source_version: before.current_version,
+    state: "pending",
+    assignee_id: null,
+  });
+  expect(unassigned.statusCode, unassigned.body).toBe(200);
+  await f.pool.query("update public.departments set active=false where id=$1", [
+    target,
+  ]);
+  const read = await request("/document-work-items?flow=collections");
+  const update = await request("/document-work-items/" + task, "PATCH", {
+    expected_version: unassigned.json().item.version,
+    expected_source_version: before.current_version,
+    state: "archived",
+    assignee_id: null,
+  });
+  const { scoped } = await import("../../apps/api/src/db");
+  const session = (
+    await f.pool.query(
+      "select auth_session_id from private.sessions where user_id=$1 and revoked_at is null order by last_seen desc limit 1",
+      [f.userId],
+    )
+  ).rows[0].auth_session_id;
+  const direct = await scoped(
+    f.pool,
+    { sub: f.userId, aal: "aal2", session_id: session },
+    (db) =>
+      db.query(
+        "select id from public.document_work_items where tenant_id=$1 and target_department_id=$2",
+        [f.tenants[0], target],
+      ),
+  );
+  expect.soft([read.statusCode, update.statusCode]).toEqual([403, 403]);
+  expect.soft(direct.rows).toHaveLength(0);
+  await f.pool.query(
+    "update public.memberships set scope='company' where tenant_id=$1 and user_id=$2",
+    [f.tenants[0], f.userId],
+  );
+  expect(
+    (await request("/document-work-items?flow=collections"))
+      .json()
+      .items.map((r: any) => r.id),
+  ).toContain(task);
+});

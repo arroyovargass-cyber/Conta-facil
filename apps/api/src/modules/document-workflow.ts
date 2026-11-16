@@ -22,7 +22,7 @@ const list = z
     cursor: z.coerce.number().int().min(0).max(1000000).default(0),
   })
   .strict();
-const summary = `w.id,w.source_kind,w.source_id,w.source_department_id,w.source_version,w.current_version,w.flow,w.target_department_id,w.assignee_id,w.customer_name,w.state,w.version,w.created_at,w.updated_at,(select p.name from public.profiles p where p.id=w.assignee_id) assignee_name,private.has_access(w.tenant_id,'collections.manage',w.target_department_id) can_manage,(w.source_version<>w.current_version) needs_review,(w.assignee_id is not null and not private.workflow_assignee_eligible(w.tenant_id,w.assignee_id,w.target_department_id,w.flow)) requires_reassignment`;
+const summary = `w.id,w.source_kind,w.source_id,w.source_department_id,w.source_version,w.current_version,w.flow,w.target_department_id,w.assignee_id,w.customer_name,w.state,w.version,w.created_at,w.updated_at,(select p.name from public.profiles p where p.id=w.assignee_id) assignee_name,private.workflow_access(w.tenant_id,'collections.manage',w.target_department_id) can_manage,(w.source_version<>w.current_version) needs_review,(w.assignee_id is not null and not private.workflow_assignee_eligible(w.tenant_id,w.assignee_id,w.target_department_id,w.flow)) requires_reassignment`;
 export function documentWorkflowRoutes(
   app: FastifyInstance,
   pool: pg.Pool,
@@ -42,9 +42,10 @@ export function documentWorkflowRoutes(
       await db.query("select set_config('request.jwt.claims',$1,true)", [
         JSON.stringify(claims),
       ]);
-      await db.query("select id from public.tenants where id=$1 for update", [
-        tenant,
-      ]);
+      await db.query(
+        "select id from public.tenants where id=$1 for no key update",
+        [tenant],
+      );
       await check(db);
       const value = await run(db);
       await check(db);
@@ -69,7 +70,7 @@ export function documentWorkflowRoutes(
       if (
         !(
           await db.query(
-            "select private.has_access($1,$2,null) or exists(select 1 from public.departments where tenant_id=$1 and private.has_access($1,$2,id)) allowed",
+            "select private.workflow_access($1,$2,null) or exists(select 1 from public.departments where tenant_id=$1 and private.workflow_access($1,$2,id)) allowed",
             [t, flow + ".read"],
           )
         ).rows[0]?.allowed
@@ -364,9 +365,20 @@ export function documentWorkflowRoutes(
       input = workInput.parse(req.body);
     let target: string | undefined;
     const permission: Check = async (db) => {
-      if (target)
-        await requirePermission(db, tenantId, "collections.manage", target);
-      else await flowRead(tenantId, "collections")(db);
+      if (target) {
+        if (
+          !(
+            await db.query(
+              "select private.workflow_access($1,'collections.manage',$2) allowed",
+              [tenantId, target],
+            )
+          ).rows[0]?.allowed
+        )
+          throw new HttpError(
+            403,
+            "No tienes permiso vigente para gestionar esta tarea.",
+          );
+      } else await flowRead(tenantId, "collections")(db);
     };
     return transaction(p.claims, tenantId, permission, async (db) => {
       const lookup = found(
