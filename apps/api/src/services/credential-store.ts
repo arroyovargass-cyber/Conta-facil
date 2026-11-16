@@ -1,3 +1,4 @@
+import type { IdpClient } from "./hacienda-idp";
 import type pg from "pg";
 import type { AppConfig } from "../config";
 import { HttpError, type Claims } from "../db";
@@ -58,10 +59,10 @@ export class CredentialStore {
       ]);
       if (
         !(
-          await db.query("select private.hacienda_access($1,$2) allowed", [
-            tenant,
-            permission,
-          ])
+          await db.query(
+            "select (private.hacienda_access($1,$2) and private.hacienda_access($1,'hacienda.read')) allowed",
+            [tenant, permission],
+          )
         ).rows[0]?.allowed
       )
         throw new HttpError(
@@ -71,10 +72,10 @@ export class CredentialStore {
       const value = await run(db);
       if (
         !(
-          await db.query("select private.hacienda_access($1,$2) allowed", [
-            tenant,
-            permission,
-          ])
+          await db.query(
+            "select (private.hacienda_access($1,$2) and private.hacienda_access($1,'hacienda.read')) allowed",
+            [tenant, permission],
+          )
         ).rows[0]?.allowed
       )
         throw new HttpError(
@@ -106,7 +107,8 @@ export class CredentialStore {
         (this.config.NODE_ENV === "test" ||
           new URL(this.config.APP_ORIGIN).protocol === "https:"),
       synthetic_only: inspector.version.includes("-dev"),
-      can_test_connection: false,
+      can_test_connection:
+        !!this.keyring && this.config.HACIENDA_STAG_PROBE_ENABLED === "true",
       can_emit: false,
       reason: !this.keyring
         ? "vault_not_configured"
@@ -131,7 +133,9 @@ export class CredentialStore {
           )
         ).rows[0] ?? empty(),
     );
-    return { configuration, capabilities: await this.capability() };
+    const capabilities = await this.capability();
+    capabilities.can_test_connection &&= configuration.active_version !== null;
+    return { configuration, capabilities };
   }
   private async current(db: pg.PoolClient, tenant: string, revision: number) {
     const row = (
@@ -364,5 +368,40 @@ export class CredentialStore {
       access.username = "";
       access.password = "";
     }
+  }
+  async testConnection(
+    claims: Claims,
+    tenant: string,
+    revision: number,
+    idp: IdpClient,
+  ) {
+    const result = await this.withApiAccess(
+      claims,
+      tenant,
+      revision,
+      (access) => idp.probe(access),
+    );
+    await this.transaction(
+      claims,
+      tenant,
+      "hacienda.connection.test",
+      async (db) => {
+        const row = await this.current(db, tenant, revision);
+        if (row.active_version === null)
+          throw new HttpError(409, "Las credenciales ya no están activas.");
+        await db.query(
+          "update public.hacienda_configuration set api_status=$2,api_checked_at=now(),session_closed=$3,updated_at=now() where tenant_id=$1 and environment='test'",
+          [tenant, result.status, result.sessionClosed],
+        );
+        await this.audit(
+          db,
+          claims,
+          tenant,
+          "connection_tested",
+          row.active_version,
+        );
+      },
+    );
+    return this.metadata(claims, tenant);
   }
 }

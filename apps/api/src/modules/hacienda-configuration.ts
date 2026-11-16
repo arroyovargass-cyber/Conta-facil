@@ -1,3 +1,4 @@
+import type { IdpClient } from "../services/hacienda-idp";
 import type { FastifyInstance } from "fastify";
 import type pg from "pg";
 import { z } from "zod";
@@ -29,6 +30,7 @@ export function haciendaConfigurationRoutes(
   pool: pg.Pool,
   auth: ReturnType<typeof identity>,
   config: AppConfig,
+  idp: IdpClient,
 ) {
   const store = new CredentialStore(pool, config),
     base = "/api/companies/:tenantId/hacienda";
@@ -68,5 +70,24 @@ export function haciendaConfigurationRoutes(
     await auth.limit("hacienda:credentials:tenant:" + tenantId, 5);
     await auth.limit("hacienda:credentials:user:" + p.claims.sub, 10);
     return store.deactivate(p.claims, tenantId, input.expected_revision);
+  });
+  app.post(base + "/connection-test", async (req) => {
+    const p = req.principal!,
+      { tenantId } = params.parse(req.params);
+    await store.authorize(p.claims, tenantId, "hacienda.connection.test");
+    const input = revision.parse(req.body);
+    if (config.HACIENDA_STAG_PROBE_ENABLED !== "true")
+      throw new HttpError(
+        503,
+        "La prueba externa de Hacienda está pendiente de habilitación.",
+      );
+    await auth.limit("hacienda:probe:tenant:" + tenantId, 5);
+    await auth.limit("hacienda:probe:user:" + p.claims.sub, 5);
+    return store.testConnection(
+      p.claims,
+      tenantId,
+      input.expected_revision,
+      idp,
+    );
   });
 }

@@ -1,4 +1,5 @@
 import { haciendaConfigurationRoutes } from "./modules/hacienda-configuration";
+import { HaciendaIdp, type IdpClient } from "./services/hacienda-idp";
 import Fastify from "fastify";
 import cookie from "@fastify/cookie";
 import helmet from "@fastify/helmet";
@@ -14,7 +15,12 @@ import { customerRoutes } from "./modules/customers";
 import { catalogRoutes } from "./modules/catalog";
 import { invoicingRoutes } from "./modules/invoicing";
 import { fiscalPreparationRoutes } from "./modules/fiscal-preparation";
-export async function createApp(config: AppConfig) {
+export async function createApp(
+  config: AppConfig,
+  options: { haciendaIdp?: IdpClient } = {},
+) {
+  if (options.haciendaIdp && config.NODE_ENV !== "test")
+    throw new Error("Las dependencias controladas solo se admiten en pruebas.");
   const app = Fastify({
     logger: false,
     bodyLimit: 32768,
@@ -82,7 +88,13 @@ export async function createApp(config: AppConfig) {
   catalogRoutes(app, pool, auth);
   invoicingRoutes(app, pool, auth);
   fiscalPreparationRoutes(app, pool, auth);
-  haciendaConfigurationRoutes(app, pool, auth, config);
+  haciendaConfigurationRoutes(
+    app,
+    pool,
+    auth,
+    config,
+    options.haciendaIdp ?? new HaciendaIdp({ environment: config.NODE_ENV }),
+  );
   app.get("/api/health", async () => {
     await pool.query("select 1");
     return { name: "Conta Fácil", phase: 1, status: "ok" };
