@@ -1,0 +1,16 @@
+create role anon nologin;
+create role authenticated nologin;
+create role service_role nologin bypassrls;
+create role authenticator login password 'local-only-authenticator' noinherit;
+grant anon,authenticated,service_role to authenticator;
+create role supabase_auth_admin login password 'local-only-auth' createrole;
+create schema auth authorization supabase_auth_admin;
+grant all on database postgres to supabase_auth_admin;
+grant usage on schema public to supabase_auth_admin;
+create function auth.uid() returns uuid language sql stable as $$select nullif(current_setting('request.jwt.claims',true)::jsonb->>'sub','')::uuid$$;
+create function auth.jwt() returns jsonb language sql stable as $$select coalesce(nullif(current_setting('request.jwt.claims',true),''),'{}')::jsonb$$;
+grant usage on schema auth to authenticated,anon,service_role;
+grant execute on function auth.uid(),auth.jwt() to authenticated,anon,service_role;
+alter role supabase_auth_admin set search_path to auth,public;
+alter function auth.uid() owner to supabase_auth_admin;
+alter function auth.jwt() owner to supabase_auth_admin;
