@@ -93,3 +93,26 @@ promete disponibilidad continua de un servicio gratuito suspendible.
 
 El nombre de cada migración enlaza el archivo fuente con el historial remoto;
 los timestamps los generó el servicio de migraciones, no el migrador local.
+
+## Actualización de conexión (17 de noviembre)
+
+El usuario confirmó el hostname de Session pooler
+`aws-1-us-east-1.pooler.supabase.com`. Se habilitó LOGIN para `conta_facil_api`,
+sin ampliar privilegios. Se generó contraseña aleatoria y verificador SCRAM;
+solo el verificador se envió a la migración alojada. La contraseña quedó en
+configuración privada de Render y en archivo local ignorado con modo 0600.
+Se guardó DATABASE_URL con usuario `conta_facil_api.ryobvhcarlpayqzaumdf`,
+puerto Session pooler 5432 y base postgres; la aplicación exige TLS validado.
+El despliegue generado es `dep-dbuefhu7bikc739neaig`.
+
+Los builds anteriores terminaron correctamente; el intento
+`dep-dbueb2psrm7s73ek27vg` falló al arrancar por SUPABASE_SERVICE_KEY ausente.
+La ausencia persiste como bloqueo hasta verificar un intento posterior.
+La prueba directa desde este entorno a la base devolvió ECONNREFUSED;
+no se deshabilitó TLS ni se afirmó conectividad validada. Verificar desde Render.
+No se enviaron invitaciones ni se crearon usuarios en esta operación.
+
+El intento `dep-dbuefhu7bikc739neaig` terminó update_failed a las
+23:51:13 UTC: build exitoso, arranque detenido por SUPABASE_SERVICE_KEY ausente.
+El usuario informa que la variable aparece en el panel; falta verificar guardado
+y aplicación en el servicio exacto. No se reintentó de nuevo automáticamente.

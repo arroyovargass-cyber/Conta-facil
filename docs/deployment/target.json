@@ -13,22 +13,22 @@
     "rls_tables": 29,
     "hosted_isolation_assertions_passed": 15,
     "security_advisories": 0,
-    "application_connection": "pending_hosting_connection_and_secure_runtime_configuration",
+    "application_connection": "restricted_role_login_enabled_render_database_url_set_connection_verification_pending",
     "hosted_fixtures_rolled_back": true
   },
   "render": {
     "service_name": "conta-facil-pruebas",
     "plan": "free",
-    "status": "created_initial_build_started_runtime_secrets_pending",
+    "status": "update_failed_service_key_missing_in_runtime",
     "workspace_id": "tea-dbtir6d9fdbs73bcn2o0",
     "workspace_confirmation": "explicit_user_confirmation",
     "service_id": "srv-dbudpelg1s2s73bi7cj0",
-    "deploy_id": "dep-dbudpf5g1s2s73bi7dt0",
+    "deploy_id": "dep-dbuefhu7bikc739neaig",
     "region": "virginia",
     "dashboard_url": "https://dashboard.render.com/web/srv-dbudpelg1s2s73bi7cj0",
     "auto_deploy": false,
     "queued_deploy_id": "dep-dbudpn0lujjs738tmso0",
-    "log_retrieval_status": "provider_503_unavailable"
+    "log_retrieval_status": "available"
   },
   "reference_only": {
     "project_name": "ContaNova",
@@ -58,7 +58,7 @@
     "administrator_email_confirmed": true,
     "invitation_sent": false,
     "auth_users_created": 0,
-    "checked_at_utc": "2026-11-17T23:01:16Z",
+    "checked_at_utc": "2026-11-17T23:48:23Z",
     "public_url_verified_ready": false
   }
 }
