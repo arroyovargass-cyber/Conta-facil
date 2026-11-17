@@ -1,6 +1,6 @@
 # Publicación de Conta Fácil Pruebas: estado comprobado
 
-Fecha: 2026-11-16. Solicitud vigente: publicar un entorno gratuito para que el
+Fecha de actualización: 2026-11-17 (Costa Rica). Solicitud vigente: publicar un entorno gratuito para que el
 usuario entre y pruebe las funciones existentes. No habilitar funciones fiscales
 pendientes ni planes de pago. No modificar ContaNova.
 
@@ -26,36 +26,52 @@ pendientes ni planes de pago. No modificar ContaNova.
   ignorado por Git, con permisos 0600. No se publica el correo en código ni se
   envía invitación antes de disponer del destino HTTPS correcto.
 
-## Bloqueos comprobados
+## Publicación en curso: Render Free
 
-| Servicio | Resultado | Acción necesaria |
-| --- | --- | --- |
-| Railway | Creación rechazada: `Your trial has expired. Please select a plan to continue using Railway.` | No se activó ningún plan ni se creó proyecto. No asumir que autoriza cobros. |
-| GitHub | Leer main funciona; crear rama `pruebas` devuelve 403 `Resource not accessible by integration`. | Reconectar con permisos efectivos de escritura para este repositorio. |
-| Render | Integración encontrada disponible, pero no instalada/conectada en esta sesión. | Instalar y conectar Render para operar el servicio Free ya preparado. |
-| Runtime | Rol backend continúa NOLOGIN; faltan variables protegidas y proveedor Auth/correo. | Provisionar por canal seguro al disponer del hosting; no pegar secretos en chat. |
-| Acceso del usuario | No hay URL pública ni usuario creado o invitación enviada. | Verificar despliegue, redirecciones, correo e invitación/MFA antes de anunciar acceso. |
+El usuario confirmó expresamente el espacio **My Workspace**. Se creó un único
+servicio web Node en Virginia, plan **free**, con despliegue automático apagado.
+No se creó una base Render, disco, worker ni recurso de pago.
 
-## Pasos de conexión del usuario
+- Servicio: `srv-dbudpelg1s2s73bi7cj0`.
+- Despliegue inicial: `dep-dbudpf5g1s2s73bi7dt0`.
+- Commit fuente: `7c00b3fb2e049eb48f7819ea277b40d550100214`.
+- Panel: https://dashboard.render.com/web/srv-dbudpelg1s2s73bi7cj0
+- URL asignada: https://conta-facil-pruebas.onrender.com
+- La actualización de la publishable key generó otro despliegue en cola:
+  `dep-dbudpn0lujjs738tmso0`; no se dispararon reintentos adicionales.
+- Consulta de logs del proveedor respondió 503; no hay evidencia de build exitoso.
+- Estado verificado al crear: `build_in_progress`. **No equivale a servicio listo**.
 
-1. En ChatGPT/Codex, abrir Configuración → Apps → GitHub. Desconectar la conexión
-   actual y volver a conectarla con la cuenta propietaria del repositorio.
-2. Autorizar `arroyovargass-cyber/Conta-facil`; aceptar solicitudes adicionales o
-   pendientes si aparecen. Revisar https://github.com/settings/installations .
-   No hace falta cambiar otra vez la visibilidad pública. Si la integración solo
-   permite lectura, la reconexión no debe anunciarse como escritura verificada.
-3. En Apps, instalar y conectar Render. Mantener el servicio en Free.
-4. Verificar nuevamente permisos y estado de las conexiones antes de reintentar
-   publicación. No se imprime ni solicita ningún token por el chat.
+La carga web de GitHub dejó 100 archivos fuente coincidentes, pero faltan 63,
+incluidos manifiestos de raíz, migraciones y pruebas. El ZIP completo versionado
+contiene los 164 archivos auditados. Como GitHub sigue rechazando escritura con
+403, el build extrae ese ZIP antes de instalar dependencias. Comprueba primero
+SHA-256 `1eec161e08b7bd0dbba7fcb65055bc922fa1f7b6981f7aade20bace3c53b2931`
+y rechaza rutas absolutas, recorrido de directorios y enlaces simbólicos.
+Este puente no modifica GitHub; una actualización requiere cambiar deliberadamente
+el archivo y su checksum o publicar el árbol completo de fuentes.
 
-## Trabajo pendiente al conectar
+Se configuraron Node 24.22.1, producción, puerto 10000, proxy de un salto,
+URL/publishable key de Supabase, SESSION_KEY aleatoria privada y STAG apagado.
+No hay contraseñas ni llaves tributarias en el build, código o documentación.
 
-Publicar el código auditado en GitHub sin sobreescribir cambios remotos; crear el
-servicio Free; configurar variables únicamente en servidor y conexión del rol
-restringido con TLS; verificar dominio HTTPS y health. Configurar Site URL y
-redirecciones de invitación/reset con el dominio real; verificar correo y enviar
-la invitación del primer administrador. Completar contraseña, identificación y
-MFA, y comprobar acceso y aislamiento con empresas ficticias.
+## Bloqueos y trabajo pendiente
+
+- Faltan `SUPABASE_SERVICE_KEY` y `DATABASE_URL` en el servidor. El usuario debe
+  introducir la clave privada directamente en Environment del panel Render;
+  no enviarla por chat. Para la base usar el rol restringido `conta_facil_api`,
+  TLS validado y el hostname oficial de Session pooler, nunca un host inventado
+  ni credenciales del usuario postgres. El rol continúa NOLOGIN hasta provisionar
+  su contraseña de forma segura.
+- Completar configuración antes de verificar el arranque; el despliegue inicial
+  puede fallar por variables ausentes. No anunciar acceso basándose solo en la URL.
+- Verificar estado terminal `live`, `/api/health`, página y registros del servidor.
+- Configurar Site URL y redirecciones de invitación/reset con el dominio real;
+  comprobar correo y enviar la invitación del primer administrador. No se envió
+  invitación ni se creó usuario hasta esta actualización.
+- Completar contraseña, identificación y MFA y probar aislamiento con empresas
+  ficticias.
+- Railway mantiene el trial vencido; no se activó ningún plan de pago.
 
 La publicación permitirá probar pantallas y procesos internos. Con el inspector
 de desarrollo actual, las llaves reales siguen bloqueadas; STAG continúa apagado
