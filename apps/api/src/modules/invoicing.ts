@@ -1,3 +1,4 @@
+import { receiverLocationIssues } from "../services/receiver-location";
 import type { FastifyInstance } from "fastify";
 import type pg from "pg";
 import { z } from "zod";
@@ -10,7 +11,21 @@ import {
 } from "../../../../packages/domain/src/billing";
 import { scoped, requirePermission, HttpError } from "../db";
 import type { identity } from "./identity";
-import { ids, listQuery, pattern, page, found } from "./billing-common";
+import {
+  ids,
+  listQuery,
+  pattern,
+  page,
+  found,
+  catalogPermission,
+} from "./billing-common";
+import {
+  calculateInvoice,
+  receiverInput,
+  validateInvoiceForIssuance,
+} from "../../../../packages/domain/src/invoice-fiscal";
+import { receiverSnapshot, insertCustomer } from "./customer-persistence";
+import { renderDraftPrint } from "../services/draft-print";
 const archiveInput = z
   .object({ version: z.int().positive(), archived: z.boolean() })
   .strict();
@@ -18,18 +33,29 @@ async function detail(db: pg.PoolClient, tenant: string, id: string) {
   const item = found(
     (
       await db.query(
-        "select * from public.invoice_drafts where tenant_id=$1 and id=$2",
+        `select d.*,coalesce((select jsonb_agg(to_jsonb(l)||jsonb_build_object('quantity',l.quantity::text,'unit_price',l.unit_price::text) order by l.position) from public.invoice_draft_lines l where l.tenant_id=d.tenant_id and l.draft_id=d.id),'[]'::jsonb) lines from public.invoice_drafts d where d.tenant_id=$1 and d.id=$2`,
         [tenant, id],
       )
     ).rows[0],
   );
-  item.lines = (
-    await db.query(
-      "select * from public.invoice_draft_lines where tenant_id=$1 and draft_id=$2 order by position",
-      [tenant, id],
-    )
-  ).rows;
-  item.subtotal = subtotal(item.lines);
+  item.subtotal = item.lines.every(
+    (l: any) => l.quantity !== null && l.unit_price !== null,
+  )
+    ? subtotal(item.lines)
+    : null;
+  item.fiscal_totals ??= calculateInvoice(item.lines);
+  const receiver = receiverInput.parse(item.customer_snapshot);
+  item.readiness = {
+    canEmit: false,
+    haciendaStatus: "not_sent",
+    issues: validateInvoiceForIssuance({
+      document_type: item.document_type,
+      receiver,
+      lines: item.lines,
+    }),
+  };
+  item.readiness.issues.push(...(await receiverLocationIssues(receiver)));
+  item.prices_include_tax = false;
   return item;
 }
 async function validateReferences(
@@ -46,14 +72,22 @@ async function validateReferences(
   ).rows[0];
   if (!dep)
     throw new HttpError(400, "Selecciona un departamento activo y autorizado.");
-  const c = (
-    await db.query(
-      "select * from public.customers where tenant_id=$1 and id=$2",
-      [tenant, v.customer_id],
-    )
-  ).rows[0];
-  if (!c || (!c.active && old?.customer_id !== c.id))
-    throw new HttpError(400, "Selecciona un cliente activo de esta empresa.");
+  if (v.receiver_mode === "occasional" && v.customer_id)
+    throw new HttpError(
+      400,
+      "La venta ocasional debe guardar el receptor directamente, sin seleccionar un cliente del catálogo.",
+    );
+  let c: any = null;
+  if (v.receiver_mode === "registered" && v.customer_id) {
+    c = (
+      await db.query(
+        "select * from public.customers where tenant_id=$1 and id=$2",
+        [tenant, v.customer_id],
+      )
+    ).rows[0];
+    if (!c || (!c.active && old?.customer_id !== c.id))
+      throw new HttpError(400, "Selecciona un cliente activo de esta empresa.");
+  }
   for (const line of v.lines)
     if (line.catalog_item_id) {
       const p = (
@@ -75,13 +109,29 @@ async function validateReferences(
           "El producto debe pertenecer a esta empresa y coincidir con la moneda. Nuevas referencias deben estar activas.",
         );
     }
-  return old?.customer_id === c.id
-    ? old.customer_snapshot
-    : {
-        name: c.name,
-        identification_type: c.identification_type,
-        identification: c.identification,
-      };
+  const snapshot =
+    v.receiver ??
+    (c
+      ? old?.customer_id === c.id
+        ? old.customer_snapshot
+        : receiverSnapshot(c)
+      : receiverInput.parse({}));
+  if (v.save_customer) {
+    if (v.receiver_mode !== "occasional")
+      throw new HttpError(
+        400,
+        "Guardar cliente solo corresponde a una venta ocasional.",
+      );
+    await catalogPermission(db, tenant, "customers.manage");
+    await catalogPermission(db, tenant, "customers.read");
+    if (!snapshot.identification || !snapshot.identification_type)
+      throw new HttpError(
+        400,
+        "Para guardar este cliente completa su identificación.",
+      );
+    await insertCustomer(db, tenant, { ...snapshot, active: true });
+  }
+  return snapshot;
 }
 async function insertLines(
   db: pg.PoolClient,
@@ -91,7 +141,7 @@ async function insertLines(
 ) {
   for (const [index, l] of lines.entries())
     await db.query(
-      "insert into public.invoice_draft_lines(tenant_id,draft_id,position,catalog_item_id,description,quantity,unit_price) values($1,$2,$3,$4,$5,$6,$7)",
+      "insert into public.invoice_draft_lines(tenant_id,draft_id,position,catalog_item_id,description,quantity,unit_price,fiscal) values($1,$2,$3,$4,$5,$6,$7,$8)",
       [
         tenant,
         id,
@@ -100,6 +150,7 @@ async function insertLines(
         l.description,
         l.quantity,
         l.unit_price,
+        l.fiscal,
       ],
     );
 }
@@ -156,6 +207,21 @@ export function invoicingRoutes(
       item: await detail(db, tenantId, id!),
     }));
   });
+  app.get(base + "/:id/print", async (req, reply) => {
+    const p = await auth.authenticate(req),
+      { tenantId, id } = ids.parse(req.params);
+    return scoped(pool, p.claims, async (db) => {
+      const draft = await detail(db, tenantId, id!);
+      const company = (
+        await db.query("select legal_name from public.tenants where id=$1", [
+          tenantId,
+        ])
+      ).rows[0];
+      return reply
+        .type("text/html; charset=utf-8")
+        .send(renderDraftPrint(draft, company?.legal_name ?? "Empresa"));
+    });
+  });
   app.post(base, { bodyLimit: 262144 }, async (req) => {
     const p = req.principal!,
       { tenantId } = ids.parse(req.params),
@@ -183,7 +249,7 @@ export function invoicingRoutes(
       const snapshot = await validateReferences(db, tenantId, v);
       const row = (
         await db.query(
-          "insert into public.invoice_drafts(tenant_id,customer_id,department_id,currency,customer_snapshot,notes,created_by,updated_by,operation_id,request_hash) values($1,$2,$3,$4,$5,$6,$7,$7,$8,$9) returning id",
+          "insert into public.invoice_drafts(tenant_id,customer_id,department_id,currency,customer_snapshot,notes,created_by,updated_by,operation_id,request_hash,receiver_mode,document_type,fiscal_totals,calculation_version) values($1,$2,$3,$4,$5,$6,$7,$7,$8,$9,$10,$11,$12,$13) returning id",
           [
             tenantId,
             v.customer_id,
@@ -194,6 +260,10 @@ export function invoicingRoutes(
             p.userId,
             v.operation_id,
             hash,
+            v.receiver_mode,
+            v.document_type,
+            calculateInvoice(v.lines),
+            "fe-iva-v1-line-half-up-5",
           ],
         )
       ).rows[0];
@@ -242,7 +312,7 @@ export function invoicingRoutes(
         );
         const snapshot = await validateReferences(db, tenantId, v, old);
         await db.query(
-          "update public.invoice_drafts set customer_id=$3,department_id=$4,currency=$5,customer_snapshot=$6,notes=$7,version=version+1,updated_by=$8,updated_at=now() where tenant_id=$1 and id=$2",
+          "update public.invoice_drafts set customer_id=$3,department_id=$4,currency=$5,customer_snapshot=$6,notes=$7,version=version+1,updated_by=$8,updated_at=now(),receiver_mode=$9,document_type=$10,fiscal_totals=$11,calculation_version=$12 where tenant_id=$1 and id=$2",
           [
             tenantId,
             id,
@@ -252,6 +322,10 @@ export function invoicingRoutes(
             snapshot,
             v.notes,
             p.userId,
+            v.receiver_mode,
+            v.document_type,
+            calculateInvoice(v.lines),
+            "fe-iva-v1-line-half-up-5",
           ],
         );
         await db.query(

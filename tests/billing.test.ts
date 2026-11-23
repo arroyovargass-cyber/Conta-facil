@@ -44,14 +44,15 @@ it("bounds commercial decimals and rejects ambiguous representations", () => {
   expect(decimalInput.parse("0")).toBe("0");
   expect(decimalInput.parse("999999999.99999")).toBe("999999999.99999");
 });
-it("accepts drafts only with positive quantities and 1 through 100 lines", () => {
+it("allows incomplete drafts and enforces supplied quantities and the 100-line bound", () => {
   expect(draftInput.safeParse(draft()).success).toBe(true);
   for (const quantity of ["0", "0.00000"]) {
     const d = draft();
     d.lines[0].quantity = quantity;
     expect(draftInput.safeParse(d).success).toBe(false);
   }
-  for (const count of [0, 101]) {
+  expect(draftInput.safeParse({ ...draft(), lines: [] }).success).toBe(true);
+  for (const count of [101]) {
     const d = draft();
     d.lines = Array.from({ length: count }, () => d.lines[0]);
     expect(draftInput.safeParse(d).success).toBe(false);

@@ -1,0 +1,2520 @@
+{
+  "source": "Hacienda",
+  "version": "4.4",
+  "provinces": [
+    {
+      "code": "1",
+      "name": "SAN JOSÉ",
+      "cantons": [
+        {
+          "code": "01",
+          "name": "SAN JOSÉ",
+          "districts": [
+            {
+              "code": "01",
+              "name": "CARMEN"
+            },
+            {
+              "code": "02",
+              "name": "MERCED"
+            },
+            {
+              "code": "03",
+              "name": "HOSPITAL"
+            },
+            {
+              "code": "04",
+              "name": "CATEDRAL"
+            },
+            {
+              "code": "05",
+              "name": "ZAPOTE"
+            },
+            {
+              "code": "06",
+              "name": "SAN FRANCISCO DE DOS RÍOS"
+            },
+            {
+              "code": "07",
+              "name": "URUCA"
+            },
+            {
+              "code": "08",
+              "name": "MATA REDONDA"
+            },
+            {
+              "code": "09",
+              "name": "PAVAS"
+            },
+            {
+              "code": "10",
+              "name": "HATILLO"
+            },
+            {
+              "code": "11",
+              "name": "SAN SEBASTIÁN"
+            }
+          ]
+        },
+        {
+          "code": "02",
+          "name": "ESCAZÚ",
+          "districts": [
+            {
+              "code": "01",
+              "name": "ESCAZÚ"
+            },
+            {
+              "code": "02",
+              "name": "SAN ANTONIO"
+            },
+            {
+              "code": "03",
+              "name": "SAN RAFAEL"
+            }
+          ]
+        },
+        {
+          "code": "03",
+          "name": "DESAMPARADOS",
+          "districts": [
+            {
+              "code": "01",
+              "name": "DESAMPARADOS"
+            },
+            {
+              "code": "02",
+              "name": "SAN MIGUEL"
+            },
+            {
+              "code": "03",
+              "name": "SAN JUAN DE DIOS"
+            },
+            {
+              "code": "04",
+              "name": "SAN RAFAEL ARRIBA"
+            },
+            {
+              "code": "05",
+              "name": "SAN ANTONIO"
+            },
+            {
+              "code": "06",
+              "name": "FRAILES"
+            },
+            {
+              "code": "07",
+              "name": "PATARRÁ"
+            },
+            {
+              "code": "08",
+              "name": "SAN CRISTÓBAL"
+            },
+            {
+              "code": "09",
+              "name": "ROSARIO"
+            },
+            {
+              "code": "10",
+              "name": "DAMAS"
+            },
+            {
+              "code": "11",
+              "name": "SAN RAFAEL ABAJO"
+            },
+            {
+              "code": "12",
+              "name": "GRAVILIAS"
+            },
+            {
+              "code": "13",
+              "name": "LOS GUIDO"
+            }
+          ]
+        },
+        {
+          "code": "04",
+          "name": "PURISCAL",
+          "districts": [
+            {
+              "code": "01",
+              "name": "SANTIAGO"
+            },
+            {
+              "code": "02",
+              "name": "MERCEDES SUR"
+            },
+            {
+              "code": "03",
+              "name": "BARBACOAS"
+            },
+            {
+              "code": "04",
+              "name": "GRIFO ALTO"
+            },
+            {
+              "code": "05",
+              "name": "SAN RAFAEL"
+            },
+            {
+              "code": "06",
+              "name": "CANDELARITA"
+            },
+            {
+              "code": "07",
+              "name": "DESAMPARADITOS"
+            },
+            {
+              "code": "08",
+              "name": "SAN ANTONIO"
+            },
+            {
+              "code": "09",
+              "name": "CHIRES"
+            }
+          ]
+        },
+        {
+          "code": "05",
+          "name": "TARRAZÚ",
+          "districts": [
+            {
+              "code": "01",
+              "name": "SAN MARCOS"
+            },
+            {
+              "code": "02",
+              "name": "SAN LORENZO"
+            },
+            {
+              "code": "03",
+              "name": "SAN CARLOS"
+            }
+          ]
+        },
+        {
+          "code": "06",
+          "name": "ASERRÍ",
+          "districts": [
+            {
+              "code": "01",
+              "name": "ASERRÍ"
+            },
+            {
+              "code": "02",
+              "name": "TARBACA"
+            },
+            {
+              "code": "03",
+              "name": "VUELTA DE JORCO"
+            },
+            {
+              "code": "04",
+              "name": "SAN GABRIEL"
+            },
+            {
+              "code": "05",
+              "name": "LEGUA"
+            },
+            {
+              "code": "06",
+              "name": "MONTERREY"
+            },
+            {
+              "code": "07",
+              "name": "SALITRILLOS"
+            }
+          ]
+        },
+        {
+          "code": "07",
+          "name": "MORA",
+          "districts": [
+            {
+              "code": "01",
+              "name": "COLÓN"
+            },
+            {
+              "code": "02",
+              "name": "GUAYABO"
+            },
+            {
+              "code": "03",
+              "name": "TABARCIA"
+            },
+            {
+              "code": "04",
+              "name": "PIEDRAS NEGRAS"
+            },
+            {
+              "code": "05",
+              "name": "PICAGRES"
+            },
+            {
+              "code": "06",
+              "name": "JARIS"
+            },
+            {
+              "code": "07",
+              "name": "QUITIRRISÍ"
+            }
+          ]
+        },
+        {
+          "code": "08",
+          "name": "GOICOECHEA",
+          "districts": [
+            {
+              "code": "01",
+              "name": "GUADALUPE"
+            },
+            {
+              "code": "02",
+              "name": "SAN FRANCISCO"
+            },
+            {
+              "code": "03",
+              "name": "CALLE BLANCOS"
+            },
+            {
+              "code": "04",
+              "name": "MATA DE PLÁTANO"
+            },
+            {
+              "code": "05",
+              "name": "IPÍS"
+            },
+            {
+              "code": "06",
+              "name": "RANCHO REDONDO"
+            },
+            {
+              "code": "07",
+              "name": "PURRAL"
+            }
+          ]
+        },
+        {
+          "code": "09",
+          "name": "SANTA ANA",
+          "districts": [
+            {
+              "code": "01",
+              "name": "SANTA ANA"
+            },
+            {
+              "code": "02",
+              "name": "SALITRAL"
+            },
+            {
+              "code": "03",
+              "name": "POZOS"
+            },
+            {
+              "code": "04",
+              "name": "URUCA"
+            },
+            {
+              "code": "05",
+              "name": "PIEDADES"
+            },
+            {
+              "code": "06",
+              "name": "BRASIL"
+            }
+          ]
+        },
+        {
+          "code": "10",
+          "name": "ALAJUELITA",
+          "districts": [
+            {
+              "code": "01",
+              "name": "ALAJUELITA"
+            },
+            {
+              "code": "02",
+              "name": "SAN JOSECITO"
+            },
+            {
+              "code": "03",
+              "name": "SAN ANTONIO"
+            },
+            {
+              "code": "04",
+              "name": "CONCEPCIÓN"
+            },
+            {
+              "code": "05",
+              "name": "SAN FELIPE"
+            }
+          ]
+        },
+        {
+          "code": "11",
+          "name": "VÁZQUEZ DE CORONADO",
+          "districts": [
+            {
+              "code": "01",
+              "name": "SAN ISIDRO"
+            },
+            {
+              "code": "02",
+              "name": "SAN RAFAEL"
+            },
+            {
+              "code": "03",
+              "name": "DULCE NOMBRE DE JESÚS"
+            },
+            {
+              "code": "04",
+              "name": "PATALILLO"
+            },
+            {
+              "code": "05",
+              "name": "CASCAJAL"
+            }
+          ]
+        },
+        {
+          "code": "12",
+          "name": "ACOSTA",
+          "districts": [
+            {
+              "code": "01",
+              "name": "SAN IGNACIO"
+            },
+            {
+              "code": "02",
+              "name": "GUAITIL"
+            },
+            {
+              "code": "03",
+              "name": "PALMICHAL"
+            },
+            {
+              "code": "04",
+              "name": "CANGREJAL"
+            },
+            {
+              "code": "05",
+              "name": "SABANILLAS"
+            }
+          ]
+        },
+        {
+          "code": "13",
+          "name": "TIBÁS",
+          "districts": [
+            {
+              "code": "01",
+              "name": "SAN JUAN"
+            },
+            {
+              "code": "02",
+              "name": "CINCO ESQUINAS"
+            },
+            {
+              "code": "03",
+              "name": "ANSELMO LLORENTE"
+            },
+            {
+              "code": "04",
+              "name": "LEÓN XIII"
+            },
+            {
+              "code": "05",
+              "name": "COLIMA"
+            }
+          ]
+        },
+        {
+          "code": "14",
+          "name": "MORAVIA",
+          "districts": [
+            {
+              "code": "01",
+              "name": "SAN VICENTE"
+            },
+            {
+              "code": "02",
+              "name": "SAN JERÓNIMO"
+            },
+            {
+              "code": "03",
+              "name": "LA TRINIDAD"
+            }
+          ]
+        },
+        {
+          "code": "15",
+          "name": "MONTES DE OCA",
+          "districts": [
+            {
+              "code": "01",
+              "name": "SAN PEDRO"
+            },
+            {
+              "code": "02",
+              "name": "SABANILLA"
+            },
+            {
+              "code": "03",
+              "name": "MERCEDES"
+            },
+            {
+              "code": "04",
+              "name": "SAN RAFAEL"
+            }
+          ]
+        },
+        {
+          "code": "16",
+          "name": "TURRUBARES",
+          "districts": [
+            {
+              "code": "01",
+              "name": "SAN PABLO"
+            },
+            {
+              "code": "02",
+              "name": "SAN PEDRO"
+            },
+            {
+              "code": "03",
+              "name": "SAN JUAN DE MATA"
+            },
+            {
+              "code": "04",
+              "name": "SAN LUIS"
+            },
+            {
+              "code": "05",
+              "name": "CARARA"
+            }
+          ]
+        },
+        {
+          "code": "17",
+          "name": "DOTA",
+          "districts": [
+            {
+              "code": "01",
+              "name": "SANTA MARÍA"
+            },
+            {
+              "code": "02",
+              "name": "JARDÍN"
+            },
+            {
+              "code": "03",
+              "name": "COPEY"
+            }
+          ]
+        },
+        {
+          "code": "18",
+          "name": "CURRIDABAT",
+          "districts": [
+            {
+              "code": "01",
+              "name": "CURRIDABAT"
+            },
+            {
+              "code": "02",
+              "name": "GRANADILLA"
+            },
+            {
+              "code": "03",
+              "name": "SÁNCHEZ"
+            },
+            {
+              "code": "04",
+              "name": "TIRRASES"
+            }
+          ]
+        },
+        {
+          "code": "19",
+          "name": "PÉREZ ZELEDÓN",
+          "districts": [
+            {
+              "code": "01",
+              "name": "SAN ISIDRO DE EL GENERAL"
+            },
+            {
+              "code": "02",
+              "name": "EL GENERAL"
+            },
+            {
+              "code": "03",
+              "name": "DANIEL FLORES"
+            },
+            {
+              "code": "04",
+              "name": "RIVAS"
+            },
+            {
+              "code": "05",
+              "name": "SAN PEDRO"
+            },
+            {
+              "code": "06",
+              "name": "PLATANARES"
+            },
+            {
+              "code": "07",
+              "name": "PEJIBAYE"
+            },
+            {
+              "code": "08",
+              "name": "CAJÓN"
+            },
+            {
+              "code": "09",
+              "name": "BARÚ"
+            },
+            {
+              "code": "10",
+              "name": "RÍO NUEVO"
+            },
+            {
+              "code": "11",
+              "name": "PÁRAMO"
+            },
+            {
+              "code": "12",
+              "name": "LA AMISTAD"
+            }
+          ]
+        },
+        {
+          "code": "20",
+          "name": "LEÓN CORTÉS CASTRO",
+          "districts": [
+            {
+              "code": "01",
+              "name": "SAN PABLO"
+            },
+            {
+              "code": "02",
+              "name": "SAN ANDRÉS"
+            },
+            {
+              "code": "03",
+              "name": "LLANO BONITO"
+            },
+            {
+              "code": "04",
+              "name": "SAN ISIDRO"
+            },
+            {
+              "code": "05",
+              "name": "SANTA CRUZ"
+            },
+            {
+              "code": "06",
+              "name": "SAN ANTONIO"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "code": "2",
+      "name": "ALAJUELA",
+      "cantons": [
+        {
+          "code": "01",
+          "name": "ALAJUELA",
+          "districts": [
+            {
+              "code": "01",
+              "name": "ALAJUELA"
+            },
+            {
+              "code": "02",
+              "name": "SAN JOSÉ"
+            },
+            {
+              "code": "03",
+              "name": "CARRIZAL"
+            },
+            {
+              "code": "04",
+              "name": "SAN ANTONIO"
+            },
+            {
+              "code": "05",
+              "name": "GUÁCIMA"
+            },
+            {
+              "code": "06",
+              "name": "SAN ISIDRO"
+            },
+            {
+              "code": "07",
+              "name": "SABANILLA"
+            },
+            {
+              "code": "08",
+              "name": "SAN RAFAEL"
+            },
+            {
+              "code": "09",
+              "name": "RÍO SEGUNDO"
+            },
+            {
+              "code": "10",
+              "name": "DESAMPARADOS"
+            },
+            {
+              "code": "11",
+              "name": "TURRÚCARES"
+            },
+            {
+              "code": "12",
+              "name": "TAMBOR"
+            },
+            {
+              "code": "13",
+              "name": "GARITA"
+            },
+            {
+              "code": "14",
+              "name": "SARAPIQUÍ"
+            }
+          ]
+        },
+        {
+          "code": "02",
+          "name": "SAN RAMÓN",
+          "districts": [
+            {
+              "code": "01",
+              "name": "SAN RAMÓN"
+            },
+            {
+              "code": "02",
+              "name": "SANTIAGO"
+            },
+            {
+              "code": "03",
+              "name": "SAN JUAN"
+            },
+            {
+              "code": "04",
+              "name": "PIEDADES NORTE"
+            },
+            {
+              "code": "05",
+              "name": "PIEDADES SUR"
+            },
+            {
+              "code": "06",
+              "name": "SAN RAFAEL"
+            },
+            {
+              "code": "07",
+              "name": "SAN ISIDRO"
+            },
+            {
+              "code": "08",
+              "name": "ÁNGELES"
+            },
+            {
+              "code": "09",
+              "name": "ALFARO"
+            },
+            {
+              "code": "10",
+              "name": "VOLIO"
+            },
+            {
+              "code": "11",
+              "name": "CONCEPCIÓN"
+            },
+            {
+              "code": "12",
+              "name": "ZAPOTAL"
+            },
+            {
+              "code": "13",
+              "name": "PEÑAS BLANCAS"
+            },
+            {
+              "code": "14",
+              "name": "SAN LORENZO"
+            }
+          ]
+        },
+        {
+          "code": "03",
+          "name": "GRECIA",
+          "districts": [
+            {
+              "code": "01",
+              "name": "GRECIA"
+            },
+            {
+              "code": "02",
+              "name": "SAN ISIDRO"
+            },
+            {
+              "code": "03",
+              "name": "SAN JOSÉ"
+            },
+            {
+              "code": "04",
+              "name": "SAN ROQUE"
+            },
+            {
+              "code": "05",
+              "name": "TACARES"
+            },
+            {
+              "code": "06",
+              "name": "PUENTE DE PIEDRA"
+            },
+            {
+              "code": "07",
+              "name": "BOLÍVAR"
+            }
+          ]
+        },
+        {
+          "code": "04",
+          "name": "SAN MATEO",
+          "districts": [
+            {
+              "code": "01",
+              "name": "SAN MATEO"
+            },
+            {
+              "code": "02",
+              "name": "DESMONTE"
+            },
+            {
+              "code": "03",
+              "name": "JESÚS MARÍA"
+            },
+            {
+              "code": "04",
+              "name": "LABRADOR"
+            }
+          ]
+        },
+        {
+          "code": "05",
+          "name": "ATENAS",
+          "districts": [
+            {
+              "code": "01",
+              "name": "ATENAS"
+            },
+            {
+              "code": "02",
+              "name": "JESÚS"
+            },
+            {
+              "code": "03",
+              "name": "MERCEDES"
+            },
+            {
+              "code": "04",
+              "name": "SAN ISIDRO"
+            },
+            {
+              "code": "05",
+              "name": "CONCEPCION"
+            },
+            {
+              "code": "06",
+              "name": "SAN JOSÉ"
+            },
+            {
+              "code": "07",
+              "name": "SANTA EULALIA"
+            },
+            {
+              "code": "08",
+              "name": "ESCOBAL"
+            }
+          ]
+        },
+        {
+          "code": "06",
+          "name": "NARANJO",
+          "districts": [
+            {
+              "code": "01",
+              "name": "NARANJO"
+            },
+            {
+              "code": "02",
+              "name": "SAN MIGUEL"
+            },
+            {
+              "code": "03",
+              "name": "SAN JOSÉ"
+            },
+            {
+              "code": "04",
+              "name": "CIRRÍ SUR"
+            },
+            {
+              "code": "05",
+              "name": "SAN JERÓNIMO"
+            },
+            {
+              "code": "06",
+              "name": "SAN JUAN"
+            },
+            {
+              "code": "07",
+              "name": "EL ROSARIO"
+            },
+            {
+              "code": "08",
+              "name": "PALMITOS"
+            }
+          ]
+        },
+        {
+          "code": "07",
+          "name": "PALMARES",
+          "districts": [
+            {
+              "code": "01",
+              "name": "PALMARES"
+            },
+            {
+              "code": "02",
+              "name": "ZARAGOZA"
+            },
+            {
+              "code": "03",
+              "name": "BUENOS AIRES"
+            },
+            {
+              "code": "04",
+              "name": "SANTIAGO"
+            },
+            {
+              "code": "05",
+              "name": "CANDELARIA"
+            },
+            {
+              "code": "06",
+              "name": "ESQUIPULAS"
+            },
+            {
+              "code": "07",
+              "name": "LA GRANJA"
+            }
+          ]
+        },
+        {
+          "code": "08",
+          "name": "POÁS",
+          "districts": [
+            {
+              "code": "01",
+              "name": "SAN PEDRO"
+            },
+            {
+              "code": "02",
+              "name": "SAN JUAN"
+            },
+            {
+              "code": "03",
+              "name": "SAN RAFAEL"
+            },
+            {
+              "code": "04",
+              "name": "CARRILLOS"
+            },
+            {
+              "code": "05",
+              "name": "SABANA REDONDA"
+            }
+          ]
+        },
+        {
+          "code": "09",
+          "name": "OROTINA",
+          "districts": [
+            {
+              "code": "01",
+              "name": "OROTINA"
+            },
+            {
+              "code": "02",
+              "name": "EL MASTATE"
+            },
+            {
+              "code": "03",
+              "name": "HACIENDA VIEJA"
+            },
+            {
+              "code": "04",
+              "name": "COYOLAR"
+            },
+            {
+              "code": "05",
+              "name": "LA CEIBA"
+            }
+          ]
+        },
+        {
+          "code": "10",
+          "name": "SAN CARLOS",
+          "districts": [
+            {
+              "code": "01",
+              "name": "QUESADA"
+            },
+            {
+              "code": "02",
+              "name": "FLORENCIA"
+            },
+            {
+              "code": "03",
+              "name": "BUENAVISTA"
+            },
+            {
+              "code": "04",
+              "name": "AGUAS ZARCAS"
+            },
+            {
+              "code": "05",
+              "name": "VENECIA"
+            },
+            {
+              "code": "06",
+              "name": "PITAL"
+            },
+            {
+              "code": "07",
+              "name": "LA FORTUNA"
+            },
+            {
+              "code": "08",
+              "name": "LA TIGRA"
+            },
+            {
+              "code": "09",
+              "name": "LA PALMERA"
+            },
+            {
+              "code": "10",
+              "name": "VENADO"
+            },
+            {
+              "code": "11",
+              "name": "CUTRIS"
+            },
+            {
+              "code": "12",
+              "name": "MONTERREY"
+            },
+            {
+              "code": "13",
+              "name": "POCOSOL"
+            }
+          ]
+        },
+        {
+          "code": "11",
+          "name": "ZARCERO",
+          "districts": [
+            {
+              "code": "01",
+              "name": "ZARCERO"
+            },
+            {
+              "code": "02",
+              "name": "LAGUNA"
+            },
+            {
+              "code": "03",
+              "name": "TAPEZCO"
+            },
+            {
+              "code": "04",
+              "name": "GUADALUPE"
+            },
+            {
+              "code": "05",
+              "name": "PALMIRA"
+            },
+            {
+              "code": "06",
+              "name": "ZAPOTE"
+            },
+            {
+              "code": "07",
+              "name": "BRISAS"
+            }
+          ]
+        },
+        {
+          "code": "12",
+          "name": "SARCHÍ",
+          "districts": [
+            {
+              "code": "01",
+              "name": "SARCHÍ NORTE"
+            },
+            {
+              "code": "02",
+              "name": "SARCHÍ SUR"
+            },
+            {
+              "code": "03",
+              "name": "TORO AMARILLO"
+            },
+            {
+              "code": "04",
+              "name": "SAN PEDRO"
+            },
+            {
+              "code": "05",
+              "name": "RODRÍGUEZ"
+            }
+          ]
+        },
+        {
+          "code": "13",
+          "name": "UPALA",
+          "districts": [
+            {
+              "code": "01",
+              "name": "UPALA"
+            },
+            {
+              "code": "02",
+              "name": "AGUAS CLARAS"
+            },
+            {
+              "code": "03",
+              "name": "SAN JOSÉ O PIZOTE"
+            },
+            {
+              "code": "04",
+              "name": "BIJAGUA"
+            },
+            {
+              "code": "05",
+              "name": "DELICIAS"
+            },
+            {
+              "code": "06",
+              "name": "DOS RÍOS"
+            },
+            {
+              "code": "07",
+              "name": "YOLILLAL"
+            },
+            {
+              "code": "08",
+              "name": "CANALETE"
+            }
+          ]
+        },
+        {
+          "code": "14",
+          "name": "LOS CHILES",
+          "districts": [
+            {
+              "code": "01",
+              "name": "LOS CHILES"
+            },
+            {
+              "code": "02",
+              "name": "CAÑO NEGRO"
+            },
+            {
+              "code": "03",
+              "name": "EL AMPARO"
+            },
+            {
+              "code": "04",
+              "name": "SAN JORGE"
+            }
+          ]
+        },
+        {
+          "code": "15",
+          "name": "GUATUSO",
+          "districts": [
+            {
+              "code": "01",
+              "name": "SAN RAFAEL"
+            },
+            {
+              "code": "02",
+              "name": "BUENA VISTA"
+            },
+            {
+              "code": "03",
+              "name": "COTE "
+            },
+            {
+              "code": "04",
+              "name": "KATIRA"
+            }
+          ]
+        },
+        {
+          "code": "16",
+          "name": "RÍO CUARTO",
+          "districts": [
+            {
+              "code": "01",
+              "name": "RÍO CUARTO"
+            },
+            {
+              "code": "02",
+              "name": "SANTA RITA"
+            },
+            {
+              "code": "03",
+              "name": "SANTA ISABEL"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "code": "3",
+      "name": "CARTAGO",
+      "cantons": [
+        {
+          "code": "01",
+          "name": "CARTAGO",
+          "districts": [
+            {
+              "code": "01",
+              "name": "ORIENTAL"
+            },
+            {
+              "code": "02",
+              "name": "OCCIDENTAL "
+            },
+            {
+              "code": "03",
+              "name": "CARMEN"
+            },
+            {
+              "code": "04",
+              "name": "SAN NICOLÁS"
+            },
+            {
+              "code": "05",
+              "name": "AGUACALIENTE O SAN FRANCISCO"
+            },
+            {
+              "code": "06",
+              "name": "GUADALUPE O ARENILLA"
+            },
+            {
+              "code": "07",
+              "name": "CORRALILLO"
+            },
+            {
+              "code": "08",
+              "name": "TIERRA BLANCA"
+            },
+            {
+              "code": "09",
+              "name": "DULCE NOMBRE"
+            },
+            {
+              "code": "10",
+              "name": "LLANO GRANDE"
+            },
+            {
+              "code": "11",
+              "name": "QUEBRADILLA"
+            }
+          ]
+        },
+        {
+          "code": "02",
+          "name": "PARAÍSO",
+          "districts": [
+            {
+              "code": "01",
+              "name": "PARAÍSO"
+            },
+            {
+              "code": "02",
+              "name": "SANTIAGO"
+            },
+            {
+              "code": "03",
+              "name": "OROSI"
+            },
+            {
+              "code": "04",
+              "name": "CACHÍ"
+            },
+            {
+              "code": "05",
+              "name": "LLANOS DE SANTA LUCIA"
+            },
+            {
+              "code": "06",
+              "name": "BIRRISITO"
+            }
+          ]
+        },
+        {
+          "code": "03",
+          "name": "LA UNIÓN",
+          "districts": [
+            {
+              "code": "01",
+              "name": "TRES RÍOS"
+            },
+            {
+              "code": "02",
+              "name": "SAN DIEGO"
+            },
+            {
+              "code": "03",
+              "name": "SAN JUAN"
+            },
+            {
+              "code": "04",
+              "name": "SAN RAFAEL"
+            },
+            {
+              "code": "05",
+              "name": "CONCEPCIÓN"
+            },
+            {
+              "code": "06",
+              "name": "DULCE NOMBRE"
+            },
+            {
+              "code": "07",
+              "name": "SAN RAMÓN"
+            },
+            {
+              "code": "08",
+              "name": "RÍO AZUL"
+            }
+          ]
+        },
+        {
+          "code": "04",
+          "name": "JIMÉNEZ",
+          "districts": [
+            {
+              "code": "01",
+              "name": "JUAN VIÑAS"
+            },
+            {
+              "code": "02",
+              "name": "TUCURRIQUE"
+            },
+            {
+              "code": "03",
+              "name": "PEJIBAYE"
+            },
+            {
+              "code": "04",
+              "name": "La Victoria"
+            }
+          ]
+        },
+        {
+          "code": "05",
+          "name": "TURRIALBA",
+          "districts": [
+            {
+              "code": "01",
+              "name": "TURRIALBA"
+            },
+            {
+              "code": "02",
+              "name": "LA SUIZA"
+            },
+            {
+              "code": "03",
+              "name": "PERALTA"
+            },
+            {
+              "code": "04",
+              "name": "SANTA CRUZ"
+            },
+            {
+              "code": "05",
+              "name": "SANTA TERESITA"
+            },
+            {
+              "code": "06",
+              "name": "PAVONES"
+            },
+            {
+              "code": "07",
+              "name": "TUIS"
+            },
+            {
+              "code": "08",
+              "name": "TAYUTIC"
+            },
+            {
+              "code": "09",
+              "name": "SANTA ROSA"
+            },
+            {
+              "code": "10",
+              "name": "TRES EQUIS"
+            },
+            {
+              "code": "11",
+              "name": "LA ISABEL "
+            },
+            {
+              "code": "12",
+              "name": "CHIRRIPÓ"
+            }
+          ]
+        },
+        {
+          "code": "06",
+          "name": "ALVARADO",
+          "districts": [
+            {
+              "code": "01",
+              "name": "PACAYAS"
+            },
+            {
+              "code": "02",
+              "name": "CERVANTES"
+            },
+            {
+              "code": "03",
+              "name": "CAPELLADES"
+            }
+          ]
+        },
+        {
+          "code": "07",
+          "name": "OREAMUNO",
+          "districts": [
+            {
+              "code": "01",
+              "name": "SAN RAFAEL"
+            },
+            {
+              "code": "02",
+              "name": "COT"
+            },
+            {
+              "code": "03",
+              "name": "POTRERO CERRADO"
+            },
+            {
+              "code": "04",
+              "name": "CIPRESES"
+            },
+            {
+              "code": "05",
+              "name": "SANTA ROSA"
+            }
+          ]
+        },
+        {
+          "code": "08",
+          "name": "EL GUARCO",
+          "districts": [
+            {
+              "code": "01",
+              "name": "EL TEJAR"
+            },
+            {
+              "code": "02",
+              "name": "SAN ISIDRO"
+            },
+            {
+              "code": "03",
+              "name": "TOBOSI"
+            },
+            {
+              "code": "04",
+              "name": "PATIO DE AGUA"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "code": "4",
+      "name": "HEREDIA",
+      "cantons": [
+        {
+          "code": "01",
+          "name": "HEREDIA",
+          "districts": [
+            {
+              "code": "01",
+              "name": "HEREDIA"
+            },
+            {
+              "code": "02",
+              "name": "MERCEDES"
+            },
+            {
+              "code": "03",
+              "name": "SAN FRANCISCO"
+            },
+            {
+              "code": "04",
+              "name": "ULLOA"
+            },
+            {
+              "code": "05",
+              "name": "VARA BLANCA"
+            }
+          ]
+        },
+        {
+          "code": "02",
+          "name": "BARVA",
+          "districts": [
+            {
+              "code": "01",
+              "name": "BARVA"
+            },
+            {
+              "code": "02",
+              "name": "SAN PEDRO"
+            },
+            {
+              "code": "03",
+              "name": "SAN PABLO"
+            },
+            {
+              "code": "04",
+              "name": "SAN ROQUE"
+            },
+            {
+              "code": "05",
+              "name": "SANTA LUCÍA"
+            },
+            {
+              "code": "06",
+              "name": "SAN JOSÉ DE LA MONTAÑA"
+            },
+            {
+              "code": "07",
+              "name": "Puente Salas"
+            }
+          ]
+        },
+        {
+          "code": "03",
+          "name": "SANTO DOMINGO",
+          "districts": [
+            {
+              "code": "01",
+              "name": "SANTO DOMINGO"
+            },
+            {
+              "code": "02",
+              "name": "SAN VICENTE"
+            },
+            {
+              "code": "03",
+              "name": "SAN MIGUEL"
+            },
+            {
+              "code": "04",
+              "name": "PARACITO"
+            },
+            {
+              "code": "05",
+              "name": "SANTO TOMÁS"
+            },
+            {
+              "code": "06",
+              "name": "SANTA ROSA"
+            },
+            {
+              "code": "07",
+              "name": "TURES"
+            },
+            {
+              "code": "08",
+              "name": "PARÁ"
+            }
+          ]
+        },
+        {
+          "code": "04",
+          "name": "SANTA BÁRBARA",
+          "districts": [
+            {
+              "code": "01",
+              "name": "SANTA BÁRBARA"
+            },
+            {
+              "code": "02",
+              "name": "SAN PEDRO"
+            },
+            {
+              "code": "03",
+              "name": "SAN JUAN"
+            },
+            {
+              "code": "04",
+              "name": "JESÚS"
+            },
+            {
+              "code": "05",
+              "name": "SANTO DOMINGO"
+            },
+            {
+              "code": "06",
+              "name": "PURABÁ"
+            }
+          ]
+        },
+        {
+          "code": "05",
+          "name": "SAN RAFAEL",
+          "districts": [
+            {
+              "code": "01",
+              "name": "SAN RAFAEL"
+            },
+            {
+              "code": "02",
+              "name": "SAN JOSECITO"
+            },
+            {
+              "code": "03",
+              "name": "SANTIAGO"
+            },
+            {
+              "code": "04",
+              "name": "ÁNGELES"
+            },
+            {
+              "code": "05",
+              "name": "CONCEPCIÓN"
+            }
+          ]
+        },
+        {
+          "code": "06",
+          "name": "SAN ISIDRO",
+          "districts": [
+            {
+              "code": "01",
+              "name": "SAN ISIDRO"
+            },
+            {
+              "code": "02",
+              "name": "SAN JOSÉ"
+            },
+            {
+              "code": "03",
+              "name": "CONCEPCIÓN"
+            },
+            {
+              "code": "04",
+              "name": "SAN FRANCISO"
+            }
+          ]
+        },
+        {
+          "code": "07",
+          "name": "BELÉN",
+          "districts": [
+            {
+              "code": "01",
+              "name": "SAN ANTONIO"
+            },
+            {
+              "code": "02",
+              "name": "LA RIBERA"
+            },
+            {
+              "code": "03",
+              "name": "LA ASUNCION"
+            }
+          ]
+        },
+        {
+          "code": "08",
+          "name": "FLORES",
+          "districts": [
+            {
+              "code": "01",
+              "name": "SAN JOAQUÍN"
+            },
+            {
+              "code": "02",
+              "name": "BARRANTES"
+            },
+            {
+              "code": "03",
+              "name": "LLORENTE"
+            }
+          ]
+        },
+        {
+          "code": "09",
+          "name": "SAN PABLO",
+          "districts": [
+            {
+              "code": "01",
+              "name": "SAN PABLO"
+            },
+            {
+              "code": "02",
+              "name": "RINCON DE SABANILLA"
+            }
+          ]
+        },
+        {
+          "code": "10",
+          "name": "SARAPIQUÍ",
+          "districts": [
+            {
+              "code": "01",
+              "name": "PUERTO VIEJO"
+            },
+            {
+              "code": "02",
+              "name": "LA VIRGEN"
+            },
+            {
+              "code": "03",
+              "name": "LAS HORQUETAS"
+            },
+            {
+              "code": "04",
+              "name": "LLANURAS DEL GASPAR"
+            },
+            {
+              "code": "05",
+              "name": "CUREÑA"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "code": "5",
+      "name": "GUANACASTE",
+      "cantons": [
+        {
+          "code": "01",
+          "name": "LIBERIA",
+          "districts": [
+            {
+              "code": "01",
+              "name": "LIBERIA"
+            },
+            {
+              "code": "02",
+              "name": "CAÑAS DULCES"
+            },
+            {
+              "code": "03",
+              "name": "MAYORGA"
+            },
+            {
+              "code": "04",
+              "name": "NACASCOLO"
+            },
+            {
+              "code": "05",
+              "name": "CURUBANDÉ"
+            }
+          ]
+        },
+        {
+          "code": "02",
+          "name": "NICOYA",
+          "districts": [
+            {
+              "code": "01",
+              "name": "NICOYA"
+            },
+            {
+              "code": "02",
+              "name": "MANSIÓN"
+            },
+            {
+              "code": "03",
+              "name": "SAN ANTONIO"
+            },
+            {
+              "code": "04",
+              "name": "QUEBRADA HONDA"
+            },
+            {
+              "code": "05",
+              "name": "SÁMARA"
+            },
+            {
+              "code": "06",
+              "name": "NOSARA"
+            },
+            {
+              "code": "07",
+              "name": "BELÉN DE NOSARITA"
+            }
+          ]
+        },
+        {
+          "code": "03",
+          "name": "SANTA CRUZ",
+          "districts": [
+            {
+              "code": "01",
+              "name": "SANTA CRUZ"
+            },
+            {
+              "code": "02",
+              "name": "BOLSÓN"
+            },
+            {
+              "code": "03",
+              "name": "VEINTISIETE DE ABRIL"
+            },
+            {
+              "code": "04",
+              "name": "TEMPATE"
+            },
+            {
+              "code": "05",
+              "name": "CARTAGENA"
+            },
+            {
+              "code": "06",
+              "name": "CUAJINIQUIL"
+            },
+            {
+              "code": "07",
+              "name": "DIRIÁ"
+            },
+            {
+              "code": "08",
+              "name": "CABO VELAS"
+            },
+            {
+              "code": "09",
+              "name": "TAMARINDO"
+            }
+          ]
+        },
+        {
+          "code": "04",
+          "name": "BAGACES",
+          "districts": [
+            {
+              "code": "01",
+              "name": "BAGACES"
+            },
+            {
+              "code": "02",
+              "name": "LA FORTUNA"
+            },
+            {
+              "code": "03",
+              "name": "MOGOTE "
+            },
+            {
+              "code": "04",
+              "name": "RÍO NARANJO"
+            }
+          ]
+        },
+        {
+          "code": "05",
+          "name": "CARRILLO",
+          "districts": [
+            {
+              "code": "01",
+              "name": "FILADELFIA"
+            },
+            {
+              "code": "02",
+              "name": "PALMIRA"
+            },
+            {
+              "code": "03",
+              "name": "SARDINAL"
+            },
+            {
+              "code": "04",
+              "name": "BELÉN"
+            }
+          ]
+        },
+        {
+          "code": "06",
+          "name": "CAÑAS",
+          "districts": [
+            {
+              "code": "01",
+              "name": "CAÑAS"
+            },
+            {
+              "code": "02",
+              "name": "PALMIRA"
+            },
+            {
+              "code": "03",
+              "name": "SAN MIGUEL"
+            },
+            {
+              "code": "04",
+              "name": "BEBEDERO"
+            },
+            {
+              "code": "05",
+              "name": "POROZAL"
+            }
+          ]
+        },
+        {
+          "code": "07",
+          "name": "ABANGARES",
+          "districts": [
+            {
+              "code": "01",
+              "name": "LAS JUNTAS"
+            },
+            {
+              "code": "02",
+              "name": "SIERRA"
+            },
+            {
+              "code": "03",
+              "name": "SAN JUAN"
+            },
+            {
+              "code": "04",
+              "name": "COLORADO"
+            }
+          ]
+        },
+        {
+          "code": "08",
+          "name": "TILARÁN",
+          "districts": [
+            {
+              "code": "01",
+              "name": "TILARÁN"
+            },
+            {
+              "code": "02",
+              "name": "QUEBRADA GRANDE"
+            },
+            {
+              "code": "03",
+              "name": "TRONADORA"
+            },
+            {
+              "code": "04",
+              "name": "SANTA ROSA"
+            },
+            {
+              "code": "05",
+              "name": "LÍBANO"
+            },
+            {
+              "code": "06",
+              "name": "TIERRAS MORENAS"
+            },
+            {
+              "code": "07",
+              "name": "ARENAL"
+            },
+            {
+              "code": "08",
+              "name": "CABECERAS (hasta ser publicado en el diario oficial La Gaceta)"
+            }
+          ]
+        },
+        {
+          "code": "09",
+          "name": "NANDAYURE",
+          "districts": [
+            {
+              "code": "01",
+              "name": "CARMONA"
+            },
+            {
+              "code": "02",
+              "name": "SANTA RITA"
+            },
+            {
+              "code": "03",
+              "name": "ZAPOTAL"
+            },
+            {
+              "code": "04",
+              "name": "SAN PABLO"
+            },
+            {
+              "code": "05",
+              "name": "PORVENIR "
+            },
+            {
+              "code": "06",
+              "name": "BEJUCO"
+            }
+          ]
+        },
+        {
+          "code": "10",
+          "name": "LA CRUZ",
+          "districts": [
+            {
+              "code": "01",
+              "name": "LA CRUZ"
+            },
+            {
+              "code": "02",
+              "name": "SANTA CECILIA"
+            },
+            {
+              "code": "03",
+              "name": "LA GARITA"
+            },
+            {
+              "code": "04",
+              "name": "SANTA ELENA"
+            }
+          ]
+        },
+        {
+          "code": "11",
+          "name": "HOJANCHA",
+          "districts": [
+            {
+              "code": "01",
+              "name": "HOJANCHA"
+            },
+            {
+              "code": "02",
+              "name": "MONTE ROMO"
+            },
+            {
+              "code": "03",
+              "name": "PUERTO CARRILLO"
+            },
+            {
+              "code": "04",
+              "name": "HUACAS"
+            },
+            {
+              "code": "05",
+              "name": "MATAMBÚ"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "code": "6",
+      "name": "PUNTARENAS",
+      "cantons": [
+        {
+          "code": "01",
+          "name": "PUNTARENAS",
+          "districts": [
+            {
+              "code": "01",
+              "name": "PUNTARENAS"
+            },
+            {
+              "code": "02",
+              "name": "PITAHAYA"
+            },
+            {
+              "code": "03",
+              "name": "CHOMES"
+            },
+            {
+              "code": "04",
+              "name": "LEPANTO"
+            },
+            {
+              "code": "05",
+              "name": "PAQUERA"
+            },
+            {
+              "code": "06",
+              "name": "MANZANILLO"
+            },
+            {
+              "code": "07",
+              "name": "GUACIMAL"
+            },
+            {
+              "code": "08",
+              "name": "BARRANCA"
+            },
+            {
+              "code": "10",
+              "name": "ISLA DEL COCO"
+            },
+            {
+              "code": "11",
+              "name": "CÓBANO"
+            },
+            {
+              "code": "12",
+              "name": "CHACARITA"
+            },
+            {
+              "code": "13",
+              "name": "CHIRA"
+            },
+            {
+              "code": "14",
+              "name": "ACAPULCO"
+            },
+            {
+              "code": "15",
+              "name": "EL ROBLE"
+            },
+            {
+              "code": "16",
+              "name": "ARANCIBIA"
+            }
+          ]
+        },
+        {
+          "code": "02",
+          "name": "ESPARZA",
+          "districts": [
+            {
+              "code": "01",
+              "name": "ESPÍRITU SANTO"
+            },
+            {
+              "code": "02",
+              "name": "SAN JUAN GRANDE"
+            },
+            {
+              "code": "03",
+              "name": "MACACONA"
+            },
+            {
+              "code": "04",
+              "name": "SAN RAFAEL"
+            },
+            {
+              "code": "05",
+              "name": "SAN JERÓNIMO"
+            },
+            {
+              "code": "06",
+              "name": "CALDERA"
+            }
+          ]
+        },
+        {
+          "code": "03",
+          "name": "BUENOS AIRES",
+          "districts": [
+            {
+              "code": "01",
+              "name": "BUENOS AIRES"
+            },
+            {
+              "code": "02",
+              "name": "VOLCÁN"
+            },
+            {
+              "code": "03",
+              "name": "POTRERO GRANDE"
+            },
+            {
+              "code": "04",
+              "name": "BORUCA"
+            },
+            {
+              "code": "05",
+              "name": "PILAS"
+            },
+            {
+              "code": "06",
+              "name": "COLINAS"
+            },
+            {
+              "code": "07",
+              "name": "CHÁNGUENA"
+            },
+            {
+              "code": "08",
+              "name": "BIOLLEY"
+            },
+            {
+              "code": "09",
+              "name": "BRUNKA"
+            }
+          ]
+        },
+        {
+          "code": "04",
+          "name": "MONTES DE ORO",
+          "districts": [
+            {
+              "code": "01",
+              "name": "Miramar"
+            },
+            {
+              "code": "02",
+              "name": "LA UNIÓN "
+            },
+            {
+              "code": "03",
+              "name": "SAN ISIDRO"
+            }
+          ]
+        },
+        {
+          "code": "05",
+          "name": "OSA",
+          "districts": [
+            {
+              "code": "01",
+              "name": "PUERTO CORTÉS"
+            },
+            {
+              "code": "02",
+              "name": "PALMAR"
+            },
+            {
+              "code": "03",
+              "name": "SIERPE"
+            },
+            {
+              "code": "04",
+              "name": "BAHÍA BALLENA"
+            },
+            {
+              "code": "05",
+              "name": "PIEDRAS BLANCAS"
+            },
+            {
+              "code": "06",
+              "name": "BAHÍA DRAKE"
+            }
+          ]
+        },
+        {
+          "code": "06",
+          "name": "QUEPOS",
+          "districts": [
+            {
+              "code": "01",
+              "name": "QUEPOS"
+            },
+            {
+              "code": "02",
+              "name": "SAVEGRE "
+            },
+            {
+              "code": "03",
+              "name": "NARANJITO"
+            }
+          ]
+        },
+        {
+          "code": "07",
+          "name": "GOLFITO",
+          "districts": [
+            {
+              "code": "01",
+              "name": "GOLFITO"
+            },
+            {
+              "code": "03",
+              "name": "GUAYCARÁ"
+            },
+            {
+              "code": "04",
+              "name": "PAVÓN"
+            }
+          ]
+        },
+        {
+          "code": "08",
+          "name": "COTO BRUS",
+          "districts": [
+            {
+              "code": "01",
+              "name": "SAN VITO"
+            },
+            {
+              "code": "02",
+              "name": "SABALITO"
+            },
+            {
+              "code": "03",
+              "name": "AGUABUENA"
+            },
+            {
+              "code": "04",
+              "name": "LIMONCITO"
+            },
+            {
+              "code": "05",
+              "name": "PITTIER"
+            },
+            {
+              "code": "06",
+              "name": "GUTIÉRREZ BRAUN"
+            }
+          ]
+        },
+        {
+          "code": "09",
+          "name": "PARRITA",
+          "districts": [
+            {
+              "code": "01",
+              "name": "PARRITA"
+            }
+          ]
+        },
+        {
+          "code": "10",
+          "name": "CORREDORES",
+          "districts": [
+            {
+              "code": "01",
+              "name": "CORREDOR"
+            },
+            {
+              "code": "02",
+              "name": "LA CUESTA"
+            },
+            {
+              "code": "03",
+              "name": "CANOAS"
+            },
+            {
+              "code": "04",
+              "name": "LAUREL"
+            }
+          ]
+        },
+        {
+          "code": "11",
+          "name": "GARABITO",
+          "districts": [
+            {
+              "code": "01",
+              "name": "JACÓ"
+            },
+            {
+              "code": "02",
+              "name": "TÁRCOLES"
+            },
+            {
+              "code": "03",
+              "name": "Lagunillas"
+            }
+          ]
+        },
+        {
+          "code": "12",
+          "name": "Monte Verde",
+          "districts": [
+            {
+              "code": "01",
+              "name": "Monte Verde"
+            }
+          ]
+        },
+        {
+          "code": "13",
+          "name": "Puerto Jimenez",
+          "districts": [
+            {
+              "code": "01",
+              "name": "Puerto Jimenez"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "code": "7",
+      "name": "LIMÓN",
+      "cantons": [
+        {
+          "code": "01",
+          "name": "LIMÓN",
+          "districts": [
+            {
+              "code": "01",
+              "name": "LIMÓN"
+            },
+            {
+              "code": "02",
+              "name": "VALLE LA ESTRELLA"
+            },
+            {
+              "code": "03",
+              "name": "RÍO BLANCO "
+            },
+            {
+              "code": "04",
+              "name": "MATAMA"
+            }
+          ]
+        },
+        {
+          "code": "02",
+          "name": "POCOCÍ",
+          "districts": [
+            {
+              "code": "01",
+              "name": "GUÁPILES"
+            },
+            {
+              "code": "02",
+              "name": "JIMÉNEZ"
+            },
+            {
+              "code": "03",
+              "name": "RITA"
+            },
+            {
+              "code": "04",
+              "name": "ROXANA"
+            },
+            {
+              "code": "05",
+              "name": "CARIARI"
+            },
+            {
+              "code": "06",
+              "name": "COLORADO"
+            },
+            {
+              "code": "07",
+              "name": "LA COLONIA"
+            }
+          ]
+        },
+        {
+          "code": "03",
+          "name": "SIQUIRRES",
+          "districts": [
+            {
+              "code": "01",
+              "name": "SIQUIRRES"
+            },
+            {
+              "code": "02",
+              "name": "PACUARITO"
+            },
+            {
+              "code": "03",
+              "name": "FLORIDA"
+            },
+            {
+              "code": "04",
+              "name": "GERMANIA"
+            },
+            {
+              "code": "05",
+              "name": "EL CAIRO"
+            },
+            {
+              "code": "06",
+              "name": "ALEGRÍA"
+            },
+            {
+              "code": "07",
+              "name": "REVENTAZÓN"
+            }
+          ]
+        },
+        {
+          "code": "04",
+          "name": "TALAMANCA",
+          "districts": [
+            {
+              "code": "01",
+              "name": "BRATSI"
+            },
+            {
+              "code": "02",
+              "name": "SIXAOLA"
+            },
+            {
+              "code": "03",
+              "name": "CAHUITA"
+            },
+            {
+              "code": "04",
+              "name": "TELIRE"
+            }
+          ]
+        },
+        {
+          "code": "05",
+          "name": "MATINA",
+          "districts": [
+            {
+              "code": "01",
+              "name": "MATINA"
+            },
+            {
+              "code": "02",
+              "name": "BATÁN"
+            },
+            {
+              "code": "03",
+              "name": "CARRANDI"
+            }
+          ]
+        },
+        {
+          "code": "06",
+          "name": "GUÁCIMO",
+          "districts": [
+            {
+              "code": "01",
+              "name": "GUÁCIMO"
+            },
+            {
+              "code": "02",
+              "name": "MERCEDES"
+            },
+            {
+              "code": "03",
+              "name": "POCORA"
+            },
+            {
+              "code": "04",
+              "name": "RÍO JIMÉNEZ"
+            },
+            {
+              "code": "05",
+              "name": "DUACARÍ"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

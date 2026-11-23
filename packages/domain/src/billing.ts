@@ -1,4 +1,9 @@
 import { z } from "zod";
+import {
+  receiverFiscalInput,
+  receiverInput,
+  lineFiscalInput,
+} from "./invoice-fiscal";
 const text = z.string().trim().min(1).max(160);
 const optionalText = (max: number) => z.string().trim().max(max).default("");
 export const decimalInput = z
@@ -16,6 +21,7 @@ export const customerInput = z
     phone: optionalText(40),
     address: optionalText(1000),
     active: z.boolean().default(true),
+    ...receiverFiscalInput.shape,
   })
   .strict()
   .refine((v) => Boolean(v.identification_type) === Boolean(v.identification), {
@@ -31,24 +37,30 @@ export const catalogInput = z
     unit_price: decimalInput,
     cabys: optionalText(40),
     unit: optionalText(40),
+    tax_defaults: lineFiscalInput.nullable().default(null),
     active: z.boolean().default(true),
   })
   .strict();
 export const draftLineInput = z
   .object({
     catalog_item_id: z.uuid().nullable().optional().default(null),
-    description: text,
-    quantity: positiveDecimal,
-    unit_price: decimalInput,
+    description: z.string().trim().max(160).default(""),
+    quantity: positiveDecimal.nullable().default(null),
+    unit_price: decimalInput.nullable().default(null),
+    fiscal: lineFiscalInput.nullable().default(null),
   })
   .strict();
 export const draftFields = z
   .object({
-    customer_id: z.uuid(),
+    customer_id: z.uuid().nullable().default(null),
+    receiver_mode: z.enum(["registered", "occasional"]).default("registered"),
+    receiver: receiverInput.optional(),
+    save_customer: z.boolean().default(false),
+    document_type: z.enum(["FE", "TE"]).default("FE"),
     department_id: z.uuid(),
     currency: z.enum(["CRC", "USD"]),
     notes: optionalText(2000),
-    lines: z.array(draftLineInput).min(1).max(100),
+    lines: z.array(draftLineInput).max(100),
   })
   .strict();
 export const draftInput = draftFields
