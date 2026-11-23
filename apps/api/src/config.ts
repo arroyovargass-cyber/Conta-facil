@@ -3,6 +3,24 @@ import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { z } from "zod";
 export function parseConfig(environment: NodeJS.ProcessEnv) {
+  if (environment.NODE_ENV === "production") {
+    const required = [
+      "DATABASE_URL",
+      "SUPABASE_URL",
+      "SUPABASE_ANON_KEY",
+      "SUPABASE_SERVICE_KEY",
+      "SESSION_KEY",
+    ];
+    const missing = required.filter((key) => !environment[key]?.trim());
+    if (!(environment.APP_ORIGIN ?? environment.RENDER_EXTERNAL_URL)?.trim())
+      missing.push("APP_ORIGIN (o RENDER_EXTERNAL_URL)");
+    if (missing.length)
+      throw new Error(
+        "Faltan variables de configuración: " +
+          missing.join(", ") +
+          ". Configúralas en Environment Variables y guarda el despliegue.",
+      );
+  }
   const config = z
     .object({
       DATABASE_URL: z
@@ -43,8 +61,6 @@ export function parseConfig(environment: NodeJS.ProcessEnv) {
         (environment.NODE_ENV === "production" ? resolve("dist") : undefined),
     });
   if (config.NODE_ENV === "production") {
-    if (!environment.DATABASE_URL)
-      throw new Error("DATABASE_URL is required for deployment");
     const database = new URL(config.DATABASE_URL);
     if (
       !["postgres:", "postgresql:"].includes(database.protocol) ||

@@ -47,3 +47,31 @@ El [manifest](../reference/hacienda/v4.4/manifest.json) conserva URL, bytes, has
 3. Habilitar validación XSD completa únicamente con paquete vigente confirmado y firma real; luego conectar STAG en el bloque de integración. Las pruebas estructurales y las criptográficas deberán tener resultados separados.
 
 Dudas a resolver antes de implementar reglas afectadas: paquete XSD2026 completo y dependencias; política de redondeo por etapa y casos de empate; catálogos oficiales CABYS/unidades/ubicaciones e identificación/actividad del escenario elegido. Ninguna discrepancia se corrige inventando reglas o alterando un XSD oficial.
+
+## Reconsulta del 23/11/2026 y auditor reproducible
+
+Se recuperaron otra vez el XSD FE y el anexo desde las URLs oficiales anteriores:
+ambos mantienen tamaños y SHA256 del manifiesto. El import continúa siendo
+`../../xmldsig-core-schema.xsd`; la URL `/docs/xmldsig-core-schema.xsd` intentada
+devuelve 404. No se infiere que esa URL sea la ubicación oficial correcta ni
+que la dependencia no exista en otro paquete. Persiste la revisión sin confirmar.
+
+`npm run fiscal:schemas:audit` comprueba el archivo FE local por tamaño y SHA256,
+requiere hashes y archivos locales explícitos para cada dependencia declarada
+y conserva el bloqueo de revisión/uso de runtime. Retorna JSON y código 1 al
+bloquear. El resultado actual es DEPENDENCY_NOT_PINNED,
+SCHEMA_REVISION_UNCONFIRMED y RUNTIME_USE_DISABLED. No es un fallo de compilación.
+
+El auditor no descarga recursos, no sigue schemaLocation, no procesa entidades
+XML ni valida un documento contra XSD. Incluso `package_verified` significa
+solamente integridad y autorización declarada en el manifiesto: conserva
+xsdValidation=not_run y emissionEnabled=false. La confirmación de revisión debe
+respaldarse en documentación oficial; nunca cambiar ese estado solo para lograr
+un resultado verde. Falta adoptar un validador compatible con XSD1.1 y obtener
+el paquete oficial completo antes de validar, firmar o emitir.
+
+Para incorporar una dependencia verificada, guardar sus bytes oficiales en el
+mismo directorio y registrar local_file, bytes y sha256 en su entrada del
+manifiesto. Solo se admiten nombres simples; la CLI rechaza symlinks al abrir,
+no recorre directorios y limita cada XSD a 2 MiB. Es herramienta de desarrollo,
+no endpoint de carga de usuarios ni modificación del servicio ya publicado.

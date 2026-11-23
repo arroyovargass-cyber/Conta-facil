@@ -12,6 +12,21 @@ import {
   catalogPermission,
   found,
 } from "./billing-common";
+function normalizedCatalog(v: z.infer<typeof catalogInput>) {
+  if (!v.tax_defaults) return v;
+  const f = v.tax_defaults;
+  if (
+    (v.cabys && f.cabys && v.cabys !== f.cabys) ||
+    (v.unit && f.unit && v.unit !== f.unit)
+  )
+    throw new HttpError(
+      400,
+      "El CABYS y la unidad del producto deben coincidir con sus valores fiscales predeterminados.",
+    );
+  const cabys = v.cabys || f.cabys,
+    unit = v.unit || f.unit;
+  return { ...v, cabys, unit, tax_defaults: { ...f, cabys, unit } };
+}
 export function catalogRoutes(
   app: FastifyInstance,
   pool: pg.Pool,
@@ -55,14 +70,14 @@ export function catalogRoutes(
   });
   app.post(base, async (req) => {
     const { tenantId } = ids.parse(req.params),
-      v = catalogInput.parse(req.body),
+      v = normalizedCatalog(catalogInput.parse(req.body)),
       p = req.principal!;
     return scoped(pool, p.claims, async (db) => {
       await catalogPermission(db, tenantId, "catalog.manage");
       return {
         item: (
           await db.query(
-            "insert into public.catalog_items(tenant_id,code,description,kind,currency,unit_price,cabys,unit,active) values($1,$2,$3,$4,$5,$6,$7,$8,$9) returning *",
+            "insert into public.catalog_items(tenant_id,code,description,kind,currency,unit_price,cabys,unit,active,tax_defaults) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) returning *",
             [
               tenantId,
               v.code,
@@ -73,6 +88,7 @@ export function catalogRoutes(
               v.cabys,
               v.unit,
               v.active,
+              v.tax_defaults,
             ],
           )
         ).rows[0],
@@ -93,7 +109,7 @@ export function catalogRoutes(
         ).rows[0],
       );
       await catalogPermission(db, tenantId, "catalog.manage");
-      const v = catalogInput.parse(
+      let v = catalogInput.parse(
         Object.fromEntries(
           Object.keys(catalogInput.shape).map((k) => [
             k,
@@ -101,9 +117,27 @@ export function catalogRoutes(
           ]),
         ),
       );
+      if (
+        v.tax_defaults &&
+        !Object.hasOwn(req.body as object, "tax_defaults")
+      ) {
+        v = {
+          ...v,
+          tax_defaults: {
+            ...v.tax_defaults,
+            ...(Object.hasOwn(req.body as object, "cabys")
+              ? { cabys: v.cabys }
+              : {}),
+            ...(Object.hasOwn(req.body as object, "unit")
+              ? { unit: v.unit }
+              : {}),
+          },
+        };
+      }
+      v = normalizedCatalog(v);
       const item = (
         await db.query(
-          "update public.catalog_items set code=$3,description=$4,kind=$5,currency=$6,unit_price=$7,cabys=$8,unit=$9,active=$10,version=version+1,updated_at=now() where tenant_id=$1 and id=$2 and version=$11 returning *",
+          "update public.catalog_items set code=$3,description=$4,kind=$5,currency=$6,unit_price=$7,cabys=$8,unit=$9,active=$10,tax_defaults=$12,version=version+1,updated_at=now() where tenant_id=$1 and id=$2 and version=$11 returning *",
           [
             tenantId,
             id,
@@ -116,6 +150,7 @@ export function catalogRoutes(
             v.unit,
             v.active,
             input.version,
+            v.tax_defaults,
           ],
         )
       ).rows[0];

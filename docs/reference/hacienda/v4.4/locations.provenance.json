@@ -1,0 +1,18 @@
+{
+  "source": "User-supplied official Hacienda workbook",
+  "filename": "Codificacionubicacion_V4.4.xlsx",
+  "sha256": "4fc2048e646b047baf76c41de8bf11f71b2385881d102b34fe72b3db6830e67d",
+  "columns": {
+    "province": "B:C",
+    "canton": "D:E",
+    "district": "F:G"
+  },
+  "processing": "Inert ZIP/XML parsing; deduplicated hierarchy; canton and district two-digit codes; neighborhoods omitted.",
+  "api_documentation": "https://api.hacienda.go.cr/docs",
+  "api_verified_on": "2026-11-23",
+  "cabys_verified_examples": [
+    "https://api.hacienda.go.cr/fe/cabys?codigo=2132100000100",
+    "https://api.hacienda.go.cr/fe/cabys?q=jugo%20de%20tomate&top=2"
+  ],
+  "identity_note": "Endpoint verified from docs; no personal ID queried; defensive optional identity schema."
+}

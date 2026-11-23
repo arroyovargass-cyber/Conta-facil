@@ -236,3 +236,22 @@
     white-space: normal;
   }
 }
+.billing-line h4 {
+  margin: 0;
+}
+.billing-line .button {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.billing-check {
+  font-size: 14px;
+  line-height: 1.5;
+}
+.billing-check input {
+  flex-shrink: 0;
+}
+.billing-editor p {
+  line-height: 1.6;
+  margin: 0;
+  color: #536480;
+}

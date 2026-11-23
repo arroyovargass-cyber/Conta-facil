@@ -12,14 +12,25 @@
     "schema_review": "twelve_migrations_applied_and_verified",
     "rls_tables": 29,
     "hosted_isolation_assertions_passed": 15,
-    "security_advisories": 0,
-    "application_connection": "pending_hosting_connection_and_secure_runtime_configuration",
-    "hosted_fixtures_rolled_back": true
+    "security_advisories": 1,
+    "application_connection": "restricted_role_tls_verified_health_200",
+    "hosted_fixtures_rolled_back": true,
+    "security_advisory_summary": "auth_leaked_password_protection_disabled"
   },
   "render": {
     "service_name": "conta-facil-pruebas",
     "plan": "free",
-    "status": "plugin_not_installed_or_connected"
+    "status": "live_http_and_database_health_verified",
+    "workspace_id": "tea-dbtir6d9fdbs73bcn2o0",
+    "workspace_confirmation": "explicit_user_confirmation",
+    "service_id": "srv-dbudpelg1s2s73bi7cj0",
+    "deploy_id": "dep-dc24n197lnhs7393sjrg",
+    "region": "virginia",
+    "dashboard_url": "https://dashboard.render.com/web/srv-dbudpelg1s2s73bi7cj0",
+    "auto_deploy": false,
+    "queued_deploy_id": "dep-dbudpn0lujjs738tmso0",
+    "log_retrieval_status": "available",
+    "previous_live_deploy_id": "dep-dc24jud9fdbs73cdivr0"
   },
   "reference_only": {
     "project_name": "ContaNova",
@@ -33,9 +44,11 @@
     "visibility": "public",
     "visibility_authorization": "explicit_user_approval",
     "deployment_branch": "main",
-    "status": "write_rejected_403_reconnect_required",
-    "remote_main_verified": "8fc87456b8ac9dc0bb1c553b3ad9607998d753a1",
-    "integration_settings_url": "https://github.com/settings/installations"
+    "status": "read_available_write_rejected_403_complete_source_zip_uploaded",
+    "remote_main_verified": "7c00b3fb2e049eb48f7819ea277b40d550100214",
+    "integration_settings_url": "https://github.com/settings/installations",
+    "source_zip": "conta-facil-test-deployment-source (1).zip",
+    "source_zip_sha256": "1eec161e08b7bd0dbba7fcb65055bc922fa1f7b6981f7aade20bace3c53b2931"
   },
   "railway": {
     "status": "trial_expired_project_creation_rejected",
@@ -43,10 +56,17 @@
     "paid_plan_activated": false
   },
   "test_access": {
-    "public_url": null,
+    "public_url": "https://conta-facil-pruebas.onrender.com",
     "administrator_email_confirmed": true,
-    "invitation_sent": false,
-    "auth_users_created": 0,
-    "checked_at_utc": "2026-11-16T16:16:58.201932+00:00"
+    "invitation_sent": true,
+    "auth_users_created": 1,
+    "checked_at_utc": "2026-11-23T16:18:05.300365+00:00",
+    "public_url_verified_ready": true,
+    "administrator_access_verified": false,
+    "companies_created": 1,
+    "invitation_sent_at_utc": "2026-11-23T16:13:25.524797Z",
+    "email_confirmation_pending": true,
+    "email_delivery_verified": true,
+    "email_mailbox_location": "INBOX/CATEGORY_UPDATES"
   }
 }

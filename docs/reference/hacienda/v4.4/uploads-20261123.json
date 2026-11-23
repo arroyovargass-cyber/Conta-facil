@@ -1,0 +1,47 @@
+{
+  "received_on": "2026-11-23",
+  "files": [
+    {
+      "name": "FacturaElectronica_V4.4.doc",
+      "bytes": 4277760,
+      "sha256": "f8d8b4f319b9e3d9de3e68a8ad65a11fef69bef5a0f436a10ff15adc46ee82fb",
+      "origin": "user_upload"
+    },
+    {
+      "name": "Codificacionubicacion_V4.4.xlsx",
+      "bytes": 314939,
+      "sha256": "4fc2048e646b047baf76c41de8bf11f71b2385881d102b34fe72b3db6830e67d",
+      "origin": "user_upload"
+    },
+    {
+      "name": "MensajeHacienda_V4.4 (1).xsd",
+      "bytes": 7799,
+      "sha256": "b2606156042b7aa7b7f7f61945f0ff1323661b43b5a1489ad5eafad1c52fd25e",
+      "origin": "user_upload"
+    },
+    {
+      "name": "ANEXOS_Y_ESTRUCTURAS_V4.4.pdf",
+      "bytes": 1243035,
+      "sha256": "6e093226b29b38c5c8de825f70c1b1cb8ed81e2f4a6eb0b3ff52708fc1eb2769",
+      "origin": "user_upload"
+    },
+    {
+      "name": "Guia_IdP.pdf",
+      "bytes": 2405918,
+      "sha256": "e7a2db0f8c3f0255f74541f0c63dc8e1b199fecb2fa0325e18b0e11f55e1bedc",
+      "origin": "user_upload"
+    },
+    {
+      "name": "Comprobantes Electrónicos API.html",
+      "bytes": 52491,
+      "sha256": "ab501434bb230d564be39fcdb0e5b11a59d3e435d5f28a54644d89f964ff845e",
+      "origin": "user_upload"
+    },
+    {
+      "name": "FacturaElectronica_V4.4.xsd",
+      "bytes": 119689,
+      "sha256": "926ba81325bc21102755bd8e4e570a63caaca086e680a877c3a6d15d6ee8a62f",
+      "origin": "user_upload"
+    }
+  ]
+}

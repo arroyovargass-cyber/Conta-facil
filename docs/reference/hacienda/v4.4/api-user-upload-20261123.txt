@@ -1,0 +1,945 @@
+Comprobantes Electrónicos API
+Comprobantes Electrónicos API
+version v1
+https://api.comprobanteselectronicos.go.cr/recepcion/v1/
+/recepcion
+Recepción de comprobantes electrónicos y respuestas del receptor.
+/recepcion
+post
+post
+Recibe el comprobante electrónico o respuesta del receptor.
+×
+post
+/recepcion
+Recibe el comprobante electrónico o respuesta del receptor.
+Secured by oidc
+Open ID Connect (OIDC) que funciona sobre el estándar de OAuth 2.0. (
+http://openid.net/connect/
+)
+Request
+Response
+Security
+Body
+Type: application/json
+Schema
+:
+{
+  "$schema": "http://json-schema.org/draft-04/schema#",
+  "type": "object",
+  "properties": {
+    "clave": {
+      "type": "string",
+      "maxLength": 50
+    },
+    "fecha": {
+      "description": "Fecha de la factura en formato [yyyy-MM-dd'T'HH:mm:ssZ] como se define en [http://tools.ietf.org/html/rfc3339#section-5.6] (date-time).",
+      "type": "string"
+    },
+    "emisor": {
+      "type": "object",
+      "properties": {
+        "tipoIdentificacion": {
+          "type": "string",
+          "maxLength": 2
+        },
+        "numeroIdentificacion": {
+          "type": "string",
+          "maxLength": 12
+        }
+      },
+      "required": [
+        "tipoIdentificacion",
+        "numeroIdentificacion"
+      ]
+    },
+    "receptor": {
+      "type": "object",
+      "properties": {
+        "tipoIdentificacion": {
+          "type": "string",
+          "maxLength": 2
+        },
+        "numeroIdentificacion": {
+          "type": "string",
+          "maxLength": 12
+        }
+      },
+      "required": [
+        "tipoIdentificacion",
+        "numeroIdentificacion"
+      ]
+    },
+    "callbackUrl":{
+      "description": "URL utilizado para que Hacienda envíe la respuesta de aceptación o rechazo, se va a enviar un mensaje JSON, igual al que se define en recepcionGetItem, por medio de un canal HTTP/HTTPS utilizando POST.",
+      "type": "string"
+    },
+    "consecutivoReceptor":{
+      "description": "Numeración consecutiva de los mensajes de confirmación. Este atributo es obligatorio en caso de ser un mensaje de confirmación del receptor.",
+      "type": "string"
+    },
+    "comprobanteXml": {
+      "description": "Comprobante electrónico XML firmado por el obligado tributario utilizando XAdES-EPES. El texto del XML debe convertirse a un byte array y codificarse en Base64. El mapa de caracteres a utilizar en el XML y en la codificación Base64 es UTF8.",
+      "type": "string"
+    }
+  },
+  "required": [
+    "clave",
+    "fecha",
+    "emisor",
+    "comprobanteXml"
+  ]
+}
+Example
+:
+{
+  "clave": "50601011600310112345600100010100000000011999999999",
+  "fecha": "2016-01-01T00:00:00-0600",
+  "emisor": {
+    "tipoIdentificacion": "02",
+    "numeroIdentificacion": "3101123456"
+  },
+  "receptor": {
+    "tipoIdentificacion": "02",
+    "numeroIdentificacion": "3101123456"
+  },
+  "comprobanteXml": "PD94bWwgdmVyc2lvbj0iMS4wIiA/Pg0KDQo8ZG9tYWluIHhtbG5zPSJ1cm46amJvc3M6ZG9tYWluOjQuMCI+DQogICAgPGV4dGVuc2lvbnM+DQogICAgICAgIDxleHRlbnNpb24gbW9kdWxlPSJvcmcuamJvc3MuYXMuY2x1c3RlcmluZy5pbmZpbmlzcGFuIi8+DQogICAgICAgIDxleHRlbnNpb24gbW9kdWxlPSJvcmcuamJvc3MuYXMuY2x1c3RlcmluZy5qZ3JvdXBzIi8+DQogICAgICAgIDxleHRlbnNpb24gbW9kdWxlPSJvcmcuamJvc3MuYXMuY29ubmVjdG9yIi8+DQogICAgICAgIDxleHRlbnNpb24gbW..."
+}
+HTTP status code
+201
+Se recibió correctamente el comprobante electrónico o respuesta del receptor, queda pendiente la validación del mismo y el envío de la respuesta de parte de Hacienda.
+Headers
+Location
+:
+(string)
+URL donde puede consultar el estado del comprobante recibido.
+Example
+:
+https://api.comprobanteselectronicos.go.cr/recepcion/v1/recepcion/50601011600310112345600100010100000000011999999999/
+X-Ratelimit-Limit
+:
+(integer)
+Número de requests permitidos en el período de tiempo actual.
+X-Ratelimit-Remaining
+:
+(integer)
+Número de requests restantes en el período de tiempo actual.
+X-Ratelimit-Reset
+:
+(integer)
+Tiempo restante antes de que los límites se reinicien (UTC Epoch Seconds).
+HTTP status code
+400
+Ocurrió algún error de validación.
+Headers
+X-Error-Cause
+:
+(string)
+Muestra la causa del error.
+Example
+:
+El comprobante con la Clave [50601011600310112345600100010100000000011999999999] ya fue recibido.
+validation-exception
+:
+(boolean)
+Indica si es un error con el
+body
+enviado del entity.
+Example
+:
+true
+X-Ratelimit-Limit
+:
+(integer)
+Número de requests permitidos en el período de tiempo actual.
+X-Ratelimit-Remaining
+:
+(integer)
+Número de requests restantes en el período de tiempo actual.
+X-Ratelimit-Reset
+:
+(integer)
+Tiempo restante antes de que los límites se reinicien (UTC Epoch Seconds).
+Secured by oidc
+Headers
+Authorization
+:
+(string)
+Se utiliza para enviar el OIDC Token (OAuth 2.0 Token)
+Example
+:
+bearer eyJhbJciOiJSUzI1NiJ9.eyJqdGkiOiI4YzYxZDc2MC01YTU3LTQyMWYtOTk4ZS05ZDM1NTFmZWNjZDYiLCJleHAiOjE0NjExMDQyOTgsIm5iZiI6MCwiaWF0IjoxNDYxMTAzOTk4LCJpc3MiOiJodHRwOi8vMTkyLjE2OC45OS4xMDA6OTA5MC9hdXRoL3JlYWxtcy9zaWdudW0tb25lIiwiYXVkIjoic2lnbnVtLW9uZS1kZW1vLWFwcCIsInN1YiI6IjJiYzgxZjcxLWI4ZTQtNDE4My1iZTQwLWIzODEzNTYxYmQzOSIsInR5cCI6IkJlYXJlciIsImF6cCI6InNpZ251bS1vbmUtZGVtby1hcHAiLCJzZXNzaW9uX3N0YXRlIjoiNzUwYzYwMDEtNDhjZC00NzJmLWE3Y2YtNjNkZTY1MDhkYzEyIiwiY2xpZW50X3Nlc3Npb24iOiJlNTE2ZjI0ZC01ZGQzLTQxNmdFtgTQwMC02MmJhM2JlYjhmMjUiLCJhbGxvd2VkLW9yaWdpbnMiOltdLCJyZXNvdXJjZV9hY2Nlc3MiOnsic2lnbnVtLW9uZS1hcGkiOnsicm9sZXMiOlsiYXBwIl19fSwiY2xpZW50SG9zdCI6IjE5Mi4xNjguOTkuMSIsImNsaWVudElkIjoic2lnbnVtLW9uZS1kZW1vLWFwcCIsIm5hbWUiOiIiLCJwcmVmZXJyZWRfdXNlcm5hbWUiOiJzZXJ2aWNlLWFjY291bnQtc2lnbnVtLW9uZS1kZW1vLWFwcCIsImNsaWVudEFkZHJlc3MiOiIxOTIuMTY4Ljk5LjEiLCJlbWFpbCI6InNlcnZpY2UtYWNjb3VudC1zaWdudW0tb25lLWRlbW8tYXBwQHBsYWNlaG9sZGVyLm9yZyJ9.Jp7xXWaIkyUrWWSldNWmg5FhqqmIKt4jagKYPRiRMceXQo7eh_y765f5Y3CSeVX1KSJaNQjouHSMTTMgMjxbceDIkGM4_scTpqBgNJNEtFx7HydpujjtO36grWwvUA4Xv92frsafq2ZiHl5IW0ChZ-VmwvqBS5n80JetAJp5KGN1xW10Zh0JhRUUZtzN_Rjuw0hPfYvPbYEc2rEVEjujdjMa1hKkNp4F_JhXwd7aVBOTiG8udSukhWPQxI1lReUm47y4vfUDq0I3udPbsK869mbf-MvuY955gVfLv6oevByUzF1UyTlH1Dvv1KBnrpKaMjvWQ-xmAhNTwVx_OOo-CPXw
+HTTP status code
+401
+Unauthorized
+/recepcion
+/{clave}
+get
+get
+Obtiene el estado del comprobante indicado por la
+clave
+.
+×
+get
+/recepcion
+/{clave}
+Obtiene el estado del comprobante indicado por la
+clave
+.
+Secured by oidc
+Open ID Connect (OIDC) que funciona sobre el estándar de OAuth 2.0. (
+http://openid.net/connect/
+)
+Request
+Response
+Security
+URI Parameters
+clave
+:
+required (string - maxLength: 50)
+Es el campo
+Clave
+comprobante electrónico. Es un campo de 50 posiciones.
+Example
+:
+50601011600310112345600100010100000000011999999999
+HTTP status code
+200
+Respuesta correcta.
+Headers
+X-Ratelimit-Limit
+:
+(integer)
+Número de requests permitidos en el período de tiempo actual.
+X-Ratelimit-Remaining
+:
+(integer)
+Número de requests restantes en el período de tiempo actual.
+X-Ratelimit-Reset
+:
+(integer)
+Tiempo restante antes de que los límites se reinicien (UTC Epoch Seconds).
+Body
+Type: application/json
+Schema
+:
+{
+  "$schema": "http://json-schema.org/draft-04/schema#",
+  "type": "object",
+  "properties": {
+    "clave": {
+      "type": "string",
+      "maxLength": 50
+    },
+    "fecha": {
+      "description": "Fecha de la factura en formato [yyyy-MM-dd'T'HH:mm:ssZ] como se define en [http://tools.ietf.org/html/rfc3339#section-5.6] (date-time).",
+      "type": "string"
+    },
+    "ind-estado": {
+      "type": "string",
+      "enum": ["recibido", "procesando", "aceptado", "rechazado", "error"]
+    },
+    "respuesta-xml": {
+      "description": "Respuesta de aceptación o rechazo en XML firmada por el Ministerio de Hacienda utilizando XAdES-XL. El texto del XML debe convertirse a un byte array y codificarse en Base64. El mapa de caracteres a utilizar en el XML y en la codificación Base64 es UTF8.",
+      "type": "string"
+    }
+  },
+  "required": [
+    "clave",
+    "fecha",
+    "ind-estado"
+  ]
+}
+Example
+:
+{
+  "clave": "50601011600310112345600100010100000000011999999999",
+  "fecha": "2016-01-01T00:00:00-0600",
+  "ind-estado": "aceptado",
+  "respuesta-xml": "PD94bWwgdmVyc2lvbj0iMS4wIiA/Pg0KDQo8ZG9tYWluIHhtbG5zPSJ1cm46amJvc3M6ZG9tYWluOjQuMCI+DQogICAgPGV4dGVuc2lvbnM+DQogICAgICAgIDxleHRlbnNpb24gbW9kdWxlPSJvcmcuamJvc3MuYXMuY2x1c3RlcmluZy5pbmZpbmlzcGFuIi8+DQogICAgICAgIDxleHRlbnNpb24gbW9kdWxlPSJvcmcuamJvc3MuYXMuY2x1c3RlcmluZy5qZ3JvdXBzIi8+DQogICAgICAgIDxleHRlbnNpb24gbW9kdWxlPSJvcmcuamJvc3MuYXMuY29ubmVjdG9yIi8+DQogICAgICAgIDxleHRlbnNpb24gbW..."
+}
+HTTP status code
+404
+Ocurrió un error, no se encuentra el recurso.
+Headers
+X-Error-Cause
+:
+(string)
+Muestra la causa del error.
+Example
+:
+No existe el recurso con Clave = [50601011600310112345600100010100000000011999999999]
+X-Ratelimit-Limit
+:
+(integer)
+Número de requests permitidos en el período de tiempo actual.
+X-Ratelimit-Remaining
+:
+(integer)
+Número de requests restantes en el período de tiempo actual.
+X-Ratelimit-Reset
+:
+(integer)
+Tiempo restante antes de que los límites se reinicien (UTC Epoch Seconds).
+Secured by oidc
+Headers
+Authorization
+:
+(string)
+Se utiliza para enviar el OIDC Token (OAuth 2.0 Token)
+Example
+:
+bearer eyJhbJciOiJSUzI1NiJ9.eyJqdGkiOiI4YzYxZDc2MC01YTU3LTQyMWYtOTk4ZS05ZDM1NTFmZWNjZDYiLCJleHAiOjE0NjExMDQyOTgsIm5iZiI6MCwiaWF0IjoxNDYxMTAzOTk4LCJpc3MiOiJodHRwOi8vMTkyLjE2OC45OS4xMDA6OTA5MC9hdXRoL3JlYWxtcy9zaWdudW0tb25lIiwiYXVkIjoic2lnbnVtLW9uZS1kZW1vLWFwcCIsInN1YiI6IjJiYzgxZjcxLWI4ZTQtNDE4My1iZTQwLWIzODEzNTYxYmQzOSIsInR5cCI6IkJlYXJlciIsImF6cCI6InNpZ251bS1vbmUtZGVtby1hcHAiLCJzZXNzaW9uX3N0YXRlIjoiNzUwYzYwMDEtNDhjZC00NzJmLWE3Y2YtNjNkZTY1MDhkYzEyIiwiY2xpZW50X3Nlc3Npb24iOiJlNTE2ZjI0ZC01ZGQzLTQxNmdFtgTQwMC02MmJhM2JlYjhmMjUiLCJhbGxvd2VkLW9yaWdpbnMiOltdLCJyZXNvdXJjZV9hY2Nlc3MiOnsic2lnbnVtLW9uZS1hcGkiOnsicm9sZXMiOlsiYXBwIl19fSwiY2xpZW50SG9zdCI6IjE5Mi4xNjguOTkuMSIsImNsaWVudElkIjoic2lnbnVtLW9uZS1kZW1vLWFwcCIsIm5hbWUiOiIiLCJwcmVmZXJyZWRfdXNlcm5hbWUiOiJzZXJ2aWNlLWFjY291bnQtc2lnbnVtLW9uZS1kZW1vLWFwcCIsImNsaWVudEFkZHJlc3MiOiIxOTIuMTY4Ljk5LjEiLCJlbWFpbCI6InNlcnZpY2UtYWNjb3VudC1zaWdudW0tb25lLWRlbW8tYXBwQHBsYWNlaG9sZGVyLm9yZyJ9.Jp7xXWaIkyUrWWSldNWmg5FhqqmIKt4jagKYPRiRMceXQo7eh_y765f5Y3CSeVX1KSJaNQjouHSMTTMgMjxbceDIkGM4_scTpqBgNJNEtFx7HydpujjtO36grWwvUA4Xv92frsafq2ZiHl5IW0ChZ-VmwvqBS5n80JetAJp5KGN1xW10Zh0JhRUUZtzN_Rjuw0hPfYvPbYEc2rEVEjujdjMa1hKkNp4F_JhXwd7aVBOTiG8udSukhWPQxI1lReUm47y4vfUDq0I3udPbsK869mbf-MvuY955gVfLv6oevByUzF1UyTlH1Dvv1KBnrpKaMjvWQ-xmAhNTwVx_OOo-CPXw
+HTTP status code
+401
+Unauthorized
+/comprobantes
+Comprobantes electrónicos que ha enviado el obligado tributario.
+/comprobantes
+get
+get
+Obtiene un resumen de todos los comprobantes electrónicos que ha enviado el obligado tributario ordenado de forma descendente por la fecha.
+×
+get
+/comprobantes
+Obtiene un resumen de todos los comprobantes electrónicos que ha enviado el obligado tributario ordenado de forma descendente por la fecha.
+Secured by oidc
+Open ID Connect (OIDC) que funciona sobre el estándar de OAuth 2.0. (
+http://openid.net/connect/
+)
+Request
+Response
+Security
+Query Parameters
+offset
+:
+(integer)
+A partir de que posición contar los items a retornar
+Example
+:
+10
+limit
+:
+(integer - default: 50)
+Cantidad de items a retornar apartir del offset
+Example
+:
+15
+emisor
+:
+(string - maxLength: 14)
+Tipo y número de identificación del emisor.
+Example
+:
+02003101123456
+receptor
+:
+(string - maxLength: 14)
+Tipo y número de identificación del receptor.
+Example
+:
+02003101123456
+HTTP status code
+200
+Respuesta correcta completa.
+Headers
+Accept-Range
+:
+(string)
+Muestra la cantidad máxima de items que se le puede solicitar al recurso.
+Example
+:
+resource 50
+X-Ratelimit-Limit
+:
+(integer)
+Número de requests permitidos en el período de tiempo actual.
+X-Ratelimit-Remaining
+:
+(integer)
+Número de requests restantes en el período de tiempo actual.
+X-Ratelimit-Reset
+:
+(integer)
+Tiempo restante antes de que los límites se reinicien (UTC Epoch Seconds).
+Body
+Type: application/json
+Schema
+:
+{
+  "$schema": "http://json-schema.org/draft-04/schema#",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "properties": {
+      "clave": {
+        "type": "string",
+        "maxLength": 50
+      },
+      "fecha": {
+        "description": "Fecha de la factura en formato [yyyy-MM-dd'T'HH:mm:ssZ] como se define en [http://tools.ietf.org/html/rfc3339#section-5.6] (date-time).",
+        "type": "string"
+      },
+      "emisor": {
+        "type": "object",
+        "properties": {
+          "tipoIdentificacion": {
+            "type": "string",
+            "maxLength": 2
+          },
+          "numeroIdentificacion": {
+            "type": "string",
+            "maxLength": 12
+          },
+          "nombre": {
+            "type": "string",
+            "maxLength": 80
+          }
+        },
+        "required": [
+          "tipoIdentificacion",
+          "numeroIdentificacion",
+          "nombre"
+        ]
+      },
+      "receptor": {
+        "type": "object",
+        "properties": {
+          "tipoIdentificacion": {
+            "type": "string",
+            "maxLength": 2
+          },
+          "numeroIdentificacion": {
+            "type": "string",
+            "maxLength": 12
+          },
+          "nombre": {
+            "type": "string",
+            "maxLength": 80
+          }
+        },
+        "required": [
+          "tipoIdentificacion",
+          "numeroIdentificacion",
+          "nombre"
+        ]
+      },
+      "notasCredito": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "clave": {
+              "type": "string",
+              "maxLength": 50
+            },
+            "fecha": {
+              "description": "Fecha de la factura en formato [yyyy-MM-dd'T'HH:mm:ssZ] como se define en [http://tools.ietf.org/html/rfc3339#section-5.6] (date-time).",
+              "type": "string"
+            }
+          },
+          "required": [
+            "clave",
+            "fecha"
+          ]
+        }
+      },
+      "notasDebito": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "clave": {
+              "type": "string",
+              "maxLength": 50
+            },
+            "fecha": {
+              "description": "Fecha de la factura en formato [yyyy-MM-dd'T'HH:mm:ssZ] como se define en [http://tools.ietf.org/html/rfc3339#section-5.6] (date-time).",
+              "type": "string"
+            }
+          },
+          "required": [
+            "clave",
+            "fecha"
+          ]
+        }
+      }
+    },
+    "required": [
+      "clave",
+      "fecha",
+      "emisor",
+      "receptor"
+    ]
+  }
+}
+Example
+:
+[{
+  "clave": "50601011600310112345600100010100000000011999999999",
+  "fecha": "2016-01-01T00:00:00-0600",
+  "emisor": {
+    "tipoIdentificacion": "02",
+    "numeroIdentificacion": "3101123456",
+    "nombre": "Razón Social S.A."
+  },
+  "receptor": {
+    "tipoIdentificacion": "02",
+    "numeroIdentificacion": "3101123456",
+    "nombre": "Razón Social S.A."
+  },
+  "notasCredito": [{
+    "clave": "50601011600310112345600100010300000000011999999999",
+    "fecha": "2016-01-01T00:00:00-0600"
+  }],
+  "notasDebito": [{
+    "clave": "50601011600310112345600100010200000000011999999999",
+    "fecha": "2016-01-01T00:00:00-0600"
+  }]
+},
+{
+  "clave": "50601011600310112345600100010100000000021999999999",
+  "fecha": "2016-01-01T00:00:00-0600",
+  "emisor": {
+    "tipoIdentificacion": "02",
+    "numeroIdentificacion": "3101123456",
+    "nombre": "Razón Social S.A."
+  },
+  "receptor": {
+    "tipoIdentificacion": "02",
+    "numeroIdentificacion": "3101123456",
+    "nombre": "Razón Social S.A."
+  },
+  "notasCredito": [{
+    "clave": "50601011600310112345600100010300000000021999999999",
+    "fecha": "2016-01-01T00:00:00-0600"
+  }],
+  "notasDebito": [{
+    "clave": "50601011600310112345600100010200000000021999999999",
+    "fecha": "2016-01-01T00:00:00-0600"
+  }]
+}]
+HTTP status code
+206
+Respuesta correcta parcial debido al uso de
+offset
+y/o
+limit
+.
+Headers
+Accept-Range
+:
+(string)
+Muestra la cantidad máxima de items que se le puede solicitar al recurso.
+Example
+:
+resource 50
+Content-Range
+:
+(string)
+Muestra la información del
+offset
+-
+limit
+/
+count_all
+.
+Example
+:
+0-10/100
+X-Ratelimit-Limit
+:
+(integer)
+Número de requests permitidos en el período de tiempo actual.
+X-Ratelimit-Remaining
+:
+(integer)
+Número de requests restantes en el período de tiempo actual.
+X-Ratelimit-Reset
+:
+(integer)
+Tiempo restante antes de que los límites se reinicien (UTC Epoch Seconds).
+Body
+Type: application/json
+Schema
+:
+{
+  "$schema": "http://json-schema.org/draft-04/schema#",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "properties": {
+      "clave": {
+        "type": "string",
+        "maxLength": 50
+      },
+      "fecha": {
+        "description": "Fecha de la factura en formato [yyyy-MM-dd'T'HH:mm:ssZ] como se define en [http://tools.ietf.org/html/rfc3339#section-5.6] (date-time).",
+        "type": "string"
+      },
+      "emisor": {
+        "type": "object",
+        "properties": {
+          "tipoIdentificacion": {
+            "type": "string",
+            "maxLength": 2
+          },
+          "numeroIdentificacion": {
+            "type": "string",
+            "maxLength": 12
+          },
+          "nombre": {
+            "type": "string",
+            "maxLength": 80
+          }
+        },
+        "required": [
+          "tipoIdentificacion",
+          "numeroIdentificacion",
+          "nombre"
+        ]
+      },
+      "receptor": {
+        "type": "object",
+        "properties": {
+          "tipoIdentificacion": {
+            "type": "string",
+            "maxLength": 2
+          },
+          "numeroIdentificacion": {
+            "type": "string",
+            "maxLength": 12
+          },
+          "nombre": {
+            "type": "string",
+            "maxLength": 80
+          }
+        },
+        "required": [
+          "tipoIdentificacion",
+          "numeroIdentificacion",
+          "nombre"
+        ]
+      },
+      "notasCredito": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "clave": {
+              "type": "string",
+              "maxLength": 50
+            },
+            "fecha": {
+              "description": "Fecha de la factura en formato [yyyy-MM-dd'T'HH:mm:ssZ] como se define en [http://tools.ietf.org/html/rfc3339#section-5.6] (date-time).",
+              "type": "string"
+            }
+          },
+          "required": [
+            "clave",
+            "fecha"
+          ]
+        }
+      },
+      "notasDebito": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "clave": {
+              "type": "string",
+              "maxLength": 50
+            },
+            "fecha": {
+              "description": "Fecha de la factura en formato [yyyy-MM-dd'T'HH:mm:ssZ] como se define en [http://tools.ietf.org/html/rfc3339#section-5.6] (date-time).",
+              "type": "string"
+            }
+          },
+          "required": [
+            "clave",
+            "fecha"
+          ]
+        }
+      }
+    },
+    "required": [
+      "clave",
+      "fecha",
+      "emisor",
+      "receptor"
+    ]
+  }
+}
+Example
+:
+[{
+  "clave": "50601011600310112345600100010100000000011999999999",
+  "fecha": "2016-01-01T00:00:00-0600",
+  "emisor": {
+    "tipoIdentificacion": "02",
+    "numeroIdentificacion": "3101123456",
+    "nombre": "Razón Social S.A."
+  },
+  "receptor": {
+    "tipoIdentificacion": "02",
+    "numeroIdentificacion": "3101123456",
+    "nombre": "Razón Social S.A."
+  },
+  "notasCredito": [{
+    "clave": "50601011600310112345600100010300000000011999999999",
+    "fecha": "2016-01-01T00:00:00-0600"
+  }],
+  "notasDebito": [{
+    "clave": "50601011600310112345600100010200000000011999999999",
+    "fecha": "2016-01-01T00:00:00-0600"
+  }]
+},
+{
+  "clave": "50601011600310112345600100010100000000021999999999",
+  "fecha": "2016-01-01T00:00:00-0600",
+  "emisor": {
+    "tipoIdentificacion": "02",
+    "numeroIdentificacion": "3101123456",
+    "nombre": "Razón Social S.A."
+  },
+  "receptor": {
+    "tipoIdentificacion": "02",
+    "numeroIdentificacion": "3101123456",
+    "nombre": "Razón Social S.A."
+  },
+  "notasCredito": [{
+    "clave": "50601011600310112345600100010300000000021999999999",
+    "fecha": "2016-01-01T00:00:00-0600"
+  }],
+  "notasDebito": [{
+    "clave": "50601011600310112345600100010200000000021999999999",
+    "fecha": "2016-01-01T00:00:00-0600"
+  }]
+}]
+Secured by oidc
+Headers
+Authorization
+:
+(string)
+Se utiliza para enviar el OIDC Token (OAuth 2.0 Token)
+Example
+:
+bearer eyJhbJciOiJSUzI1NiJ9.eyJqdGkiOiI4YzYxZDc2MC01YTU3LTQyMWYtOTk4ZS05ZDM1NTFmZWNjZDYiLCJleHAiOjE0NjExMDQyOTgsIm5iZiI6MCwiaWF0IjoxNDYxMTAzOTk4LCJpc3MiOiJodHRwOi8vMTkyLjE2OC45OS4xMDA6OTA5MC9hdXRoL3JlYWxtcy9zaWdudW0tb25lIiwiYXVkIjoic2lnbnVtLW9uZS1kZW1vLWFwcCIsInN1YiI6IjJiYzgxZjcxLWI4ZTQtNDE4My1iZTQwLWIzODEzNTYxYmQzOSIsInR5cCI6IkJlYXJlciIsImF6cCI6InNpZ251bS1vbmUtZGVtby1hcHAiLCJzZXNzaW9uX3N0YXRlIjoiNzUwYzYwMDEtNDhjZC00NzJmLWE3Y2YtNjNkZTY1MDhkYzEyIiwiY2xpZW50X3Nlc3Npb24iOiJlNTE2ZjI0ZC01ZGQzLTQxNmdFtgTQwMC02MmJhM2JlYjhmMjUiLCJhbGxvd2VkLW9yaWdpbnMiOltdLCJyZXNvdXJjZV9hY2Nlc3MiOnsic2lnbnVtLW9uZS1hcGkiOnsicm9sZXMiOlsiYXBwIl19fSwiY2xpZW50SG9zdCI6IjE5Mi4xNjguOTkuMSIsImNsaWVudElkIjoic2lnbnVtLW9uZS1kZW1vLWFwcCIsIm5hbWUiOiIiLCJwcmVmZXJyZWRfdXNlcm5hbWUiOiJzZXJ2aWNlLWFjY291bnQtc2lnbnVtLW9uZS1kZW1vLWFwcCIsImNsaWVudEFkZHJlc3MiOiIxOTIuMTY4Ljk5LjEiLCJlbWFpbCI6InNlcnZpY2UtYWNjb3VudC1zaWdudW0tb25lLWRlbW8tYXBwQHBsYWNlaG9sZGVyLm9yZyJ9.Jp7xXWaIkyUrWWSldNWmg5FhqqmIKt4jagKYPRiRMceXQo7eh_y765f5Y3CSeVX1KSJaNQjouHSMTTMgMjxbceDIkGM4_scTpqBgNJNEtFx7HydpujjtO36grWwvUA4Xv92frsafq2ZiHl5IW0ChZ-VmwvqBS5n80JetAJp5KGN1xW10Zh0JhRUUZtzN_Rjuw0hPfYvPbYEc2rEVEjujdjMa1hKkNp4F_JhXwd7aVBOTiG8udSukhWPQxI1lReUm47y4vfUDq0I3udPbsK869mbf-MvuY955gVfLv6oevByUzF1UyTlH1Dvv1KBnrpKaMjvWQ-xmAhNTwVx_OOo-CPXw
+HTTP status code
+401
+Unauthorized
+/comprobantes
+/{clave}
+get
+get
+Obtiene el comprobante indicado por la
+clave
+.
+×
+get
+/comprobantes
+/{clave}
+Obtiene el comprobante indicado por la
+clave
+.
+Secured by oidc
+Open ID Connect (OIDC) que funciona sobre el estándar de OAuth 2.0. (
+http://openid.net/connect/
+)
+Request
+Response
+Security
+URI Parameters
+clave
+:
+required (string - maxLength: 50)
+Es el campo
+Clave
+de la factura o tiquete electrónicos. Es un campo de 54 posiciones.
+Example
+:
+50601011600310112345600100010100000000011999999999
+HTTP status code
+200
+Respuesta correcta.
+Headers
+X-Ratelimit-Limit
+:
+(integer)
+Número de requests permitidos en el período de tiempo actual.
+X-Ratelimit-Remaining
+:
+(integer)
+Número de requests restantes en el período de tiempo actual.
+X-Ratelimit-Reset
+:
+(integer)
+Tiempo restante antes de que los límites se reinicien (UTC Epoch Seconds).
+Body
+Type: application/json
+Schema
+:
+{
+  "$schema": "http://json-schema.org/draft-04/schema#",
+  "type": "object",
+  "properties": {
+    "clave": {
+      "type": "string",
+      "maxLength": 50
+    },
+    "fecha": {
+      "description": "Fecha de la factura en formato [yyyy-MM-dd'T'HH:mm:ssZ] como se define en [http://tools.ietf.org/html/rfc3339#section-5.6] (date-time).",
+      "type": "string"
+    },
+    "emisor": {
+      "type": "object",
+      "properties": {
+        "tipoIdentificacion": {
+          "type": "string",
+          "maxLength": 2
+        },
+        "numeroIdentificacion": {
+          "type": "string",
+          "maxLength": 12
+        },
+        "nombre": {
+          "type": "string",
+          "maxLength": 80
+        }
+      },
+      "required": [
+        "tipoIdentificacion",
+        "numeroIdentificacion",
+        "nombre"
+      ]
+    },
+    "receptor": {
+      "type": "object",
+      "properties": {
+        "tipoIdentificacion": {
+          "type": "string",
+          "maxLength": 2
+        },
+        "numeroIdentificacion": {
+          "type": "string",
+          "maxLength": 12
+        },
+        "nombre": {
+          "type": "string",
+          "maxLength": 80
+        }
+      },
+      "required": [
+        "tipoIdentificacion",
+        "numeroIdentificacion",
+        "nombre"
+      ]
+    },
+    "notasCredito": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "clave": {
+            "type": "string",
+            "maxLength": 50
+          },
+          "fecha": {
+            "description": "Fecha de la factura en formato [yyyy-MM-dd'T'HH:mm:ssZ] como se define en [http://tools.ietf.org/html/rfc3339#section-5.6] (date-time).",
+            "type": "string"
+          }
+        },
+        "required": [
+          "clave",
+          "fecha"
+        ]
+      }
+    },
+    "notasDebito": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "clave": {
+            "type": "string",
+            "maxLength": 50
+          },
+          "fecha": {
+            "description": "Fecha de la factura en formato [yyyy-MM-dd'T'HH:mm:ssZ] como se define en [http://tools.ietf.org/html/rfc3339#section-5.6] (date-time).",
+            "type": "string"
+          }
+        },
+        "required": [
+          "clave",
+          "fecha"
+        ]
+      }
+    }
+  },
+  "required": [
+    "clave",
+    "fecha",
+    "emisor",
+    "receptor"
+  ]
+}
+Example
+:
+{
+  "clave": "50601011600310112345600100010100000000011999999999",
+  "fecha": "2016-01-01T00:00:00-0600",
+  "emisor": {
+    "tipoIdentificacion": "02",
+    "numeroIdentificacion": "3101123456",
+    "nombre": "Razón Social S.A."
+  },
+  "receptor": {
+    "tipoIdentificacion": "02",
+    "numeroIdentificacion": "3101123456",
+    "nombre": "Razón Social S.A."
+  },
+  "notasCredito": [{
+    "clave": "50601011600310112345600100010300000000011999999999",
+    "fecha": "2016-01-01T00:00:00-0600"
+  }],
+  "notasDebito": [{
+    "clave": "50601011600310112345600100010200000000011999999999",
+    "fecha": "2016-01-01T00:00:00-0600"
+  }]
+}
+HTTP status code
+404
+Ocurrió un error, no se encuentra el recurso.
+Headers
+X-Error-Cause
+:
+(string)
+Muestra la causa del error.
+Example
+:
+No existe el recurso con Clave = [50601011600310112345600100010100000000011999999999]
+X-Ratelimit-Limit
+:
+(integer)
+Número de requests permitidos en el período de tiempo actual.
+X-Ratelimit-Remaining
+:
+(integer)
+Número de requests restantes en el período de tiempo actual.
+X-Ratelimit-Reset
+:
+(integer)
+Tiempo restante antes de que los límites se reinicien (UTC Epoch Seconds).
+Secured by oidc
+Headers
+Authorization
+:
+(string)
+Se utiliza para enviar el OIDC Token (OAuth 2.0 Token)
+Example
+:
+bearer eyJhbJciOiJSUzI1NiJ9.eyJqdGkiOiI4YzYxZDc2MC01YTU3LTQyMWYtOTk4ZS05ZDM1NTFmZWNjZDYiLCJleHAiOjE0NjExMDQyOTgsIm5iZiI6MCwiaWF0IjoxNDYxMTAzOTk4LCJpc3MiOiJodHRwOi8vMTkyLjE2OC45OS4xMDA6OTA5MC9hdXRoL3JlYWxtcy9zaWdudW0tb25lIiwiYXVkIjoic2lnbnVtLW9uZS1kZW1vLWFwcCIsInN1YiI6IjJiYzgxZjcxLWI4ZTQtNDE4My1iZTQwLWIzODEzNTYxYmQzOSIsInR5cCI6IkJlYXJlciIsImF6cCI6InNpZ251bS1vbmUtZGVtby1hcHAiLCJzZXNzaW9uX3N0YXRlIjoiNzUwYzYwMDEtNDhjZC00NzJmLWE3Y2YtNjNkZTY1MDhkYzEyIiwiY2xpZW50X3Nlc3Npb24iOiJlNTE2ZjI0ZC01ZGQzLTQxNmdFtgTQwMC02MmJhM2JlYjhmMjUiLCJhbGxvd2VkLW9yaWdpbnMiOltdLCJyZXNvdXJjZV9hY2Nlc3MiOnsic2lnbnVtLW9uZS1hcGkiOnsicm9sZXMiOlsiYXBwIl19fSwiY2xpZW50SG9zdCI6IjE5Mi4xNjguOTkuMSIsImNsaWVudElkIjoic2lnbnVtLW9uZS1kZW1vLWFwcCIsIm5hbWUiOiIiLCJwcmVmZXJyZWRfdXNlcm5hbWUiOiJzZXJ2aWNlLWFjY291bnQtc2lnbnVtLW9uZS1kZW1vLWFwcCIsImNsaWVudEFkZHJlc3MiOiIxOTIuMTY4Ljk5LjEiLCJlbWFpbCI6InNlcnZpY2UtYWNjb3VudC1zaWdudW0tb25lLWRlbW8tYXBwQHBsYWNlaG9sZGVyLm9yZyJ9.Jp7xXWaIkyUrWWSldNWmg5FhqqmIKt4jagKYPRiRMceXQo7eh_y765f5Y3CSeVX1KSJaNQjouHSMTTMgMjxbceDIkGM4_scTpqBgNJNEtFx7HydpujjtO36grWwvUA4Xv92frsafq2ZiHl5IW0ChZ-VmwvqBS5n80JetAJp5KGN1xW10Zh0JhRUUZtzN_Rjuw0hPfYvPbYEc2rEVEjujdjMa1hKkNp4F_JhXwd7aVBOTiG8udSukhWPQxI1lReUm47y4vfUDq0I3udPbsK869mbf-MvuY955gVfLv6oevByUzF1UyTlH1Dvv1KBnrpKaMjvWQ-xmAhNTwVx_OOo-CPXw
+HTTP status code
+401
+Unauthorized
+/recepcion
+/comprobantes

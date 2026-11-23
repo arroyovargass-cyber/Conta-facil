@@ -1,3 +1,4 @@
+import { fiscalLookupRoutes } from "./modules/fiscal-lookups";
 import { haciendaConfigurationRoutes } from "./modules/hacienda-configuration";
 import { HaciendaIdp, type IdpClient } from "./services/hacienda-idp";
 import { documentWorkflowRoutes } from "./modules/document-workflow";
@@ -88,6 +89,7 @@ export async function createApp(
   customerRoutes(app, pool, auth);
   catalogRoutes(app, pool, auth);
   invoicingRoutes(app, pool, auth);
+  fiscalLookupRoutes(app, pool, auth);
   fiscalPreparationRoutes(app, pool, auth);
   documentWorkflowRoutes(app, pool, auth);
   haciendaConfigurationRoutes(

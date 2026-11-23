@@ -5,6 +5,12 @@ import { customerInput } from "../../../../packages/domain/src/billing";
 import { scoped, HttpError } from "../db";
 import type { identity } from "./identity";
 import {
+  insertCustomer,
+  CUSTOMER_COLUMNS,
+  customerValues,
+  ensureCustomerNotDuplicate,
+} from "./customer-persistence";
+import {
   ids,
   listQuery,
   pattern,
@@ -60,23 +66,7 @@ export function customerRoutes(
       p = req.principal!;
     return scoped(pool, p.claims, async (db) => {
       await catalogPermission(db, tenantId, "customers.manage");
-      return {
-        item: (
-          await db.query(
-            "insert into public.customers(tenant_id,name,identification_type,identification,email,phone,address,active) values($1,$2,$3,$4,$5,$6,$7,$8) returning *",
-            [
-              tenantId,
-              v.name,
-              v.identification_type,
-              v.identification,
-              v.email,
-              v.phone,
-              v.address,
-              v.active,
-            ],
-          )
-        ).rows[0],
-      };
+      return { item: await insertCustomer(db, tenantId, v) };
     });
   });
   app.patch(base + "/:id", async (req) => {
@@ -101,21 +91,12 @@ export function customerRoutes(
           ]),
         ),
       );
+      await ensureCustomerNotDuplicate(db, tenantId, v, id!);
+      const values = customerValues(v);
       const item = (
         await db.query(
-          "update public.customers set name=$3,identification_type=$4,identification=$5,email=$6,phone=$7,address=$8,active=$9,version=version+1,updated_at=now() where tenant_id=$1 and id=$2 and version=$10 returning *",
-          [
-            tenantId,
-            id,
-            v.name,
-            v.identification_type,
-            v.identification,
-            v.email,
-            v.phone,
-            v.address,
-            v.active,
-            input.version,
-          ],
+          `update public.customers set ${CUSTOMER_COLUMNS.map((k, i) => k + "=$" + (i + 3)).join(",")},version=version+1,updated_at=now() where tenant_id=$1 and id=$2 and version=$${values.length + 3} returning *`,
+          [tenantId, id, ...values, input.version],
         )
       ).rows[0];
       if (!item)

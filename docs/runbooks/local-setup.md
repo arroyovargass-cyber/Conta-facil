@@ -19,3 +19,12 @@ El gateway HTTP de desarrollo escucha en 127.0.0.1:54321 y enruta `/auth/v1/` a 
 PostgreSQL puede reiniciarse con `.local/pg/root/usr/lib/postgresql/17/bin/pg_ctl -D .local/pg/data -l /tmp/conta-postgres.log start`. Se cambió su socket a `/tmp`; el socket predeterminado de Debian no existe aquí. Tras las pruebas se restringirá TCP a loopback, ya que ya no se conecta ningún contenedor.
 
 El directorio `.local`, `.env`, datos, respaldos y certificados de sesión no pertenecen al código distribuible. No subirlos a Git ni compartirlos como ejemplo. El arranque normal de Compose completo no se pudo verificar en este executor; se verificaron los mismos componentes como procesos locales.
+
+## Herramienta XSD de diagnóstico
+
+Antes de ejecutar la suite que incluye el nuevo worker: `npm run xml:prepare`
+(Python 3.10+ y Linux). Instala un venv privado con wheels fijados por hash.
+`npm run test:xml-validator` ejecuta sus pruebas propias. Ver
+[alcance y límites del motor](../development/xml-xsd11-evidence.md).
+El servicio publicado actual no utiliza este worker; no se requiere cambiar
+sus secretos ni instalar Python en Render para mantener la versión vigente.

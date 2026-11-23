@@ -1,6 +1,15 @@
 import React, { useRef, useState } from "react";
 import { apiRequest, post } from "../../api/client";
-import { Field, useAlive, useListing, type Row } from "./common";
+import {
+  Field,
+  useAlive,
+  useListing,
+  type Row,
+  ReceiverFields,
+  FiscalFields,
+  receiverDefaults,
+  fiscalDefaults,
+} from "./common";
 export function RecordCatalog({
   base,
   kind,
@@ -22,6 +31,7 @@ export function RecordCatalog({
     [conflict, setConflict] = useState(false);
   const defaults = customer
     ? {
+        ...receiverDefaults(),
         name: "",
         identification_type: "",
         identification: "",
@@ -38,11 +48,20 @@ export function RecordCatalog({
         unit_price: "0",
         cabys: "",
         unit: "",
+        tax_defaults: null,
         active: true,
       };
   function change(key: string, value: any) {
     editorGeneration.current++;
-    setEditing((v) => ({ ...v, [key]: value }));
+    setEditing((v) => ({
+      ...v,
+      [key]: value,
+      ...(!customer && key === "tax_defaults" && value
+        ? { cabys: value.cabys ?? "", unit: value.unit ?? "" }
+        : !customer && (key === "cabys" || key === "unit") && v?.tax_defaults
+          ? { tax_defaults: { ...v.tax_defaults, [key]: value } }
+          : {}),
+    }));
   }
   async function open(id: string) {
     if (writing.current) return;
@@ -148,42 +167,14 @@ export function RecordCatalog({
             <div className="form-grid">
               {customer ? (
                 <>
-                  <Field
-                    label="Nombre del cliente"
-                    value={editing.name}
-                    onChange={(v) => change("name", v)}
-                    required
-                  />
-                  <Field
-                    label="Tipo de identificación tributaria"
-                    value={editing.identification_type}
-                    onChange={(v) => change("identification_type", v)}
-                    maxLength={40}
-                  />
-                  <Field
-                    label="Identificación tributaria"
-                    value={editing.identification}
-                    onChange={(v) => change("identification", v)}
-                    maxLength={40}
-                  />
-                  <Field
-                    label="Correo del cliente"
-                    value={editing.email}
-                    onChange={(v) => change("email", v)}
-                    type="email"
-                    maxLength={254}
-                  />
-                  <Field
-                    label="Teléfono del cliente"
-                    value={editing.phone}
-                    onChange={(v) => change("phone", v)}
-                    maxLength={40}
-                  />
-                  <Field
-                    label="Dirección del cliente"
-                    value={editing.address}
-                    onChange={(v) => change("address", v)}
-                    maxLength={1000}
+                  <ReceiverFields
+                    value={editing}
+                    customerLabels
+                    base={base.replace(/\/customers$/, "")}
+                    onChange={(v) => {
+                      editorGeneration.current++;
+                      setEditing(v);
+                    }}
                   />
                 </>
               ) : (
@@ -240,6 +231,37 @@ export function RecordCatalog({
                     onChange={(v) => change("unit", v)}
                     maxLength={40}
                   />
+                </>
+              )}
+              {!customer && (
+                <>
+                  <p>Los precios excluyen impuestos.</p>
+                  <label className="billing-check">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(editing.tax_defaults)}
+                      onChange={(e) =>
+                        change(
+                          "tax_defaults",
+                          e.target.checked
+                            ? {
+                                ...fiscalDefaults(),
+                                cabys: editing.cabys,
+                                unit: editing.unit,
+                              }
+                            : null,
+                        )
+                      }
+                    />
+                    Configurar valores fiscales predeterminados
+                  </label>
+                  {editing.tax_defaults && (
+                    <FiscalFields
+                      value={editing.tax_defaults}
+                      onChange={(v) => change("tax_defaults", v)}
+                      base={base.replace(/\/catalog-items$/, "")}
+                    />
+                  )}
                 </>
               )}
               <label className="billing-check">

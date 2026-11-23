@@ -1,10 +1,10 @@
 {
-  "retrieved_on": "2026-11-14",
-  "status": "official-download-revision-unconfirmed",
-  "source_url": "https://www.hacienda.go.cr/docs/FacturaElectronica_V4.4.xsd.xml",
-  "file": "FacturaElectronica.downloaded.xsd",
-  "bytes": 118627,
-  "sha256": "4d7a1718cf5b09a4816503c08d1701c37b7beca5f212dd82f18d1d3a9a3042ba",
+  "retrieved_on": "2026-11-23",
+  "status": "uploaded-package-under-review",
+  "source_url": null,
+  "file": "FacturaElectronica.uploaded-20261123.xsd",
+  "bytes": 119689,
+  "sha256": "926ba81325bc21102755bd8e4e570a63caaca086e680a877c3a6d15d6ee8a62f",
   "target_namespace": "https://cdn.comprobanteselectronicos.go.cr/xml-schemas/v4.4/facturaElectronica",
   "declared_version": "4.4",
   "minimum_xsd_version": "1.1",
@@ -33,6 +33,10 @@
       "10",
       "11",
       "12",
+      "13",
+      "14",
+      "15",
+      "16",
       "99"
     ],
     "document_reference_types": [
@@ -54,9 +58,22 @@
       "15",
       "16",
       "17",
-      "18"
+      "18",
+      "19",
+      "20"
     ],
-    "signature_min_occurs": "1"
+    "signature_min_occurs": "1",
+    "signature_max_occurs": "5",
+    "reference_code_17": "annex_note_35_exclusive_to_payment_receipt"
   },
-  "runtime_use_allowed": false
+  "runtime_use_allowed": false,
+  "last_rechecked_on": "2026-11-23",
+  "previous_snapshot": {
+    "file": "FacturaElectronica.downloaded.xsd",
+    "bytes": 118627,
+    "sha256": "4d7a1718cf5b09a4816503c08d1701c37b7beca5f212dd82f18d1d3a9a3042ba",
+    "source_url": "https://www.hacienda.go.cr/docs/FacturaElectronica_V4.4.xsd.xml",
+    "status": "official-download-revision-unconfirmed"
+  },
+  "source_origin": "user_upload_from_displayed_hacienda_downloads"
 }
