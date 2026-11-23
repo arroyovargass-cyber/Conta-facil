@@ -81,3 +81,18 @@ PDF/correo y pruebas de extremo a extremo todavía no están terminados.
 Las credenciales/certificado STAG deben configurarse por canal privado; nunca
 se solicitan sus valores en chat. El acceso del primer administrador sigue
 pendiente. Este incremento no se declara listo para producción.
+
+## Bloqueo del siguiente contrato
+
+La nueva consulta de la guía API enlazada en la investigación inicial,
+https://atv.hacienda.go.cr/ATV/ComprobanteElectronico/docs/esquemas/2024/v4.4/comprobantes-electronicos-api.html,
+respondió HTTP404. No se sustituyó por un endpoint supuesto ni por un contrato
+de terceros. Debe recuperarse la guía vigente desde Hacienda/OVi antes de
+implementar el envío afectado por ese contrato.
+
+Se solicitó al usuario confirmar si dispone de empresa/credenciales STAG para
+configurarlas por canal privado. Sin respuesta aún al cerrar esta operación.
+También se necesita el paquete oficial actual descargable (esquemas/anexo)
+o confirmación técnica oficial de qué revisión corresponde, dadas las
+discrepancias ya documentadas. No se considera que la compilación del snapshot
+resuelva esa duda normativa. El resto del flujo fiscal no se declara terminado.
