@@ -4,6 +4,7 @@ import {
   inspectInvoiceXml,
   XML_INPUT_LIMITS,
 } from "../apps/api/src/services/xml-input";
+import { validateInvoiceXmlSnapshot } from "../apps/api/src/services/xml-snapshot";
 
 // Local developer command; no upload endpoint or external-resource access.
 const failure = (code: string) => ({
@@ -14,9 +15,11 @@ const failure = (code: string) => ({
   emissionEnabled: false,
 });
 async function inspectFile() {
-  if (process.argv.length !== 3) return failure("XML_FILE_ARGUMENT_REQUIRED");
+  const snapshot = process.argv[2] === "--validate-snapshot";
+  if (process.argv.length !== (snapshot ? 4 : 3))
+    return failure("XML_FILE_ARGUMENT_REQUIRED");
   const file = await open(
-    process.argv[2],
+    process.argv[snapshot ? 3 : 2],
     constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
   );
   try {
@@ -30,7 +33,10 @@ async function inspectFile() {
       if (read.bytesRead === 0) break;
       length += read.bytesRead;
     }
-    return inspectInvoiceXml(bytes.subarray(0, length));
+    const content = bytes.subarray(0, length);
+    return snapshot
+      ? await validateInvoiceXmlSnapshot(content)
+      : inspectInvoiceXml(content);
   } finally {
     await file.close();
   }
@@ -38,7 +44,8 @@ async function inspectFile() {
 try {
   const result = await inspectFile();
   console.log(JSON.stringify(result, null, 2));
-  if (result.status === "blocked") process.exitCode = 1;
+  if (!["well_formed", "snapshot_matches"].includes(result.status))
+    process.exitCode = 1;
 } catch {
   console.error(JSON.stringify(failure("XML_FILE_UNREADABLE")));
   process.exitCode = 1;

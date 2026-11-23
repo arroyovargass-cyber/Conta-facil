@@ -22,7 +22,10 @@
     "openssl:prepare": "node infra/prepare-openssl.mjs",
     "vault:local-keys": "node infra/local-vault-env.mjs",
     "fiscal:schemas:audit": "node --import tsx infra/audit-hacienda-schemas.ts",
-    "fiscal:xml:inspect": "node --import tsx infra/inspect-invoice-xml.ts"
+    "fiscal:xml:inspect": "node --import tsx infra/inspect-invoice-xml.ts",
+    "xml:prepare": "node infra/prepare-xml-validator.mjs",
+    "test:xml-validator": ".local/xmlschema-env/bin/python -m unittest discover -s tests/xml-validator -p \"test_*.py\"",
+    "fiscal:xml:validate-snapshot": "node --import tsx infra/inspect-invoice-xml.ts --validate-snapshot"
   },
   "dependencies": {
     "@fastify/cookie": "11.1.5",

@@ -11,3 +11,5 @@ coverage/
 .local/
 
 dist-server/
+__pycache__/
+*.pyc
