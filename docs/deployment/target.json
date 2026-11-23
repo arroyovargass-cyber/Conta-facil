@@ -12,9 +12,10 @@
     "schema_review": "twelve_migrations_applied_and_verified",
     "rls_tables": 29,
     "hosted_isolation_assertions_passed": 15,
-    "security_advisories": 0,
+    "security_advisories": 1,
     "application_connection": "restricted_role_tls_verified_health_200",
-    "hosted_fixtures_rolled_back": true
+    "hosted_fixtures_rolled_back": true,
+    "security_advisory_summary": "auth_leaked_password_protection_disabled"
   },
   "render": {
     "service_name": "conta-facil-pruebas",
@@ -57,10 +58,15 @@
   "test_access": {
     "public_url": "https://conta-facil-pruebas.onrender.com",
     "administrator_email_confirmed": true,
-    "invitation_sent": false,
-    "auth_users_created": 0,
-    "checked_at_utc": "2026-11-23T14:22:50Z",
+    "invitation_sent": true,
+    "auth_users_created": 1,
+    "checked_at_utc": "2026-11-23T16:18:05.300365+00:00",
     "public_url_verified_ready": true,
-    "administrator_access_verified": false
+    "administrator_access_verified": false,
+    "companies_created": 1,
+    "invitation_sent_at_utc": "2026-11-23T16:13:25.524797Z",
+    "email_confirmation_pending": true,
+    "email_delivery_verified": true,
+    "email_mailbox_location": "INBOX/CATEGORY_UPDATES"
   }
 }

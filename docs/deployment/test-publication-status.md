@@ -136,3 +136,50 @@ Verificación externa: GET /api/health → 200, estado ok; GET / → 200 HTML.
 La consulta de health usa la base; conexión del rol restringido con TLS validada.
 Acceso Auth, invitación y primer administrador siguen pendientes de verificar.
 No se declara emisión fiscal ni producción listas.
+
+## Primera invitación enviada — 23/11/2026
+
+Antes de operar se confirmó cero usuarios, empresas e invitaciones. El usuario
+confirmó Site URL de Render y Redirect URL /** guardados en Supabase.
+Se creó una empresa ficticia, rol administrador y una invitación con hash de
+token aleatorio y expiración de48 horas. El token no se publicó en código.
+
+Una Edge Function temporal con verify_jwt=true, capacidad de256 bits y plazo
+de30 minutos ejecutó la invitación con la clave administrativa automática de
+Supabase; nunca se obtuvo ni expuso dicha clave en el chat. El destinatario y
+el origen de redirección estaban fijados. Una función SQL restringida solo a
+service_role bloqueó la fila y registró el intento antes de solicitar el correo,
+impidiendo reintentos automáticos si el resultado fuera incierto. Se verificó
+execute=false para anon/authenticated y true para service_role.
+
+La invocación respondió HTTP200 INVITATION_SENT. Auth registra invited_at y
+confirmation_sent_at=2026-11-23T16:13:25.524797Z (10:13 Costa Rica).
+email_confirmed_at seguía null al comprobarlo. Esto acredita aceptación de envío
+por Supabase, no entrega al buzón ni acceso completado. Hay1 usuario invitado,
+1 empresa y1 invitación pendiente. No se asignó contraseña predeterminada.
+
+Cierre: RPC temporal eliminada, Edge Function versión2 reemplazada por respuesta
+410 OPERATION_CLOSED sin acceso a credenciales ni acciones de correo. Se
+eliminaron los archivos locales del token de operación y de invocación. Los
+eventos BOOTSTRAP_INVITATION_ATTEMPTED y BOOTSTRAP_INVITATION_SENT permanecen.
+
+La primera invocación Node falló antes de llegar al servicio por ECONNREFUSED;
+se comprobó cero intentos antes de utilizar el cliente HTTP con proxy del entorno.
+El primer cierre de la Edge Function falló por import-map heredado; se corrigió
+indicando deno.json explícitamente y se verificó su versión2. No hubo segundo
+envío. No se activaron planes de pago ni se modificó ContaNova.
+
+Próximo paso del usuario: abrir la invitación, verificar correo, definir su
+identificación/contraseña y MFA; comprobar membresía/permisos tras aceptación.
+
+Validación local de la operación: 3 pruebas específicas y suite completa de
+166 pruebas en35 archivos aprobadas (42,72 s). La comprobación de seguridad
+posterior reportó una advertencia Auth: protección contra contraseñas filtradas
+desactivada. No se cambió el plan ni se activaron servicios de pago. Referencia:
+[seguridad de contraseñas Supabase](https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection).
+
+Confirmación adicional de entrega: consulta Gmail de metadatos, sin leer el cuerpo
+ni extraer el enlace/token de verificación. Se verificó la cuenta destinataria
+y el mensaje de Supabase Auth con asunto You've been invited, fecha23/11/2026
+16:13:25 UTC, etiquetas INBOX, CATEGORY_UPDATES y UNREAD. La entrega al buzón sí
+queda comprobada; aceptación y acceso continúan pendientes del usuario.
