@@ -116,3 +116,23 @@ El intento `dep-dbuefhu7bikc739neaig` terminó update_failed a las
 23:51:13 UTC: build exitoso, arranque detenido por SUPABASE_SERVICE_KEY ausente.
 El usuario informa que la variable aparece en el panel; falta verificar guardado
 y aplicación en el servicio exacto. No se reintentó de nuevo automáticamente.
+
+## Certificado de conexión (23 de noviembre)
+
+El despliegue dep-dc24jud9fdbs73cdivr0 llegó a live. La raíz HTTP respondió 200
+y /api/health respondió 500, con código SELF_SIGNED_CERT_IN_CHAIN en el servidor.
+Se resolvió la ausencia de SUPABASE_SERVICE_KEY; su validez para Auth sigue
+pendiente de probar.
+
+El usuario adjuntó prod-ca-2021.crt desde Supabase. Certificado CA autofirmado
+Supabase Root 2021 CA, vigente desde 2021-04-28 hasta 2031-04-26. Huella SHA256:
+807025AD50D4ED219D2C9C7D299C004F824EB00CF7F65AFEF607D07B72E6CAFA.
+Se guardó como DATABASE_CA_CERT en Render mediante actualización parcial,
+preservando variables existentes. TLS mantiene rejectUnauthorized=true.
+Despliegue generado: dep-dc24n197lnhs7393sjrg; falta verificar health y acceso.
+
+Resultado: dep-dc24n197lnhs7393sjrg terminó live a las 14:22:50 UTC.
+Verificación externa: GET /api/health → 200, estado ok; GET / → 200 HTML.
+La consulta de health usa la base; conexión del rol restringido con TLS validada.
+Acceso Auth, invitación y primer administrador siguen pendientes de verificar.
+No se declara emisión fiscal ni producción listas.
