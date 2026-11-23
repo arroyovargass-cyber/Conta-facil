@@ -21,7 +21,8 @@
     "test:browser": "npm run build && playwright test",
     "openssl:prepare": "node infra/prepare-openssl.mjs",
     "vault:local-keys": "node infra/local-vault-env.mjs",
-    "fiscal:schemas:audit": "node --import tsx infra/audit-hacienda-schemas.ts"
+    "fiscal:schemas:audit": "node --import tsx infra/audit-hacienda-schemas.ts",
+    "fiscal:xml:inspect": "node --import tsx infra/inspect-invoice-xml.ts"
   },
   "dependencies": {
     "@fastify/cookie": "11.1.5",
@@ -33,6 +34,7 @@
     "pg": "8.23.1",
     "react": "19.3.1",
     "react-dom": "19.3.1",
+    "saxes": "6.0.0",
     "zod": "4.6.7"
   },
   "devDependencies": {
