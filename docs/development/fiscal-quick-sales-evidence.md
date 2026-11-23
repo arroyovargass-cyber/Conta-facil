@@ -20,12 +20,12 @@ Los importes de IVA se muestran antes de exoneración, con la exoneración separ
 
 ## Migraciones
 
-Aplicadas y verificadas **en la base local solamente**:
+Aplicadas y verificadas localmente y, posteriormente, en **Supabase Pruebas `ryobvhcarlpayqzaumdf`**:
 
 1. `20261123200903_invoice_fiscal_quick_sales.sql`: campos fiscales, configuración de productos, receptor ocasional, cliente opcional, líneas incompletas y totales calculados.
 2. `20261123201844_receiver_fiscal_conditions.sql`: domicilio y condiciones de actividad y correo del receptor.
 
-Los campos fiscales históricos quedan sin clasificación cuando no existían; no se imputan impuestos retroactivos. Se mantienen las restricciones y políticas de aislamiento existentes. Estas migraciones todavía deben ejecutarse en el entorno publicado al desplegar la versión.
+Los campos fiscales históricos quedan sin clasificación cuando no existían; no se imputan impuestos retroactivos. Se mantienen las restricciones y políticas de aislamiento existentes. En Supabase, los identificadores generados por el servicio son `20261123211414` y `20261123211428`, respectivamente; no volver a aplicar estos SQL por tener otra marca de tiempo local.
 
 ## Fuentes
 
@@ -54,4 +54,14 @@ Esta entrega completa la preparación fiscal de borradores para el perfil de IVA
 
 Falta conectar la generación del XML del comprobante con estos datos, validar ese XML contra el XSD oficial, firmar, transmitir al ambiente de pruebas y comprobar la respuesta definitiva. La herramienta existente de diagnóstico XML no sustituye ese flujo. El sistema mantiene `canEmit: false` y no presenta un comprobante como aceptado por Hacienda.
 
-El código y las migraciones de esta entrega no están publicados en Render. La publicación en GitHub fue rechazada con HTTP 403 tanto mediante Git como por el conector; no se creó una rama remota. El despliegue existente continúa con la versión anterior. La siguiente publicación necesita acceso efectivo de escritura y actualizar la fuente utilizada por Render; el despliegue actual consume un ZIP anterior con nombre y huella fijados, por lo que subir otro ZIP por sí solo no actualiza la aplicación.
+El bloqueo de GitHub 403 se resolvió. Se conservó el historial y los ZIP subidos manualmente al integrar el árbol completo verificado. La rama `fiscal-quick-sales` se publicó y la solicitud https://github.com/arroyovargass-cyber/Conta-facil/pull/1 se integró en `main`, commit `22f5bba839da2f59c78df07f20d4fdcdf1e8be3c`.
+
+Después de las migraciones alojadas se verificaron los nuevos campos, la nulabilidad de cliente y líneas incompletas y las cuatro tablas con RLS activo y sin lectura anónima. No se crearon clientes ni comprobantes de prueba en la base alojada. El asesor de seguridad no detectó problemas nuevos de las tablas; conserva el aviso previo de protección de contraseñas filtradas desactivada (https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection).
+
+El servicio Render existente `srv-dbudpelg1s2s73bi7cj0` conserva el plan gratuito, rama `main` y despliegue automático desactivado. El despliegue anterior `dep-dc24n197lnhs7393sjrg` sigue en estado `live`; no equivale a publicación de esta entrega. Falta cambiar su Build Command, que todavía extrae el ZIP antiguo, por:
+
+```sh
+npm ci --include=dev && npm run openssl:prepare && npm run build && npm prune --omit=dev
+```
+
+El conector Render disponible no ofrece actualización del Build Command y no hay credenciales API Render ni herramienta de navegador de escritorio disponibles en esta sesión. Se solicitó al usuario ese ajuste puntual en el panel del servicio. No se lanzó deliberadamente otro despliegue con el comando antiguo. Tras guardar el cambio, se debe desplegar `main`, esperar estado `live` y comprobar health, HTML y que el bundle publicado contenga el formulario nuevo. No se declara publicado antes de esa verificación.
