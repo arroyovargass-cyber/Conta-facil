@@ -12,7 +12,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 MAX_BYTES = 2 * 1024 * 1024
 NAMESPACE = 'https://cdn.comprobanteselectronicos.go.cr/xml-schemas/v4.4/facturaElectronica'
 PINS = [
-    ('FacturaElectronica.downloaded.xsd', 118627, '4d7a1718cf5b09a4816503c08d1701c37b7beca5f212dd82f18d1d3a9a3042ba'),
+    ('FacturaElectronica.uploaded-20261123.xsd', 119689, '926ba81325bc21102755bd8e4e570a63caaca086e680a877c3a6d15d6ee8a62f'),
     ('candidates/xmldsig-core-schema.w3c-2002.xsd', 10293, '35cf8197da812c85e40d57891b35c94187569ed474a2dac813ce5090dafcd35c'),
 ]
 

@@ -37,6 +37,20 @@ class SnapshotTests(unittest.TestCase):
         self.assertEqual(result['issues'], ['XML_DTD_FORBIDDEN'])
         self.assertNotIn('private-secret', str(result))
 
+    def test_uploaded_revision_supports_new_reference_codes_and_requires_signature(self):
+        schema = validator.build_schema()
+        reference = schema.maps.types['{' + validator.NAMESPACE + '}CodigoReferenciaType']
+        self.assertTrue(reference.is_valid('13'))
+        self.assertTrue(reference.is_valid('16'))
+        self.assertFalse(reference.is_valid('17'))  # Annex note 35: payment receipt only.
+        document = schema.maps.types['{' + validator.NAMESPACE + '}TipoDocReferenciaType']
+        self.assertTrue(document.is_valid('19'))
+        self.assertTrue(document.is_valid('20'))
+        invoice = schema.maps.elements['{' + validator.NAMESPACE + '}FacturaElectronica']
+        signature = next(e for e in invoice.type.content.iter_elements() if e.name == '{http://www.w3.org/2000/09/xmldsig#}Signature')
+        self.assertEqual(signature.min_occurs, 1)
+        self.assertEqual(signature.max_occurs, 5)
+
     def test_tampered_schema_pin_blocks_compilation(self):
         name, length, digest = validator.PINS[0]
         with patch.object(validator, 'PINS', [(name, length, '0' * 64)]):
