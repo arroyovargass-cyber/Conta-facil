@@ -20,7 +20,8 @@
     "start": "node dist-server/server.mjs",
     "test:browser": "npm run build && playwright test",
     "openssl:prepare": "node infra/prepare-openssl.mjs",
-    "vault:local-keys": "node infra/local-vault-env.mjs"
+    "vault:local-keys": "node infra/local-vault-env.mjs",
+    "fiscal:schemas:audit": "node --import tsx infra/audit-hacienda-schemas.ts"
   },
   "dependencies": {
     "@fastify/cookie": "11.1.5",
