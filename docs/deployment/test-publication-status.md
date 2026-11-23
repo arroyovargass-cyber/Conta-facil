@@ -183,3 +183,14 @@ ni extraer el enlace/token de verificación. Se verificó la cuenta destinataria
 y el mensaje de Supabase Auth con asunto You've been invited, fecha23/11/2026
 16:13:25 UTC, etiquetas INBOX, CATEGORY_UPDATES y UNREAD. La entrega al buzón sí
 queda comprobada; aceptación y acceso continúan pendientes del usuario.
+
+## Reanudación de acceso tras cerrar la pestaña
+
+El usuario confirmó que cerró la página y reutilizó el enlace. El callback
+conserva el token de sesión en memoria y limpia el fragmento de URL; al cerrar
+se pierde la sesión y el enlace de verificación consumido no la recupera.
+Se rotó únicamente el hash de la invitación pendiente y se solicitó un enlace
+OTP para la cuenta existente, con create_user=false y redirect a /invite.
+Respuesta HTTP200; se mantienen1 usuario,1 empresa y1 invitación pendiente.
+No se fijó contraseña ni se crearon membresías sin verificación. El token y
+archivo operativo se eliminaron del workspace tras solicitar el envío.
