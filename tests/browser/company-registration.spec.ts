@@ -1,7 +1,11 @@
 import { test, expect, type Page } from "@playwright/test";
 import { workspace } from "../support/workspace";
 import { totp } from "../support/totp";
-async function login(page: Page, f: Awaited<ReturnType<typeof workspace>>) {
+async function login(
+  page: Page,
+  f: Awaited<ReturnType<typeof workspace>>,
+  selectCompany = true,
+) {
   await page.goto("/");
   await page
     .getByRole("combobox", { name: "Tipo de identificación", exact: true })
@@ -17,6 +21,7 @@ async function login(page: Page, f: Awaited<ReturnType<typeof workspace>>) {
     .getByLabel("Código de 6 dígitos")
     .fill(totp(await page.locator("details code").innerText()));
   await page.getByRole("button", { name: "Verificar y continuar" }).click();
+  if (!selectCompany) return;
   await page.getByRole("button", { name: /Empresa Norte/ }).click();
   const menu = page.getByRole("button", { name: "Abrir menú", exact: true });
   if (await menu.isVisible()) await menu.click();
@@ -71,6 +76,15 @@ test("owner creates and reopens a basic company with six configuration tabs", as
       .getByRole("button", { name: "Editar empresa", exact: true })
       .click();
     await page
+      .getByRole("tab", { name: "Facturación electrónica", exact: true })
+      .click();
+    await page
+      .getByLabel("Código de sucursal · 3 dígitos", { exact: true })
+      .fill("001");
+    await page
+      .getByLabel("Código de terminal · 5 dígitos", { exact: true })
+      .fill("00001");
+    await page
       .getByRole("tab", { name: "Configuración contable", exact: true })
       .click();
     await page.getByLabel("Manejo de bancos").check();
@@ -79,6 +93,12 @@ test("owner creates and reopens a basic company with six configuration tabs", as
       .click();
     await expect(
       page.getByText("Empresa guardada.", { exact: true }),
+    ).toBeVisible();
+    await page
+      .getByRole("tab", { name: "Facturación electrónica", exact: true })
+      .click();
+    await expect(
+      page.getByText(/Factura electrónica · terminal .* último consecutivo 0/),
     ).toBeVisible();
     expect(
       await page.evaluate(
@@ -139,6 +159,51 @@ test("owner can reopen an inactive company when no active companies remain", asy
     await expect(
       page.getByRole("button", { name: "Editar empresa", exact: true }),
     ).toBeVisible();
+  } finally {
+    await f.pool.end();
+  }
+});
+
+test("owner without assigned companies can start the first company", async ({
+  page,
+}) => {
+  const f = await workspace({ role: "admin", companies: 0, systemAdmin: true });
+  try {
+    await login(page, f, false);
+    await page
+      .getByRole("button", { name: "Nueva empresa", exact: true })
+      .click();
+    await expect(
+      page.getByRole("heading", { name: "Nueva empresa", exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByLabel("Razón social *", { exact: true }),
+    ).toBeEditable();
+  } finally {
+    await f.pool.end();
+  }
+});
+test("failed complete company load never enables editing partial overview data", async ({
+  page,
+}) => {
+  const f = await workspace({ role: "admin", companies: 2, systemAdmin: true });
+  try {
+    await page.route("**/api/company-administration/" + f.tenants[0], (r) =>
+      r.fulfill({
+        status: 503,
+        contentType: "application/json",
+        body: JSON.stringify({
+          message: "Detalle temporalmente no disponible.",
+        }),
+      }),
+    );
+    await login(page, f);
+    await expect(page.getByRole("alert")).toContainText(
+      "Detalle temporalmente no disponible.",
+    );
+    await expect(
+      page.getByRole("button", { name: "Editar empresa", exact: true }),
+    ).toHaveCount(0);
   } finally {
     await f.pool.end();
   }

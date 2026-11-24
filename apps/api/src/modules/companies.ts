@@ -66,14 +66,10 @@ export function companyRoutes(
         .parse(req.body);
     return scoped(pool, p.claims, async (db) => {
       await requirePermission(db, tenantId, "company.manage");
-      return {
-        item: (
-          await db.query(
-            "update public.tenants set legal_name=$2,trade_name=$3,identification_type=$4,identification=$5,contact_email=$6,phone=$7,address=$8 where id=$1 returning *",
-            [tenantId, ...Object.values(input)],
-          )
-        ).rows[0],
-      };
+      throw new HttpError(
+        409,
+        "Utiliza el formulario de configuración de empresa con control de versión.",
+      );
     });
   });
   const entities = {

@@ -630,13 +630,14 @@ export function App() {
             </button>
           ))}
           <InactiveCompanyAccess
-            onSelect={(row) => {
+            onSelect={(row, saved) => {
               setCompanies((old) => [
                 ...old.filter((c) => c.id !== row.id),
                 row,
               ]);
               choose(row.id);
               setView("company");
+              if (saved) setNotice("Empresa guardada.");
             }}
           />
           {!companies.length && (

@@ -133,7 +133,7 @@ const base = z
     address: text(1000).default(""),
     active: z.boolean().default(true),
     configuration: companyConfiguration,
-    activities: z.array(companyActivity).max(30).default([]),
+    activities: z.array(companyActivity).max(1000).default([]),
   })
   .strict();
 function validate(v: z.infer<typeof base>, ctx: z.RefinementCtx) {
@@ -204,6 +204,7 @@ export const createCompanyInput = base
     (v) =>
       ["01", "02", "03", "04"].includes(v.identification_type) &&
       v.person_type !== "unspecified" &&
+      v.activities.length <= 30 &&
       v.activities.every((a) => /^\d{6}$/.test(a.code)) &&
       (!v.activities.some((a) => a.active) ||
         v.activities.some((a) => a.active && a.primary)),

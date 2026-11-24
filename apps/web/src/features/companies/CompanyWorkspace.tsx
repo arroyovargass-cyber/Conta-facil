@@ -65,11 +65,13 @@ export function CompanyWorkspace({
   company,
   onSaved,
   onUsers,
+  onCancel,
 }: {
   tenantId: string;
   company: Row;
   onSaved: (id: string) => Promise<void>;
   onUsers: () => void;
+  onCancel?: () => void;
 }) {
   const alive = useAlive(),
     generation = useRef(0),
@@ -77,6 +79,7 @@ export function CompanyWorkspace({
     operation = useRef(crypto.randomUUID());
   const [canManage, setCanManage] = useState(false),
     [ready, setReady] = useState(false),
+    [detailReady, setDetailReady] = useState(false),
     [items, setItems] = useState<Row[]>([]),
     [value, setValue] = useState<CompanyInput>(() => fromRow(company)),
     [id, setId] = useState(tenantId),
@@ -100,13 +103,22 @@ export function CompanyWorkspace({
         setCanManage(r.canManage);
         setItems(r.items);
         if (r.canManage) {
-          const result = await apiRequest(
-            "/company-administration/" + tenantId,
-          );
-          if (!current || seq !== generation.current) return;
-          setValue(fromRow(result.item));
-          setVersion(result.item.configuration_version);
-          setSequences(result.sequences);
+          if (tenantId) {
+            const result = await apiRequest(
+              "/company-administration/" + tenantId,
+            );
+            if (!current || seq !== generation.current) return;
+            setValue(fromRow(result.item));
+            setVersion(result.item.configuration_version);
+            setSequences(result.sequences);
+          } else {
+            const next = blank();
+            next.legal_name = "";
+            next.identification = "";
+            setValue(next);
+            setEditing(true);
+          }
+          setDetailReady(true);
           void apiRequest("/company-administration/locations")
             .then((l) => {
               if (current && seq === generation.current) setLocations(l);
@@ -212,6 +224,7 @@ export function CompanyWorkspace({
     </label>
   );
   function apply(row: Row, seqs: Row[] = []) {
+    setDetailReady(true);
     setValue(fromRow(row));
     setId(row.id);
     setVersion(row.configuration_version);
@@ -220,6 +233,7 @@ export function CompanyWorkspace({
     setLookup(null);
   }
   function newCompany() {
+    setDetailReady(true);
     generation.current++;
     operation.current = crypto.randomUUID();
     const next = blank();
@@ -276,7 +290,7 @@ export function CompanyWorkspace({
         id ? "PATCH" : "POST",
       );
       if (!alive.current || seq !== generation.current) return;
-      apply(r.item, sequences);
+      apply(r.item, r.sequences ?? []);
       await onSaved(r.item.id);
     } catch (e: any) {
       if (alive.current && seq === generation.current) setError(e.message);
@@ -356,7 +370,7 @@ export function CompanyWorkspace({
             >
               Nueva empresa
             </button>
-            {!editing && (
+            {!editing && detailReady && (
               <button
                 type="button"
                 className="button primary"
@@ -989,7 +1003,9 @@ export function CompanyWorkspace({
                 type="button"
                 className="button secondary"
                 disabled={busy}
-                onClick={() => void loadCompany(tenantId)}
+                onClick={() =>
+                  tenantId ? void loadCompany(tenantId) : onCancel?.()
+                }
               >
                 Cancelar
               </button>
@@ -1063,23 +1079,49 @@ export function CompanyWorkspace({
 export function InactiveCompanyAccess({
   onSelect,
 }: {
-  onSelect: (row: Row) => void;
+  onSelect: (row: Row, saved?: boolean) => void;
 }) {
-  const [items, setItems] = useState<Row[]>([]);
+  const [items, setItems] = useState<Row[]>([]),
+    [canManage, setCanManage] = useState(false),
+    [creating, setCreating] = useState(false);
   useEffect(() => {
     let current = true;
     void apiRequest("/company-administration")
       .then((r) => {
-        if (current && r.canManage)
-          setItems(r.items.filter((i: Row) => !i.active));
+        if (current) {
+          setCanManage(r.canManage);
+          if (r.canManage) setItems(r.items.filter((i: Row) => !i.active));
+        }
       })
       .catch(() => {});
     return () => {
       current = false;
     };
   }, []);
+  if (creating)
+    return (
+      <CompanyWorkspace
+        tenantId=""
+        company={blank()}
+        onCancel={() => setCreating(false)}
+        onUsers={() => {}}
+        onSaved={async (id) => {
+          const r = await apiRequest("/company-administration/" + id);
+          onSelect(r.item, true);
+        }}
+      />
+    );
   return (
     <>
+      {canManage && (
+        <button
+          type="button"
+          className="button secondary"
+          onClick={() => setCreating(true)}
+        >
+          Nueva empresa
+        </button>
+      )}
       {items.map((row) => (
         <button
           type="button"

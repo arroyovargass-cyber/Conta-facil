@@ -9,6 +9,7 @@ grant select,insert on conta_hosted_results to authenticated,anon;
 insert into conta_hosted_results select plan(15);
 insert into auth.users(id,email) values ('10000000-0000-0000-0000-000000000001','a@example.test'),('10000000-0000-0000-0000-000000000002','b@example.test');
 insert into public.profiles(id,name) values ('10000000-0000-0000-0000-000000000001','A'),('10000000-0000-0000-0000-000000000002','B');
+insert into private.platform_operators values ('10000000-0000-0000-0000-000000000001');
 insert into public.tenants(id,legal_name,identification_type,identification) values ('20000000-0000-0000-0000-000000000001','Empresa A','legal','001'),('20000000-0000-0000-0000-000000000002','Empresa B','legal','002');
 insert into public.memberships(tenant_id,user_id,scope) values ('20000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','company'),('20000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000002','company');
 insert into public.membership_roles(tenant_id,user_id,role_id) select r.tenant_id,m.user_id,r.id from public.roles r join public.memberships m using(tenant_id) where r.code='admin' and m.user_id in ('10000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000002');

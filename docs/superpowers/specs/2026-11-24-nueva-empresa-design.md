@@ -1,6 +1,6 @@
 # Nueva empresa y administración exclusiva del propietario
 
-Estado: diseño para aprobación; no implementado ni desplegado.
+Estado: diseño aprobado por el usuario e implementado localmente; sin publicación ni despliegue automático.
 
 ## Alcance y decisiones confirmadas
 

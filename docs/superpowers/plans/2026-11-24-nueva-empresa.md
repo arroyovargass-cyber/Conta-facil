@@ -24,27 +24,27 @@
 ### Task 1: Dominio y restricciones
 **Files:** packages/domain/src/company.ts; supabase/migrations/*company_administration.sql; tests/company.test.ts.
 **Interfaces:** companyInput, createCompanyInput, updateCompanyInput, companyPreparation(input); private.is_system_administrator(); tenants.configuration y configuration_version.
-- [ ] Escribir pruebas de campos básicos, identificación, parámetros, fechas, secretos y condiciones pendientes; ejecutar RED.
-- [ ] Implementar esquema y migración aditiva con RLS y restricciones administrativas. Aplicar solo local.
-- [ ] Ejecutar pruebas de dominio GREEN y registrar resultado.
+- [x] Escribir pruebas de campos básicos, identificación, parámetros, fechas, secretos y condiciones pendientes; ejecutar RED.
+- [x] Implementar esquema y migración aditiva con RLS y restricciones administrativas. Aplicar solo local.
+- [x] Ejecutar pruebas de dominio GREEN y registrar resultado.
 
 ### Task 2: API transaccional
 **Files:** apps/api/src/modules/company-registration.ts; apps/api/src/modules/companies.ts; apps/api/src/app.ts; tests/integration/company-registration.test.ts.
 **Interfaces:** GET /api/company-administration; GET /api/company-administration/:id; POST /api/company-administration; PATCH /api/company-administration/:id. POST usa operation_id; PATCH expected_version. GET incluye capacidad owner sin modificar login.
-- [ ] Pruebas RED de no máster, MFA, alta, idempotencia, duplicado, aislamiento, actualización obsoleta e inactividad.
-- [ ] Crear rutas con autenticación y CSRF existentes, transacciones bloqueadas, membresía del creador, auditoría y reutilización de actividades/sucursales/terminales.
-- [ ] Añadir consulta oficial de identificación y ubicaciones para nueva empresa sin exigir una empresa creada.
-- [ ] Ejecutar integración GREEN; comprobar denegación directa por RLS y contadores intactos.
+- [x] Pruebas RED de no máster, MFA, alta, idempotencia, duplicado, aislamiento, actualización obsoleta e inactividad.
+- [x] Crear rutas con autenticación y CSRF existentes, transacciones bloqueadas, membresía del creador, auditoría y reutilización de actividades/sucursales/terminales.
+- [x] Añadir consulta oficial de identificación y ubicaciones para nueva empresa sin exigir una empresa creada.
+- [x] Ejecutar integración GREEN; comprobar denegación directa por RLS y contadores intactos.
 
 ### Task 3: Formulario de seis pestañas
 **Files:** apps/web/src/features/companies/CompanyWorkspace.tsx y company.css; apps/web/src/app.tsx; tests/browser/company-registration.spec.ts.
 **Interfaces:** CompanyWorkspace({tenantId,onSaved}); recargar selector tras alta, usar capacidad autenticada del servidor.
-- [ ] Prueba RED de Nueva empresa, guardar datos básicos, reapertura, seis pestañas y denegación no máster.
-- [ ] Implementar campos solicitados, validación, territorios dependientes, actividades múltiples, configuración contable y estado honesto. Credenciales mediante componente de bóveda existente tras guardar empresa.
-- [ ] Prueba GREEN escritorio/móvil; verificar que el formulario no guarda secretos en la configuración.
+- [x] Prueba RED de Nueva empresa, guardar datos básicos, reapertura, seis pestañas y denegación no máster.
+- [x] Implementar campos solicitados, validación, territorios dependientes, actividades múltiples, configuración contable y estado honesto. Credenciales mediante componente de bóveda existente tras guardar empresa.
+- [x] Prueba GREEN escritorio/móvil; verificar que el formulario no guarda secretos en la configuración.
 
 ### Task 4: Verificación y entrega local
 **Files:** tests/support/workspace.ts (opción explícita de operador para fixtures); docs/development/new-company-evidence.md.
-- [ ] Ejecutar pruebas relacionadas de empresas, autorización, credenciales y aislamiento; TypeScript y build.
-- [ ] Revisión independiente de cambios; corregir hallazgos importantes con prueba de regresión.
-- [ ] Registrar migración local, pruebas y dependencias. Commit local sin push ni despliegue.
+- [x] Ejecutar pruebas relacionadas de empresas, autorización, credenciales y aislamiento; TypeScript y build.
+- [x] Revisión independiente de cambios; corregir hallazgos importantes con prueba de regresión.
+- [x] Registrar migración local, pruebas y dependencias. Commit local sin push ni despliegue.

@@ -313,6 +313,128 @@ it("preserves legacy activities while completing unrelated company fields", asyn
   expect(saved.statusCode, saved.body).toBe(200);
   expect(saved.json().item.activities[0].code).toBe("legacy-1");
 });
+it("handles five simultaneous creates without exhausting the runtime pool", async () => {
+  const stamp = Date.now() % 800000;
+  const replies = await Promise.all(
+    Array.from({ length: 5 }, (_, i) =>
+      request("/company-administration", "POST", {
+        ...payload(),
+        identification: "3101" + String(100000 + stamp + i),
+      }),
+    ),
+  );
+  expect(
+    replies.map((r) => r.statusCode),
+    replies.map((r) => r.body).join(" "),
+  ).toEqual([200, 200, 200, 200, 200]);
+});
+it("reopens more than thirty historical activities and retains omitted activity history", async () => {
+  const p = payload();
+  const made = await request("/company-administration", "POST", p);
+  expect(made.statusCode, made.body).toBe(200);
+  const id = made.json().item.id;
+  for (let i = 0; i < 31; i++)
+    await f.pool.query(
+      "insert into public.economic_activities(tenant_id,code,name,source_url,is_primary) values($1,$2,$3,'', $4)",
+      [id, String(100000 + i), "Histórica " + i, i === 0],
+    );
+  const opened = await request("/company-administration/" + id);
+  expect(opened.statusCode, opened.body).toBe(200);
+  expect(opened.json().item.activities).toHaveLength(31);
+  const item = opened.json().item;
+  const input = Object.fromEntries(
+    [
+      "legal_name",
+      "trade_name",
+      "person_type",
+      "identification_type",
+      "identification",
+      "contact_email",
+      "phone",
+      "address",
+      "active",
+      "configuration",
+      "activities",
+    ].map((k) => [k, item[k]]),
+  );
+  const saved = await request("/company-administration/" + id, "PATCH", {
+    ...input,
+    activities: item.activities.slice(0, 30),
+    expected_version: item.configuration_version,
+  });
+  expect(saved.statusCode, saved.body).toBe(200);
+  expect(
+    (
+      await f.pool.query(
+        "select count(*)::int n from public.economic_activities where tenant_id=$1",
+        [id],
+      )
+    ).rows[0].n,
+  ).toBe(31);
+});
+it("rejects legacy writes without version and blocks direct authenticated company updates", async () => {
+  const item = (await request("/company-administration/" + created.id)).json()
+    .item;
+  const legacy = await request("/companies/" + created.id, "PATCH", {
+    legal_name: "Bypass",
+    trade_name: "",
+    identification_type: "02",
+    identification: item.identification,
+    contact_email: "",
+    phone: "",
+    address: "",
+  });
+  expect(legacy.statusCode, legacy.body).toBe(409);
+  const db = await f.pool.connect();
+  try {
+    await db.query("begin");
+    const session = await db.query(
+      "select auth_session_id from private.sessions where user_id=$1 limit 1",
+      [f.userId],
+    );
+    await db.query("select set_config('request.jwt.claims',$1,true)", [
+      JSON.stringify({
+        sub: f.userId,
+        aal: "aal2",
+        session_id: session.rows[0].auth_session_id,
+      }),
+    ]);
+    await db.query("set local role authenticated");
+    await expect(
+      db.query("update public.tenants set legal_name='Bypass' where id=$1", [
+        created.id,
+      ]),
+    ).rejects.toMatchObject({ code: "42501" });
+  } finally {
+    await db.query("rollback");
+    db.release();
+  }
+});
+it("rejects an image signature without actual PNG content", async () => {
+  expect(
+    (
+      await request("/company-administration", "POST", {
+        ...payload(),
+        configuration: { logo: "data:image/png;base64,iVBORw0KGgo=" },
+      })
+    ).statusCode,
+  ).toBe(400);
+});
+it("guards normalized identification even for a trusted alternate insert", async () => {
+  const existing = (
+    await request("/company-administration/" + created.id)
+  ).json().item;
+  await expect(
+    f.pool.query(
+      "insert into public.tenants(legal_name,identification_type,identification) values('Duplicate alternate path','legal',$1)",
+      [
+        existing.identification.slice(0, 1) +
+          "-" +
+          existing.identification.slice(1),
+      ],
+    ),
+  ).rejects.toMatchObject({ code: "23505" });
+});
 it("checks direct RLS permission after operator revocation", async () => {
   await f.pool.query(
     "delete from private.platform_operators where user_id=$1",
@@ -341,14 +463,12 @@ it("checks direct RLS permission after operator revocation", async () => {
         )
       ).rows[0].allowed,
     ).toBe(false);
-    expect(
-      (
-        await db.query(
-          "update public.tenants set legal_name='Forbidden' where id=$1 returning id",
-          [f.tenants[0]],
-        )
-      ).rowCount,
-    ).toBe(0);
+    await expect(
+      db.query(
+        "update public.tenants set legal_name='Forbidden' where id=$1 returning id",
+        [f.tenants[0]],
+      ),
+    ).rejects.toMatchObject({ code: "42501" });
   } finally {
     await db.query("rollback");
     db.release();

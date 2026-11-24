@@ -1,3 +1,4 @@
+import { validCompanyLogo } from "../services/company-logo";
 import type { FastifyInstance } from "fastify";
 import type pg from "pg";
 import { z } from "zod";
@@ -133,16 +134,8 @@ export function companyRegistrationRoutes(
       if (!match) throw new HttpError(400, "El logotipo debe ser PNG o JPEG.");
       const bytes = Buffer.from(match[2], "base64");
       if (
-        bytes.length > 65536 ||
         bytes.toString("base64") !== match[2] ||
-        !(match[1] === "png"
-          ? bytes
-              .subarray(0, 8)
-              .equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
-          : bytes.length > 3 &&
-            bytes[0] === 255 &&
-            bytes[1] === 216 &&
-            bytes[2] === 255)
+        !validCompanyLogo(bytes, match[1])
       )
         throw new HttpError(400, "Logotipo inválido o mayor de 64 KiB.");
     }
@@ -273,7 +266,17 @@ export function companyRegistrationRoutes(
     return transaction(p.claims, async (db) => {
       const parsed = createCompanyInput.parse(req.body);
       await validateConfiguration(parsed);
-      await auth.limit("company-create:" + p.userId, 20);
+      const quota = (
+        await db.query(
+          "insert into private.rate_limits(key,count,reset_at) values($1,1,now()+interval '15 minutes') on conflict(key) do update set count=case when private.rate_limits.reset_at<now() then 1 else private.rate_limits.count+1 end,reset_at=case when private.rate_limits.reset_at<now() then now()+interval '15 minutes' else private.rate_limits.reset_at end returning count",
+          [hash("company-create:" + p.userId)],
+        )
+      ).rows[0].count;
+      if (quota > 20)
+        throw new HttpError(
+          429,
+          "Demasiadas altas de empresa. Intenta nuevamente más tarde.",
+        );
       const { operation_id, ...value } = parsed;
       await db.query("select pg_advisory_xact_lock(hashtextextended($1,0))", [
         "company-operation:" + p.userId + ":" + operation_id,
@@ -334,7 +337,15 @@ export function companyRegistrationRoutes(
         "insert into public.audit_events(tenant_id,actor_id,action,entity,entity_id) values($1,$2,'COMPANY_CREATED','tenants',$3)",
         [id, p.userId, id],
       );
-      return { item: await read(db, id) };
+      return {
+        item: await read(db, id),
+        sequences: (
+          await db.query(
+            "select terminal_id,document_type,last_value::text from public.document_sequences where tenant_id=$1",
+            [id],
+          )
+        ).rows,
+      };
     });
   });
   app.patch(base + "/:id", { bodyLimit: 160 * 1024 }, async (req) => {
@@ -401,7 +412,15 @@ export function companyRegistrationRoutes(
         [id, ...keys.map((k) => (value as any)[k])],
       );
       await children(db, id, value);
-      return { item: await read(db, id) };
+      return {
+        item: await read(db, id),
+        sequences: (
+          await db.query(
+            "select terminal_id,document_type,last_value::text from public.document_sequences where tenant_id=$1",
+            [id],
+          )
+        ).rows,
+      };
     });
   });
 }
