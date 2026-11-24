@@ -1,6 +1,6 @@
 # Nueva empresa y administración exclusiva del propietario
 
-Estado: diseño aprobado por el usuario e implementado localmente; sin publicación ni despliegue automático.
+Estado: diseño aprobado, implementado y publicado en pruebas tras autorización expresa posterior del usuario; ver docs/development/new-company-evidence.md.
 
 ## Alcance y decisiones confirmadas
 
