@@ -5,18 +5,23 @@ firma fiscal, transmisión ni recepción. Las bandejas son revisiones internas.
 
 ## Puertas de habilitación
 
-El inspector local proviene del commit oficial OpenSSL
-`84dda7853c130429210b37bee9e5b62366ca8bce`, versión **3.5.10-dev**. Se preparó
-como snapshot de desarrollo porque el archivo/tag estable 3.5.10 no estaba
-disponible. **Con este binario, cargar credenciales está bloqueado fuera de
-`NODE_ENV=test`.** No cambiar el ambiente del servicio para eludir ese bloqueo.
-Las pruebas automatizadas usan exclusivamente certificados sintéticos.
+El perfil de inspección es `pkcs12-official-security-20261124`, definido en
+`infra/openssl-inspector-profile.json`. Fija la revisión oficial OpenSSL
+`906f55c2199f543702480c0499fb889df4fecb03`, versión **3.5.10-dev**.
+Sigue siendo un snapshot de seguridad, no una publicación estable del proveedor.
+El preparador comprueba la ascendencia de los doce parches oficiales revisados,
+elimina únicamente sus directorios desechables de compilación/instalación y
+compila desde cero. La atestación resultante relaciona perfil, revisión, versión
+y SHA-256 del binario. Requiere confiar en la fuente y el sistema de build/despliegue;
+no es una firma independiente que resista un servidor o artefacto comprometido.
 
-Antes de admitir material real: verificar la versión estable y sus parches en
-las fuentes oficiales, la instalación objetivo y proveedores criptográficos;
-repetir pruebas del inspector y de permisos; configurar HTTPS y claves de
-bóveda independientes. Ninguna de estas comprobaciones implica certificación
-tributaria ni habilita por sí misma la emisión.
+Fuera de las pruebas automatizadas se admite exclusivamente ese perfil exacto,
+con integridad comprobada **antes** de ejecutar el binario. La consulta de versión
+y el parser reciben un entorno mínimo, sin claves de bóveda ni secretos de sesión.
+Otros snapshots o modificaciones quedan bloqueados. No cambiar `NODE_ENV` para
+eludir controles. La habilitación admite únicamente credenciales del ambiente
+Hacienda de pruebas, bajo HTTPS y con raíz de bóveda independiente configurada.
+Identidad tributaria, firma y transmisión siguen pendientes.
 
 `HACIENDA_STAG_PROBE_ENABLED=false` es el valor predeterminado. La disponibilidad
 operativa del IdP de STAG sigue sin confirmarse desde este entorno. Antes de
@@ -32,7 +37,7 @@ Fuentes: [OpenSSL 3.5, seguridad](https://openssl-library.org/news/vulnerabiliti
 
 Se requieren Node 24, Git, Perl, make y compilador C. `npm run openssl:prepare`
 prepara el binario bajo `.local/openssl`; no modifica el del sistema. El build
-comprueba la presencia y versión mínima y compila un worker separado. La
+comprueba el perfil y la integridad exactos y compila un worker separado. La
 configuración de Render incluye esa preparación, pero no fue desplegada ni
 validada en infraestructura remota.
 

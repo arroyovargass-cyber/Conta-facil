@@ -96,17 +96,18 @@ export class CredentialStore {
   }
   async capability() {
     const inspector = await (this.inspectorCheck ??= inspectorCapability());
-    // The current development security snapshot is permitted only in automated tests.
+    // Published services admit only the pinned, integrity-verified PKCS12 profile.
     const supported =
       inspector.available &&
-      (!inspector.version.includes("-dev") || this.config.NODE_ENV === "test");
+      (inspector.validated_profile || this.config.NODE_ENV === "test");
     return {
       can_store_credentials:
         !!this.keyring &&
         supported &&
         (this.config.NODE_ENV === "test" ||
           new URL(this.config.APP_ORIGIN).protocol === "https:"),
-      synthetic_only: inspector.version.includes("-dev"),
+      synthetic_only: !inspector.validated_profile,
+      inspector_profile_verified: inspector.validated_profile,
       can_test_connection:
         !!this.keyring && this.config.HACIENDA_STAG_PROBE_ENABLED === "true",
       can_emit: false,
