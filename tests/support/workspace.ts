@@ -4,7 +4,7 @@ import { randomBytes } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { loadConfig } from "../../apps/api/src/config";
 export async function workspace(
-  options: { role?: string; companies?: number } = {},
+  options: { role?: string; companies?: number; systemAdmin?: boolean } = {},
 ) {
   const config = loadConfig();
   if (
@@ -37,6 +37,10 @@ export async function workspace(
     "insert into private.login_directory values($1,'CR','other',$2,$3)",
     [userId, identification, email],
   );
+  if (options.systemAdmin)
+    await pool.query("insert into private.platform_operators values($1)", [
+      userId,
+    ]);
   const tenants: string[] = [];
   for (let i = 0; i < (options.companies ?? 1); i++) {
     const id = (

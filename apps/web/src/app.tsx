@@ -1,3 +1,7 @@
+import {
+  CompanyWorkspace,
+  InactiveCompanyAccess,
+} from "./features/companies/CompanyWorkspace";
 import React, { useEffect, useState, useRef } from "react";
 import {
   LayoutDashboard,
@@ -273,7 +277,11 @@ export function App() {
     setListLoading(true);
     try {
       const current = await scope.current.load(async () => {
-        const info = await apiRequest(base + "/overview");
+        const inactive = companies.find((c) => c.id === tenant && !c.active);
+        const info =
+          view === "company" && inactive
+            ? { company: inactive, permissions: [], counts: {} }
+            : await apiRequest(base + "/overview");
         let data: Row = { items: [] };
         if (view === "organization") {
           const params = new URLSearchParams({ search });
@@ -621,6 +629,17 @@ export function App() {
               <ArrowRight size={18} />
             </button>
           ))}
+          <InactiveCompanyAccess
+            onSelect={(row, saved) => {
+              setCompanies((old) => [
+                ...old.filter((c) => c.id !== row.id),
+                row,
+              ]);
+              choose(row.id);
+              setView("company");
+              if (saved) setNotice("Empresa guardada.");
+            }}
+          />
           {!companies.length && (
             <div className="empty">
               <Building2 />
@@ -1075,83 +1094,32 @@ export function App() {
             </>
           )}
           {view === "company" && company && (
-            <section className="panel form-panel">
-              <div className="panel-heading">
-                <div>
-                  <h3>Información general</h3>
-                  <p>
-                    Estos datos pertenecen exclusivamente a la empresa activa.
-                  </p>
-                </div>
-                <Badge tone="blue">Empresa activa</Badge>
-              </div>
-              <form
-                key={tenant}
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  const f = new FormData(e.currentTarget);
-                  void act(async () => {
-                    await post(base, Object.fromEntries(f), "PATCH");
-                    setNotice("Información de empresa actualizada.");
-                    await loadData();
-                  });
-                }}
-              >
-                <div className="form-grid">
-                  <Field
-                    label="Razón social"
-                    name="legal_name"
-                    defaultValue={company.legal_name}
-                  />
-                  <Field
-                    label="Nombre comercial"
-                    name="trade_name"
-                    defaultValue={company.trade_name}
-                    required={false}
-                  />
-                  <Field
-                    label="Tipo de identificación"
-                    name="identification_type"
-                    defaultValue={company.identification_type}
-                  />
-                  <Field
-                    label="Identificación tributaria"
-                    name="identification"
-                    defaultValue={company.identification}
-                  />
-                  <Field
-                    label="Correo de contacto"
-                    name="contact_email"
-                    defaultValue={company.contact_email}
-                    type="email"
-                    required={false}
-                  />
-                  <Field
-                    label="Teléfono"
-                    name="phone"
-                    defaultValue={company.phone}
-                    required={false}
-                  />
-                  <Field
-                    label="Dirección"
-                    name="address"
-                    defaultValue={company.address}
-                    required={false}
-                  />
-                </div>
-                <div className="form-actions">
-                  <span>
-                    <LockKeyhole size={14} /> Cambios registrados en auditoría
-                  </span>
-                  <button
-                    disabled={busy || !can("company.manage")}
-                    className="button primary"
-                  >
-                    Guardar cambios <Check size={16} />
-                  </button>
-                </div>
-              </form>
-            </section>
+            <CompanyWorkspace
+              key={tenant + ":company:" + session.user.id}
+              tenantId={tenant}
+              company={company}
+              onUsers={() => setView("users")}
+              onSaved={async (id) => {
+                const token = scope.current.capture();
+                const data = await apiRequest("/companies");
+                if (!scope.current.matches(token)) return;
+                setCompanies(data.items);
+                if (
+                  id !== tenant ||
+                  !data.items.some((r: Row) => r.id === id)
+                ) {
+                  if (data.items.some((r: Row) => r.id === id)) {
+                    choose(id);
+                    setView("company");
+                  } else {
+                    scope.current.clear();
+                    setTenant("");
+                    setOverview(null);
+                  }
+                } else await loadData();
+                setNotice("Empresa guardada.");
+              }}
+            />
           )}
           {view === "organization" && (
             <section className="panel">

@@ -46,7 +46,7 @@ const hidden = (body: string) => {
     expect(body).not.toContain(s);
 };
 beforeAll(async () => {
-  f = await workspace({ role: "admin", companies: 2 });
+  f = await workspace({ role: "admin", companies: 2, systemAdmin: true });
   runtime = await runtimeConfig({
     ...f.config,
     NODE_ENV: "test",

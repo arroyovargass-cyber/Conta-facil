@@ -1,3 +1,4 @@
+import { companyRegistrationRoutes } from "./modules/company-registration";
 import { fiscalLookupRoutes } from "./modules/fiscal-lookups";
 import { haciendaConfigurationRoutes } from "./modules/hacienda-configuration";
 import { HaciendaIdp, type IdpClient } from "./services/hacienda-idp";
@@ -86,6 +87,7 @@ export async function createApp(
   const auth = identity(pool, config);
   await auth.routes(app);
   companyRoutes(app, pool, auth);
+  companyRegistrationRoutes(app, pool, auth);
   customerRoutes(app, pool, auth);
   catalogRoutes(app, pool, auth);
   invoicingRoutes(app, pool, auth);

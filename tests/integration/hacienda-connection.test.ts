@@ -40,7 +40,7 @@ const request = (
     payload,
   });
 beforeAll(async () => {
-  f = await workspace({ role: "admin" });
+  f = await workspace({ role: "admin", systemAdmin: true });
   config = await runtimeConfig({
     ...f.config,
     NODE_ENV: "test",
