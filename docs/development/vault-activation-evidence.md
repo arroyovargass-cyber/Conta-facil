@@ -21,3 +21,12 @@ La atestación local al artefacto incluye revisión, perfil, versión y SHA-256 
 Se comprobó en Supabase Pruebas que existen cero versiones cifradas antes de provisionar raíz. Debe verificarse nuevamente justo antes del cambio. Nunca sustituir a ciegas un keyring que proteja versiones activas o históricas. Generar raíz independiente de SESSION_KEY, conservar respaldo privado con permisos0600 fuera de Git y mezclar únicamente HACIENDA_KEYRING y HACIENDA_ACTIVE_KEY_ID en el servicio Render existente. La raíz no se imprime en el chat, código, registros ni respuestas públicas. La recuperación requiere conservar esa raíz; no regenerarla una vez guardadas credenciales.
 
 No hay migración de base de datos. HACIENDA_STAG_PROBE_ENABLED permanece desactivado. La captura habilitada no significa aceptación de Hacienda ni emisión disponible.
+
+
+## Publicación y provisión
+
+- PR https://github.com/arroyovargass-cyber/Conta-facil/pull/3 integrado; commit de aplicación `d4effde7e53c62c3131e44f81d3525757f6fb994`.
+- Se volvió a comprobar inmediatamente antes del cambio que había cero versiones cifradas. La raíz aleatoria independiente se guardó en un respaldo privado ignorado por Git, modo0600. Se mezclaron únicamente HACIENDA_KEYRING y HACIENDA_ACTIVE_KEY_ID en el servicio existente; no se recuperaron ni sustituyeron las demás variables. Un escaneo confirmó que la raíz no aparece en archivos versionados.
+- Render `srv-dbudpelg1s2s73bi7cj0`, mismo plan gratuito, despliegue `dep-dc2v1eetlv9c738r0qrg` en estado live, finalizado el 24/11/2026 a las 14:19:37 de Costa Rica. NODE_ENV no se modificó. Los registros confirman compilación limpia del perfil fijado y build exitoso.
+- Página y health HTTP200; administración sin sesión HTTP401; no se inició sesión en la cuenta personal ni se cargó material de Hacienda real para esta verificación. Las pruebas del flujo usaron únicamente certificados sintéticos.
+- La configuración de captura de credenciales STAG queda desplegada. Las credenciales del usuario se ingresan directamente en el formulario HTTPS; nunca por chat. Firma, aceptación tributaria y transmisión siguen deshabilitadas, y la consulta externa de acceso no se activó automáticamente.

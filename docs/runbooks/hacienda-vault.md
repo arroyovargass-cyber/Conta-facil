@@ -38,8 +38,8 @@ Fuentes: [OpenSSL 3.5, seguridad](https://openssl-library.org/news/vulnerabiliti
 Se requieren Node 24, Git, Perl, make y compilador C. `npm run openssl:prepare`
 prepara el binario bajo `.local/openssl`; no modifica el del sistema. El build
 comprueba el perfil y la integridad exactos y compila un worker separado. La
-configuración de Render incluye esa preparación, pero no fue desplegada ni
-validada en infraestructura remota.
+configuración de Render incluye esa preparación; el despliegue de activación
+se verificó en el entorno publicado el 24/11/2026.
 
 `npm run vault:local-keys` opera solo con configuración localhost. Agrega una
 clave independiente cuando faltan ambas variables; preserva `.env` existente,
