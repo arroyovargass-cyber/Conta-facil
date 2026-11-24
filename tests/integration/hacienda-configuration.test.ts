@@ -26,7 +26,7 @@ const request = (
     payload,
   });
 const input = (revision: number) => ({
-  environment: "test",
+  environment: "test" as const,
   expected_revision: revision,
   username: "usuario-prueba-api",
   password: " CONTRASEÑA-PRIVADA-Ñ! ",
@@ -231,7 +231,7 @@ function appConfig() {
     HACIENDA_ACTIVE_KEY_ID: "v1",
   };
 }
-it("keeps development snapshots disabled outside the automated test environment", async () => {
+it("requires HTTPS outside automated tests even with a verified inspector", async () => {
   const development = await createApp({
     ...appConfig(),
     NODE_ENV: "development",
@@ -246,7 +246,7 @@ it("keeps development snapshots disabled outside the automated test environment"
     );
     expect(metadata.json().capabilities).toMatchObject({
       can_store_credentials: false,
-      reason: "inspector_validation_pending",
+      reason: "https_required",
     });
     const response = await request(
       "/credentials",
@@ -431,6 +431,51 @@ it("requires MFA even for metadata and rejects an unauthorized company", async (
         )
       ).statusCode,
     ).toBe(403);
+  } finally {
+    await pool.end();
+  }
+});
+
+it("stores synthetic credentials in the production guard with HTTPS and the exact verified profile", async () => {
+  const { CredentialStore } =
+    await import("../../apps/api/src/services/credential-store");
+  const pg = await import("pg");
+  const pool = new pg.default.Pool({ connectionString: runtime.DATABASE_URL });
+  const session = (
+    await f.pool.query(
+      "select auth_session_id from private.sessions where user_id=$1 and revoked_at is null order by last_seen desc limit 1",
+      [f.userId],
+    )
+  ).rows[0].auth_session_id;
+  const claims = { sub: f.userId, aal: "aal2", session_id: session };
+  try {
+    const store = new CredentialStore(pool, {
+      ...appConfig(),
+      NODE_ENV: "production",
+      APP_ORIGIN: "https://synthetic.example.test",
+    });
+    const before = await store.metadata(claims, f.tenants[1]);
+    expect(before.capabilities).toMatchObject({
+      can_store_credentials: true,
+      inspector_profile_verified: true,
+      synthetic_only: false,
+      can_emit: false,
+    });
+    const revision = before.configuration.revision;
+    const result = await store.replace(
+      claims,
+      f.tenants[1],
+      input(revision),
+      Buffer.from(file, "base64"),
+    );
+    expect(result.configuration.certificate_metadata).toMatchObject({
+      technical_status: "valid_local",
+      identity_status: "pending",
+      algorithm: "rsa",
+      bits: 2048,
+    });
+    expect(result.configuration.revision).toBe(revision + 1);
+    hidden(JSON.stringify(result));
   } finally {
     await pool.end();
   }

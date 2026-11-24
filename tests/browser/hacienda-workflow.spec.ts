@@ -39,7 +39,7 @@ async function login(page: Page, f: Awaited<ReturnType<typeof workspace>>) {
 test("registers synthetic credentials, clears secrets after errors and success, and deactivates locally", async ({
   page,
 }, info) => {
-  const f = await workspace({ role: "admin", companies: 2 });
+  const f = await workspace({ role: "admin", companies: 2, systemAdmin: true });
   const file = await syntheticPkcs12({ pin: "1234" });
   try {
     await login(page, f);
@@ -146,7 +146,7 @@ test("registers synthetic credentials, clears secrets after errors and success, 
 test("sets up departments and routes a saved draft to an internal collection review", async ({
   page,
 }, info) => {
-  const f = await workspace({ role: "admin", companies: 2 });
+  const f = await workspace({ role: "admin", companies: 2, systemAdmin: true });
   try {
     const t = f.tenants[0],
       dep = (
@@ -253,7 +253,7 @@ test("sets up departments and routes a saved draft to an internal collection rev
 test("ignores a delayed Hacienda error after switching companies", async ({
   page,
 }) => {
-  const f = await workspace({ role: "admin", companies: 2 });
+  const f = await workspace({ role: "admin", companies: 2, systemAdmin: true });
   let release: () => void = () => {};
   try {
     await login(page, f);

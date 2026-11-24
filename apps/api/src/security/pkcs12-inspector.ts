@@ -1,3 +1,8 @@
+import profile from "../../../../infra/openssl-inspector-profile.json" with { type: "json" };
+import { inspectorProfileAllowed } from "./inspector-policy.ts";
+import { readFile } from "node:fs/promises";
+import { createReadStream } from "node:fs";
+import { createHash } from "node:crypto";
 import { Worker } from "node:worker_threads";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
@@ -14,20 +19,49 @@ export type CertificateMetadata = {
   valid_until: string;
 };
 export async function inspectorCapability() {
+  const denied = { available: false, version: "", validated_profile: false };
   try {
+    let attestation: unknown,
+      digest = "";
+    try {
+      const raw = await readFile(
+        resolve(".local/openssl/inspector-attestation.json"),
+        "utf8",
+      );
+      if (raw.length > 4096) return denied;
+      attestation = JSON.parse(raw);
+      const hash = createHash("sha256");
+      for await (const chunk of createReadStream(binary)) hash.update(chunk);
+      digest = hash.digest("hex");
+    } catch {
+      attestation = undefined;
+    }
+    const verified = inspectorProfileAllowed(
+      profile.version,
+      attestation,
+      digest,
+      "production",
+    );
+    if (!verified && process.env.NODE_ENV !== "test") return denied;
     const { stdout } = await promisify(execFile)(binary, ["version"], {
       timeout: 2000,
       maxBuffer: 4096,
+      env: { PATH: "/usr/bin:/bin" },
     });
-    const version = stdout.match(/OpenSSL (3\.5\.(\d+)(?:-dev)?)/);
+    const version = stdout.match(/^OpenSSL (\S+)(?: |$)/)?.[1] ?? "";
+    const available = /^3\.5\.(1\d|[2-9]\d)(?:-dev)?$/.test(version);
     return {
-      available: !!version && Number(version[2]) >= 10,
-      version: version?.[1] ?? "",
+      available,
+      version,
+      validated_profile:
+        verified &&
+        inspectorProfileAllowed(version, attestation, digest, "production"),
     };
   } catch {
-    return { available: false, version: "" };
+    return denied;
   }
 }
+
 let active = 0;
 const queue: Array<() => void> = [];
 export async function inspectPkcs12(
@@ -48,8 +82,14 @@ export async function inspectPkcs12(
     await new Promise<void>((r) => queue.push(r));
   } else active++;
   try {
-    if (!(await inspectorCapability()).available)
-      throw new Error("Inspector criptográfico no disponible");
+    const capability = await inspectorCapability();
+    if (
+      !capability.available ||
+      (process.env.NODE_ENV === "production" && !capability.validated_profile)
+    )
+      throw new Error(
+        "Inspector criptográfico no disponible o sin perfil verificado",
+      );
     return await new Promise<CertificateMetadata>((resolveResult, reject) => {
       const compiled = resolve("dist-server/pkcs12-worker.mjs");
       const worker = new Worker(
