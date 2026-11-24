@@ -57,9 +57,19 @@ it("keeps monetary presentation parameters separate from fiscal rounding", () =>
   expect(v.configuration.accounting.inventory_method).toBe("fifo");
   expect(companyPreparation(v).canEmit).toBe(false);
 });
-it('can parse saved optional empty URLs again and rejects impossible dates without throwing',()=>{
- const v=companyInput.parse(basic);
- expect(()=>companyInput.parse(v)).not.toThrow();
- expect(()=>companyInput.safeParse({...basic,configuration:{tax:{registration_date:'2026-99-99'}}})).not.toThrow();
- expect(companyInput.safeParse({...basic,configuration:{tax:{registration_date:'2026-99-99'}}}).success).toBe(false);
+it("can parse saved optional empty URLs again and rejects impossible dates without throwing", () => {
+  const v = companyInput.parse(basic);
+  expect(() => companyInput.parse(v)).not.toThrow();
+  expect(() =>
+    companyInput.safeParse({
+      ...basic,
+      configuration: { tax: { registration_date: "2026-99-99" } },
+    }),
+  ).not.toThrow();
+  expect(
+    companyInput.safeParse({
+      ...basic,
+      configuration: { tax: { registration_date: "2026-99-99" } },
+    }).success,
+  ).toBe(false);
 });

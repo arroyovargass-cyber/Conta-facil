@@ -190,14 +190,14 @@ export function companyRegistrationRoutes(
     if (b.branch_code) {
       const branch = (
         await db.query(
-          "insert into public.branches(tenant_id,code,name) values($1,$2,'Sucursal '+$2) on conflict(tenant_id,code) do update set code=excluded.code returning id",
+          "insert into public.branches(tenant_id,code,name) values($1,$2,'Sucursal '||$2) on conflict(tenant_id,code) do update set code=excluded.code returning id",
           [id, b.branch_code],
         )
       ).rows[0].id;
       if (b.terminal_code) {
         const terminal = (
           await db.query(
-            "insert into public.terminals(tenant_id,branch_id,code,name) values($1,$2,$3,'Terminal '+$3) on conflict(tenant_id,branch_id,code) do update set code=excluded.code returning id",
+            "insert into public.terminals(tenant_id,branch_id,code,name) values($1,$2,$3,'Terminal '||$3) on conflict(tenant_id,branch_id,code) do update set code=excluded.code returning id",
             [id, branch, b.terminal_code],
           )
         ).rows[0].id;
@@ -362,6 +362,21 @@ export function companyRegistrationRoutes(
         throw new HttpError(
           400,
           "Utiliza un tipo de identificación válido para cambiar estos datos.",
+        );
+      const legacyActivities = (
+        await db.query(
+          "select code from public.economic_activities where tenant_id=$1",
+          [id],
+        )
+      ).rows.map((r) => r.code);
+      if (
+        value.activities.some(
+          (a) => !/^\d{6}$/.test(a.code) && !legacyActivities.includes(a.code),
+        )
+      )
+        throw new HttpError(
+          400,
+          "Los códigos nuevos de actividad deben tener seis dígitos.",
         );
       await validateConfiguration(value);
       await duplicate(db, value, id);

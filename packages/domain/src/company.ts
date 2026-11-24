@@ -7,7 +7,8 @@ const date = z
     (v) =>
       !v ||
       (/^\d{4}-\d{2}-\d{2}$/.test(v) &&
-        Number.isFinite(Date.parse(v + "T00:00:00Z")) && new Date(v + "T00:00:00Z").toISOString().slice(0, 10) === v),
+        Number.isFinite(Date.parse(v + "T00:00:00Z")) &&
+        new Date(v + "T00:00:00Z").toISOString().slice(0, 10) === v),
     "Fecha inválida.",
   )
   .default("");
@@ -86,7 +87,11 @@ export const companyConfiguration = z
       .union([
         z
           .url()
-          .refine((v) => URL.canParse(v) && ["http:", "https:"].includes(new URL(v).protocol)),
+          .refine(
+            (v) =>
+              URL.canParse(v) &&
+              ["http:", "https:"].includes(new URL(v).protocol),
+          ),
         z.literal(""),
       ])
       .default(""),
@@ -97,10 +102,7 @@ export const companyConfiguration = z
   .prefault({});
 export const companyActivity = z
   .object({
-    code: z
-      .string()
-      .trim()
-      .regex(/^\d{6}$/, "La actividad debe contener seis dígitos."),
+    code: text(30).min(1),
     name: text().min(1),
     primary: z.boolean().default(false),
     active: z.boolean().default(true),
@@ -108,8 +110,7 @@ export const companyActivity = z
       .union([
         z.url().refine((v) => {
           if (!URL.canParse(v)) return false;
-          const h = new URL(v).hostname;
-          return h === "hacienda.go.cr" || h.endsWith(".hacienda.go.cr");
+          return new URL(v).protocol === "https:";
         }, "Utiliza una fuente oficial de Hacienda."),
         z.literal(""),
       ])
@@ -160,11 +161,7 @@ function validate(v: z.infer<typeof base>, ctx: z.RefinementCtx) {
       path: ["person_type"],
       message: "Revisa el tipo de persona y de identificación.",
     });
-  if (
-    v.activities.filter((a) => a.active && a.primary).length > 1 ||
-    (v.activities.some((a) => a.active) &&
-      !v.activities.some((a) => a.active && a.primary))
-  )
+  if (v.activities.filter((a) => a.active && a.primary).length > 1)
     ctx.addIssue({
       code: "custom",
       path: ["activities"],
@@ -206,7 +203,10 @@ export const createCompanyInput = base
   .refine(
     (v) =>
       ["01", "02", "03", "04"].includes(v.identification_type) &&
-      v.person_type !== "unspecified",
+      v.person_type !== "unspecified" &&
+      v.activities.every((a) => /^\d{6}$/.test(a.code)) &&
+      (!v.activities.some((a) => a.active) ||
+        v.activities.some((a) => a.active && a.primary)),
     {
       message:
         "Selecciona tipo de persona e identificación para la nueva empresa.",

@@ -87,6 +87,7 @@ const request = (url: string, method = "GET", payload?: any) =>
 beforeAll(async () => {
   app = await createApp(await runtimeConfig(config));
   adminId = await user("admin-" + tag, "Administrador de prueba");
+  await pool.query("insert into private.platform_operators values($1)", [adminId]);
   workerId = await user("worker-" + tag, "Operativo de prueba");
   tenantA = (
     await pool.query(

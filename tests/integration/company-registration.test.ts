@@ -190,6 +190,129 @@ it("rejects unrelated company even for operator and rejects secrets in configura
     ).statusCode,
   ).toBe(400);
 });
+it("retains consecutive counters and rejects malformed location and logo", async () => {
+  await f.pool.query(
+    "insert into private.platform_operators values($1) on conflict do nothing",
+    [f.userId],
+  );
+  const p = {
+    ...payload(),
+    configuration: {
+      billing: {
+        branch_code: "001",
+        terminal_code: "00001",
+        documents: ["FE", "TE"],
+      },
+    },
+  };
+  const made = await request("/company-administration", "POST", p);
+  expect(made.statusCode, made.body).toBe(200);
+  const item = made.json().item;
+  await f.pool.query(
+    "update public.document_sequences set last_value=7 where tenant_id=$1 and document_type='FE'",
+    [item.id],
+  );
+  const input = Object.fromEntries(
+    [
+      "legal_name",
+      "trade_name",
+      "person_type",
+      "identification_type",
+      "identification",
+      "contact_email",
+      "phone",
+      "address",
+      "active",
+      "configuration",
+      "activities",
+    ].map((k) => [k, item[k]]),
+  );
+  const saved = await request("/company-administration/" + item.id, "PATCH", {
+    ...input,
+    expected_version: item.configuration_version,
+  });
+  expect(saved.statusCode, saved.body).toBe(200);
+  const reopened = await request("/company-administration/" + item.id);
+  expect(
+    reopened.json().sequences.find((r: any) => r.document_type === "FE")
+      .last_value,
+  ).toBe("7");
+  expect(
+    (
+      await request("/company-administration", "POST", {
+        ...payload(),
+        configuration: {
+          location: { province: "1", canton: "99", district: "99" },
+        },
+      })
+    ).statusCode,
+  ).toBe(400);
+  expect(
+    (
+      await request("/company-administration", "POST", {
+        ...payload(),
+        configuration: { logo: "data:image/png;base64,QUJD" },
+      })
+    ).statusCode,
+  ).toBe(400);
+  const db = await f.pool.connect();
+  try {
+    await db.query("begin");
+    const session = await db.query(
+      "select auth_session_id from private.sessions where user_id=$1 limit 1",
+      [f.userId],
+    );
+    await db.query("select set_config('request.jwt.claims',$1,true)", [
+      JSON.stringify({
+        sub: f.userId,
+        aal: "aal1",
+        session_id: session.rows[0].auth_session_id,
+      }),
+    ]);
+    await db.query("set local role authenticated");
+    expect(
+      (await db.query("select private.is_system_administrator() allowed"))
+        .rows[0].allowed,
+    ).toBe(false);
+  } finally {
+    await db.query("rollback");
+    db.release();
+  }
+});
+it("preserves legacy activities while completing unrelated company fields", async () => {
+  await f.pool.query(
+    "insert into public.economic_activities(tenant_id,code,name,source_url) values($1,'legacy-1','Actividad histórica','https://example.test/reference')",
+    [f.tenants[0]],
+  );
+  const opened = await request("/company-administration/" + f.tenants[0]);
+  expect(opened.statusCode, opened.body).toBe(200);
+  const input = Object.fromEntries(
+    [
+      "legal_name",
+      "trade_name",
+      "person_type",
+      "identification_type",
+      "identification",
+      "contact_email",
+      "phone",
+      "address",
+      "active",
+      "configuration",
+      "activities",
+    ].map((k) => [k, opened.json().item[k]]),
+  );
+  const saved = await request(
+    "/company-administration/" + f.tenants[0],
+    "PATCH",
+    {
+      ...input,
+      phone: "22223333",
+      expected_version: opened.json().item.configuration_version,
+    },
+  );
+  expect(saved.statusCode, saved.body).toBe(200);
+  expect(saved.json().item.activities[0].code).toBe("legacy-1");
+});
 it("checks direct RLS permission after operator revocation", async () => {
   await f.pool.query(
     "delete from private.platform_operators where user_id=$1",
