@@ -13,7 +13,7 @@ describe("API security", () => {
     const r = await app.inject("/api/health");
     expect(r.statusCode).toBe(200);
     expect(r.headers["cache-control"]).toBe("no-store");
-    expect(r.json()).toEqual({ name: "Conta Fácil", phase: 1, status: "ok" });
+    expect(r.json()).toEqual({ name: "Conta Ágil", phase: 1, status: "ok" });
   });
   it("requires authentication", async () => {
     expect((await app.inject("/api/companies")).statusCode).toBe(401);

@@ -1,5 +1,6 @@
 import type { IdpClient } from "./hacienda-idp";
 import type pg from "pg";
+import type { HaciendaEnvironment } from "../../../../packages/domain/src/hacienda-environment";
 import type { AppConfig } from "../config";
 import { HttpError, type Claims } from "../db";
 import {
@@ -13,22 +14,49 @@ import {
   inspectorCapability,
 } from "../security/pkcs12-inspector";
 export type CredentialInput = {
-  environment: "test";
+  environment: HaciendaEnvironment;
   expected_revision: number;
   username: string;
   password: string;
   pin: string;
   pkcs12_base64: string;
 };
-const empty = () => ({
-  environment: "test",
+export type CredentialEnrollmentInput = {
+  environment: HaciendaEnvironment;
+  expected_revision: number;
+  confirmed: true;
+  evidence_reference: string;
+};
+const empty = (environment: HaciendaEnvironment) => ({
+  environment,
   revision: 0,
   active_version: null,
   certificate_metadata: null,
   api_status: "not_tested",
   api_checked_at: null,
   session_closed: null,
+  enrollment: null,
 });
+function validCertificate(certificate: any) {
+  const now = Date.now();
+  return (
+    certificate?.technical_status === "valid_local" &&
+    Date.parse(certificate.valid_from) <= now &&
+    Date.parse(certificate.valid_until) > now &&
+    /^[a-f0-9]{64}$/i.test(
+      String(certificate.fingerprint ?? "").replace(/:/g, ""),
+    )
+  );
+}
+function validIssuer(type: string, identification: string) {
+  const patterns: Record<string, RegExp> = {
+    "01": /^\d{9}$/,
+    "02": /^\d{10}$/,
+    "03": /^\d{11,12}$/,
+    "04": /^\d{10}$/,
+  };
+  return patterns[type]?.test(identification) === true;
+}
 export class CredentialStore {
   private readonly keyring: Keyring | undefined;
   private inspectorCheck?: ReturnType<typeof inspectorCapability>;
@@ -94,7 +122,7 @@ export class CredentialStore {
   async authorize(claims: Claims, tenant: string, permission: string) {
     await this.transaction(claims, tenant, permission, async () => {});
   }
-  async capability() {
+  async capability(environment: HaciendaEnvironment = "test") {
     const inspector = await (this.inspectorCheck ??= inspectorCapability());
     // Published services admit only the pinned, integrity-verified PKCS12 profile.
     const supported =
@@ -109,7 +137,10 @@ export class CredentialStore {
       synthetic_only: !inspector.validated_profile,
       inspector_profile_verified: inspector.validated_profile,
       can_test_connection:
-        !!this.keyring && this.config.HACIENDA_STAG_PROBE_ENABLED === "true",
+        !!this.keyring &&
+        (environment === "test"
+          ? this.config.HACIENDA_STAG_PROBE_ENABLED
+          : this.config.HACIENDA_PRODUCTION_PROBE_ENABLED) === "true",
       can_emit: false,
       reason: !this.keyring
         ? "vault_not_configured"
@@ -121,28 +152,67 @@ export class CredentialStore {
             : null,
     };
   }
-  async metadata(claims: Claims, tenant: string) {
-    const configuration = await this.transaction(
+  async metadata(
+    claims: Claims,
+    tenant: string,
+    environment: HaciendaEnvironment = "test",
+  ) {
+    const result = await this.transaction(
       claims,
       tenant,
       "hacienda.read",
-      async (db) =>
-        (
+      async (db) => {
+        const configuration =
+          (
+            await db.query(
+              "select environment,revision,active_version,certificate_metadata,api_status,api_checked_at,session_closed,updated_at,private.hacienda_enrollment(tenant_id,environment,active_version) enrollment from public.hacienda_configuration where tenant_id=$1 and environment=$2",
+              [tenant, environment],
+            )
+          ).rows[0] ?? empty(environment);
+        const issuer = (
           await db.query(
-            "select environment,revision,active_version,certificate_metadata,api_status,api_checked_at,session_closed,updated_at from public.hacienda_configuration where tenant_id=$1 and environment='test'",
+            "select identification,identification_type,private.hacienda_access(id,'hacienda.credentials.manage') can_manage from public.tenants where id=$1",
             [tenant],
           )
-        ).rows[0] ?? empty(),
+        ).rows[0];
+        const reviewed =
+          configuration.active_version !== null &&
+          (
+            await db.query(
+              "select 1 from private.hacienda_credential_enrollments where tenant_id=$1 and environment=$2 and version=$3",
+              [tenant, environment, configuration.active_version],
+            )
+          ).rows.length > 0;
+        return {
+          configuration,
+          canEnroll:
+            !!issuer?.can_manage &&
+            configuration.active_version !== null &&
+            !reviewed &&
+            configuration.api_status === "success" &&
+            validCertificate(configuration.certificate_metadata) &&
+            validIssuer(issuer.identification_type, issuer.identification),
+        };
+      },
     );
-    const capabilities = await this.capability();
+    const { configuration } = result;
+    const capabilities = {
+      ...(await this.capability(environment)),
+      can_enroll: result.canEnroll,
+    };
     capabilities.can_test_connection &&= configuration.active_version !== null;
     return { configuration, capabilities };
   }
-  private async current(db: pg.PoolClient, tenant: string, revision: number) {
+  private async current(
+    db: pg.PoolClient,
+    tenant: string,
+    revision: number,
+    environment: HaciendaEnvironment = "test",
+  ) {
     const row = (
       await db.query(
-        "select revision,active_version from public.hacienda_configuration where tenant_id=$1 and environment='test'",
-        [tenant],
+        "select revision,active_version,certificate_metadata,api_status from public.hacienda_configuration where tenant_id=$1 and environment=$2 for update",
+        [tenant, environment],
       )
     ).rows[0] ?? { revision: 0, active_version: null };
     if (row.revision !== revision)
@@ -158,15 +228,11 @@ export class CredentialStore {
     tenant: string,
     action: string,
     version: number,
+    environment: HaciendaEnvironment = "test",
   ) {
     await db.query(
       "insert into public.audit_events(tenant_id,actor_id,action,entity,entity_id,details) values($1::uuid,$2::uuid,$3,'hacienda_credentials',$1::uuid::text,$4::jsonb)",
-      [
-        tenant,
-        claims.sub,
-        action,
-        JSON.stringify({ environment: "test", version }),
-      ],
+      [tenant, claims.sub, action, JSON.stringify({ environment, version })],
     );
   }
   async replace(
@@ -179,9 +245,10 @@ export class CredentialStore {
       claims,
       tenant,
       "hacienda.credentials.manage",
-      (db) => this.current(db, tenant, input.expected_revision),
+      (db) =>
+        this.current(db, tenant, input.expected_revision, input.environment),
     );
-    if (!(await this.capability()).can_store_credentials)
+    if (!(await this.capability(input.environment)).can_store_credentials)
       throw new HttpError(
         503,
         "El registro seguro de credenciales no está habilitado en este entorno.",
@@ -206,7 +273,12 @@ export class CredentialStore {
         tenant,
         "hacienda.credentials.manage",
         async (db) => {
-          await this.current(db, tenant, input.expected_revision);
+          await this.current(
+            db,
+            tenant,
+            input.expected_revision,
+            input.environment,
+          );
           const version = input.expected_revision + 1;
           const apiPlain = Buffer.from(
             JSON.stringify({
@@ -223,7 +295,7 @@ export class CredentialStore {
           try {
             const base = {
               tenantId: tenant,
-              environment: "test" as const,
+              environment: input.environment,
               version,
             };
             const api = encryptCredential(
@@ -237,17 +309,18 @@ export class CredentialStore {
                 this.keyring!,
               );
             await db.query(
-              "insert into public.hacienda_configuration(tenant_id) values($1) on conflict do nothing",
-              [tenant],
+              "insert into public.hacienda_configuration(tenant_id,environment) values($1,$2) on conflict do nothing",
+              [tenant, input.environment],
             );
             await db.query(
-              "update private.hacienda_credential_versions set active=false where tenant_id=$1 and environment='test' and active",
-              [tenant],
+              "update private.hacienda_credential_versions set active=false where tenant_id=$1 and environment=$2 and active",
+              [tenant, input.environment],
             );
             await db.query(
-              "insert into private.hacienda_credential_versions(tenant_id,environment,version,api_key_id,api_ciphertext,pkcs12_key_id,pkcs12_ciphertext,created_by) values($1,'test',$2,$3,$4,$5,$6,$7)",
+              "insert into private.hacienda_credential_versions(tenant_id,environment,version,api_key_id,api_ciphertext,pkcs12_key_id,pkcs12_ciphertext,created_by) values($1,$2,$3,$4,$5,$6,$7,$8)",
               [
                 tenant,
+                input.environment,
                 version,
                 api.keyId,
                 api.blob,
@@ -257,8 +330,8 @@ export class CredentialStore {
               ],
             );
             await db.query(
-              "update public.hacienda_configuration set revision=$2,active_version=$2,certificate_metadata=$3,api_status='not_tested',api_checked_at=null,session_closed=null,updated_at=now() where tenant_id=$1 and environment='test'",
-              [tenant, version, JSON.stringify(certificate)],
+              "update public.hacienda_configuration set revision=$3,active_version=$3,certificate_metadata=$4,api_status='not_tested',api_checked_at=null,session_closed=null,updated_at=now() where tenant_id=$1 and environment=$2",
+              [tenant, input.environment, version, JSON.stringify(certificate)],
             );
             await this.audit(
               db,
@@ -266,6 +339,7 @@ export class CredentialStore {
               tenant,
               "credentials_registered",
               version,
+              input.environment,
             );
           } finally {
             apiPlain.fill(0);
@@ -276,26 +350,31 @@ export class CredentialStore {
     } finally {
       file.fill(0);
     }
-    return this.metadata(claims, tenant);
+    return this.metadata(claims, tenant, input.environment);
   }
-  async deactivate(claims: Claims, tenant: string, revision: number) {
+  async deactivate(
+    claims: Claims,
+    tenant: string,
+    revision: number,
+    environment: HaciendaEnvironment = "test",
+  ) {
     await this.transaction(
       claims,
       tenant,
       "hacienda.credentials.manage",
       async (db) => {
-        await this.current(db, tenant, revision);
+        await this.current(db, tenant, revision, environment);
         await db.query(
-          "insert into public.hacienda_configuration(tenant_id) values($1) on conflict do nothing",
-          [tenant],
+          "insert into public.hacienda_configuration(tenant_id,environment) values($1,$2) on conflict do nothing",
+          [tenant, environment],
         );
         await db.query(
-          "update private.hacienda_credential_versions set active=false where tenant_id=$1 and environment='test' and active",
-          [tenant],
+          "update private.hacienda_credential_versions set active=false where tenant_id=$1 and environment=$2 and active",
+          [tenant, environment],
         );
         await db.query(
-          "update public.hacienda_configuration set revision=$2,active_version=null,certificate_metadata=null,api_status='not_tested',api_checked_at=null,session_closed=null,updated_at=now() where tenant_id=$1 and environment='test'",
-          [tenant, revision + 1],
+          "update public.hacienda_configuration set revision=$3,active_version=null,certificate_metadata=null,api_status='not_tested',api_checked_at=null,session_closed=null,updated_at=now() where tenant_id=$1 and environment=$2",
+          [tenant, environment, revision + 1],
         );
         await this.audit(
           db,
@@ -303,11 +382,12 @@ export class CredentialStore {
           tenant,
           "credentials_deactivated",
           revision + 1,
+          environment,
         );
       },
     );
     return {
-      ...(await this.metadata(claims, tenant)),
+      ...(await this.metadata(claims, tenant, environment)),
       official_revocation: false,
     };
   }
@@ -316,20 +396,21 @@ export class CredentialStore {
     tenant: string,
     revision: number,
     run: (access: { username: string; password: string }) => Promise<T>,
+    environment: HaciendaEnvironment = "test",
   ): Promise<T> {
     const access = await this.transaction(
       claims,
       tenant,
       "hacienda.connection.test",
       async (db) => {
-        const current = await this.current(db, tenant, revision);
+        const current = await this.current(db, tenant, revision, environment);
         if (current.active_version === null)
           throw new HttpError(409, "No hay credenciales activas.");
         if (!this.keyring) throw new HttpError(503, "Bóveda no disponible.");
         const row = (
           await db.query(
-            "select api_key_id,api_ciphertext from private.hacienda_credential_versions where tenant_id=$1 and environment='test' and version=$2 and active",
-            [tenant, current.active_version],
+            "select api_key_id,api_ciphertext from private.hacienda_credential_versions where tenant_id=$1 and environment=$2 and version=$3 and active",
+            [tenant, environment, current.active_version],
           )
         ).rows[0];
         if (!row)
@@ -340,7 +421,7 @@ export class CredentialStore {
             { keyId: row.api_key_id, blob: row.api_ciphertext },
             {
               tenantId: tenant,
-              environment: "test",
+              environment,
               version: current.active_version,
               kind: "api_access",
             },
@@ -375,24 +456,35 @@ export class CredentialStore {
     tenant: string,
     revision: number,
     idp: IdpClient,
+    environment: HaciendaEnvironment = "test",
   ) {
+    if (
+      (environment === "test"
+        ? this.config.HACIENDA_STAG_PROBE_ENABLED
+        : this.config.HACIENDA_PRODUCTION_PROBE_ENABLED) !== "true"
+    )
+      throw new HttpError(
+        503,
+        "La prueba externa de Hacienda está pendiente de habilitación.",
+      );
     const result = await this.withApiAccess(
       claims,
       tenant,
       revision,
-      (access) => idp.probe(access),
+      (access) => idp.probe(access, environment),
+      environment,
     );
     await this.transaction(
       claims,
       tenant,
       "hacienda.connection.test",
       async (db) => {
-        const row = await this.current(db, tenant, revision);
+        const row = await this.current(db, tenant, revision, environment);
         if (row.active_version === null)
           throw new HttpError(409, "Las credenciales ya no están activas.");
         await db.query(
-          "update public.hacienda_configuration set api_status=$2,api_checked_at=now(),session_closed=$3,updated_at=now() where tenant_id=$1 and environment='test'",
-          [tenant, result.status, result.sessionClosed],
+          "update public.hacienda_configuration set api_status=$3,api_checked_at=now(),session_closed=$4,updated_at=now() where tenant_id=$1 and environment=$2",
+          [tenant, environment, result.status, result.sessionClosed],
         );
         await this.audit(
           db,
@@ -400,9 +492,104 @@ export class CredentialStore {
           tenant,
           "connection_tested",
           row.active_version,
+          environment,
         );
       },
     );
-    return this.metadata(claims, tenant);
+    return this.metadata(claims, tenant, environment);
+  }
+
+  async enroll(
+    claims: Claims,
+    tenant: string,
+    input: CredentialEnrollmentInput,
+  ) {
+    await this.transaction(
+      claims,
+      tenant,
+      "hacienda.credentials.manage",
+      async (db) => {
+        const current = await this.current(
+          db,
+          tenant,
+          input.expected_revision,
+          input.environment,
+        );
+        if (
+          input.confirmed !== true ||
+          typeof input.evidence_reference !== "string" ||
+          !input.evidence_reference.trim() ||
+          input.evidence_reference.trim().length > 500 ||
+          /[\x00-\x1f\x7f]/.test(input.evidence_reference)
+        )
+          throw new HttpError(
+            400,
+            "Confirma la revisión e indica una referencia válida de hasta 500 caracteres.",
+          );
+        if (
+          current.active_version === null ||
+          !validCertificate(current.certificate_metadata)
+        )
+          throw new HttpError(
+            409,
+            "Se requieren credenciales activas con un certificado técnicamente válido y vigente.",
+          );
+        if (current.api_status !== "success")
+          throw new HttpError(
+            409,
+            "Prueba satisfactoriamente la conexión de este ambiente antes de registrar la revisión.",
+          );
+        const issuer = (
+          await db.query(
+            "select identification,identification_type from public.tenants where id=$1",
+            [tenant],
+          )
+        ).rows[0];
+        if (
+          !issuer ||
+          !validIssuer(issuer.identification_type, issuer.identification)
+        )
+          throw new HttpError(
+            409,
+            "Completa la identificación tributaria de la empresa antes de revisar la llave.",
+          );
+        const inserted = await db.query(
+          "insert into private.hacienda_credential_enrollments(tenant_id,environment,version,issuer_identification,issuer_identification_type,certificate_fingerprint,confirmed_by,evidence_reference) values($1,$2,$3,$4,$5,$6,$7,$8) on conflict(tenant_id,environment,version) do nothing returning version",
+          [
+            tenant,
+            input.environment,
+            current.active_version,
+            issuer.identification,
+            issuer.identification_type,
+            current.certificate_metadata.fingerprint
+              .replace(/:/g, "")
+              .toLowerCase(),
+            claims.sub,
+            input.evidence_reference.trim(),
+          ],
+        );
+        const enrollment = (
+          await db.query(
+            "select private.hacienda_enrollment($1,$2,$3) enrollment",
+            [tenant, input.environment, current.active_version],
+          )
+        ).rows[0]?.enrollment;
+        if (!enrollment)
+          throw new HttpError(
+            409,
+            "La revisión anterior ya no corresponde a esta identificación o llave. Registra una nueva versión de credenciales.",
+          );
+        if (inserted.rows.length)
+          await this.audit(
+            db,
+            claims,
+            tenant,
+            "credentials_enrolled",
+            current.active_version,
+            input.environment,
+          );
+      },
+    );
+    return this.metadata(claims, tenant, input.environment);
   }
 }

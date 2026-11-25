@@ -148,9 +148,9 @@ it("preserves active material after a bad PIN and rejects stale revisions", asyn
     409,
   );
 });
-it("rejects production, unknown fields, noncanonical base64 and oversized requests", async () => {
+it("rejects unknown environments and fields, noncanonical base64 and oversized requests", async () => {
   for (const payload of [
-    { ...input(1), environment: "production" },
+    { ...input(1), environment: "staging" },
     { ...input(1), extra: "PRIVATE-EXTRA" },
     { ...input(1), pkcs12_base64: file + "\n" },
   ]) {
@@ -479,4 +479,36 @@ it("stores synthetic credentials in the production guard with HTTPS and the exac
   } finally {
     await pool.end();
   }
+});
+
+it("keeps credentials, revisions, deactivation and metadata separate by fiscal environment", async () => {
+  const before = (await request()).json().configuration;
+  const saved = await request("/credentials", "POST", {
+    ...input(0),
+    environment: "production",
+  });
+  expect(saved.statusCode, saved.body).toBe(200);
+  expect(saved.json().configuration).toMatchObject({
+    environment: "production",
+    revision: 1,
+    active_version: 1,
+    enrollment: null,
+  });
+  expect((await request()).json().configuration).toEqual(before);
+  const production = await request("?environment=production");
+  expect(production.statusCode, production.body).toBe(200);
+  expect(production.json().configuration.active_version).toBe(1);
+  expect((await request("?environment=staging")).statusCode).toBe(400);
+  const disabled = await request("/credentials/deactivate", "POST", {
+    environment: "production",
+    expected_revision: 1,
+  });
+  expect(disabled.statusCode, disabled.body).toBe(200);
+  expect(disabled.json().configuration).toMatchObject({
+    environment: "production",
+    revision: 2,
+    active_version: null,
+  });
+  expect((await request()).json().configuration).toEqual(before);
+  hidden(saved.body);
 });

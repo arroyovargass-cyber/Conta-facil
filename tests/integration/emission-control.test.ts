@@ -20,12 +20,12 @@ let f: Awaited<ReturnType<typeof workspace>>,
   config: any;
 const certificate = {
   technical_status: "valid_local",
-  identity_status: "verified",
+  identity_status: "pending",
   fingerprint: "a".repeat(64),
   valid_from: "2020-01-01",
   valid_until: "2099-01-01",
   fixture:
-    "TEST ONLY: synthetic verified metadata; no actual certificate or identity attestation",
+    "TEST ONLY: synthetic technical metadata and administrative review; no official identity attestation",
 };
 async function run<T>(fn: (db: pg.PoolClient) => Promise<T>) {
   const db = await f.pool.connect();
@@ -170,6 +170,18 @@ beforeAll(async () => {
     "update public.hacienda_configuration set active_version=1 where tenant_id=$1",
     [t],
   );
+  await run((db) =>
+    db.query(
+      "insert into private.hacienda_credential_enrollments(tenant_id,environment,version,issuer_identification,issuer_identification_type,certificate_fingerprint,confirmed_by,evidence_reference) values($1,'test',1,$2,$3,$4,$5,'TEST ONLY: synthetic administrative review')",
+      [
+        t,
+        issuer.identification,
+        issuer.identification_type,
+        certificate.fingerprint,
+        f.userId,
+      ],
+    ),
+  );
   config = {
     ...f.config,
     HACIENDA_STAG_EMISSION_ENABLED: "true",
@@ -195,7 +207,7 @@ it("fails closed for the global switch without reserving a number", async () => 
         HACIENDA_STAG_EMISSION_ENABLED: "false",
       }),
     ),
-  ).rejects.toThrow("STAG");
+  ).rejects.toThrow("Pruebas");
   expect(
     (
       await f.pool.query(
@@ -205,15 +217,22 @@ it("fails closed for the global switch without reserving a number", async () => 
     ).rows[0].last_value,
   ).toBe("0");
 });
-it("requires actual verified certificate identity and hides cross-company metadata", async () => {
+it("requires a current administrative review and hides cross-company metadata", async () => {
   await f.pool.query(
     "update public.hacienda_configuration set certificate_metadata=$2 where tenant_id=$1",
-    [row.tenant_id, { ...certificate, identity_status: "pending" }],
+    [
+      row.tenant_id,
+      {
+        ...certificate,
+        identity_status: "verified",
+        fingerprint: "b".repeat(64),
+      },
+    ],
   );
   const readiness = await run((db) => emissionReadiness(db, row, config));
   expect(readiness.canEmit).toBe(false);
   expect(readiness.issues.map((i) => i.code)).toContain(
-    "CERTIFICATE_IDENTITY_UNVERIFIED",
+    "CERTIFICATE_ENROLLMENT_REQUIRED",
   );
   expect(
     await run(
@@ -264,6 +283,71 @@ it("rejects incomplete issuer XML data before consuming numbering", async () => 
       "update public.electronic_invoices set snapshot=$2 where id=$1",
       [row.id, row.snapshot],
     );
+  }
+});
+it("keeps issuer identity and reviewed credentials stable while issuance is checked", async () => {
+  const issuingDb = await f.pool.connect(),
+    replacingDb = await f.pool.connect();
+  let reached!: () => void,
+    rejectReached!: (error: unknown) => void,
+    resume!: () => void;
+  const metadataReached = new Promise<void>((resolve, reject) => {
+    reached = resolve;
+    rejectReached = reject;
+  });
+  const continueIssuance = new Promise<void>((resolve) => {
+    resume = resolve;
+  });
+  const originalQuery = issuingDb.query.bind(issuingDb);
+  let paused = false;
+  await issuingDb.query("begin");
+  await issuingDb.query("set local role conta_facil_api");
+  await issuingDb.query("select set_config('request.jwt.claims',$1,true)", [
+    JSON.stringify(claims),
+  ]);
+  issuingDb.query = (async (sql: string, values?: unknown[]) => {
+    const result = await originalQuery(sql, values);
+    if (sql.includes("private.invoice_emission_metadata") && !paused) {
+      paused = true;
+      reached();
+      await continueIssuance;
+    }
+    return result;
+  }) as typeof issuingDb.query;
+  const issuing = issuePreparedInvoice(
+    issuingDb,
+    row,
+    randomUUID(),
+    f.userId,
+    config,
+  );
+  void issuing.catch(rejectReached);
+  try {
+    await metadataReached;
+    await replacingDb.query("begin");
+    await replacingDb.query("set local lock_timeout='200ms'");
+    // Custody replacement and company edits take this same tenant write lock.
+    await expect(
+      replacingDb.query(
+        "select id from public.tenants where id=$1 for update",
+        [row.tenant_id],
+      ),
+    ).rejects.toThrow("lock timeout");
+  } finally {
+    // Release the competing write lock before the issuance FK checks continue,
+    // including when the regression is observed before the share lock exists.
+    await replacingDb.query("rollback");
+    resume();
+    try {
+      const issued = await issuing;
+      expect(issued.credential_version).toBe(1);
+      expect(issued.certificate_fingerprint).toBe(certificate.fingerprint);
+    } finally {
+      issuingDb.query = originalQuery as typeof issuingDb.query;
+      await issuingDb.query("rollback");
+      issuingDb.release();
+      replacingDb.release();
+    }
   }
 });
 it("serializes two confirmations into one issued invoice and one sign job", async () => {
@@ -386,4 +470,111 @@ it("requires MFA even for an issued replay and rejects cross-company identifiers
       ),
     ),
   ).rejects.toThrow("no encontrada");
+});
+it("issues local synthetic production fixtures only with their own review, confirmation and sequence", async () => {
+  const production = (
+    await f.pool.query(
+      "insert into public.electronic_invoices(tenant_id,draft_id,draft_version,department_id,snapshot,options,created_by,operation_id,request_hash,environment) values($1,$2,1,$3,$4,$5,$6,$7,$8,'production') returning *",
+      [
+        row.tenant_id,
+        row.draft_id,
+        row.department_id,
+        row.snapshot,
+        row.options,
+        f.userId,
+        randomUUID(),
+        "e".repeat(64),
+      ],
+    )
+  ).rows[0];
+  await f.pool.query(
+    "insert into public.hacienda_configuration(tenant_id,environment,certificate_metadata,api_status) values($1,'production',$2,'success')",
+    [row.tenant_id, certificate],
+  );
+  await f.pool.query(
+    "insert into private.hacienda_credential_versions(tenant_id,environment,version,api_key_id,api_ciphertext,pkcs12_key_id,pkcs12_ciphertext,created_by) values($1,'production',1,'TEST',$2,'TEST',$2,$3)",
+    [row.tenant_id, Buffer.alloc(28), f.userId],
+  );
+  await f.pool.query(
+    "update public.hacienda_configuration set active_version=1 where tenant_id=$1 and environment='production'",
+    [row.tenant_id],
+  );
+  await run((db) =>
+    db.query(
+      "insert into private.hacienda_credential_enrollments(tenant_id,environment,version,issuer_identification,issuer_identification_type,certificate_fingerprint,confirmed_by,evidence_reference) values($1,'production',1,$2,$3,$4,$5,'TEST ONLY: local synthetic production fixture; no external submission')",
+      [
+        row.tenant_id,
+        row.snapshot.issuer.identification,
+        row.snapshot.issuer.identification_type,
+        certificate.fingerprint,
+        f.userId,
+      ],
+    ),
+  );
+  await run((db) =>
+    db.query(
+      "select private.confirm_emission_numbering($1,'001','00001',0,'production')",
+      [row.tenant_id],
+    ),
+  );
+  const productionConfig = {
+    ...config,
+    HACIENDA_STAG_EMISSION_ENABLED: "false",
+    HACIENDA_PRODUCTION_EMISSION_ENABLED: "true",
+    HACIENDA_RESPONSE_TRUST_POLICY: "official_api",
+    HACIENDA_RESPONSE_CERTIFICATE_PINS: undefined,
+  };
+  expect(
+    (await run((db) => emissionReadiness(db, production, productionConfig)))
+      .issues,
+  ).toEqual([]);
+  await expect(
+    run((db) =>
+      issuePreparedInvoice(
+        db,
+        production,
+        randomUUID(),
+        f.userId,
+        productionConfig,
+      ),
+    ),
+  ).rejects.toThrow("Confirma expresamente");
+  const operation = randomUUID();
+  const issued = await run((db) =>
+    issuePreparedInvoice(
+      db,
+      production,
+      operation,
+      f.userId,
+      productionConfig,
+      true,
+    ),
+  );
+  expect(issued.environment).toBe("production");
+  expect(issued.consecutivo).toBe("00100001010000000001");
+  expect(issued.response_trust_policy).toBe("official_api");
+  const replay = await run((db) =>
+    issuePreparedInvoice(db, production, operation, f.userId, {
+      ...productionConfig,
+      HACIENDA_PRODUCTION_EMISSION_ENABLED: "false",
+    }),
+  );
+  expect(replay.id).toBe(issued.id);
+  expect(replay.version).toBe(issued.version);
+  const sequences = (
+    await f.pool.query(
+      "select environment,last_value from private.emission_sequences where tenant_id=$1 order by environment",
+      [row.tenant_id],
+    )
+  ).rows;
+  expect(sequences).toEqual([
+    { environment: "production", last_value: "1" },
+    { environment: "test", last_value: "1" },
+  ]);
+  await expect(
+    f.pool.query(
+      "update public.electronic_invoices set environment='test' where id=$1",
+      [issued.id],
+    ),
+  ).rejects.toThrow("IMMUTABLE");
 });

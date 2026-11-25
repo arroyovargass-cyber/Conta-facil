@@ -16,16 +16,22 @@ import { scoped, requirePermission, HttpError } from "../db";
 import { found, ids, page, pattern } from "./billing-common";
 import type { identity } from "./identity";
 import { receiverLocationIssues } from "../services/receiver-location";
+import { haciendaEnvironmentInput } from "../../../../packages/domain/src/hacienda-environment";
 const prepareInput = z
   .object({
     operation_id: z.uuid(),
     draft_id: z.uuid(),
     expected_version: z.int().positive(),
     options: emissionOptionsInput,
+    environment: haciendaEnvironmentInput,
   })
   .strict();
 const issueInput = z
-  .object({ operation_id: z.uuid(), version: z.int().positive() })
+  .object({
+    operation_id: z.uuid(),
+    version: z.int().positive(),
+    production_confirmation: z.boolean().default(false),
+  })
   .strict();
 const issue = (code: string, message: string) => ({ code, message });
 async function decorate(db: pg.PoolClient, row: any, config: AppConfig) {
@@ -102,6 +108,7 @@ export function emissionRoutes(
         .object({
           search: z.string().max(100).default(""),
           cursor: z.coerce.number().int().min(0).max(1000000).default(0),
+          environment: haciendaEnvironmentInput,
         })
         .strict()
         .parse(req.query ?? {});
@@ -109,10 +116,10 @@ export function emissionRoutes(
       page(
         (
           await db.query(
-            `select id,version,draft_id,draft_version,department_id,document_status,signature_status,transmission_status,hacienda_status,email_status,created_at,
+            `select id,version,draft_id,draft_version,department_id,environment,document_status,signature_status,transmission_status,hacienda_status,email_status,created_at,
  jsonb_build_object('receiver',jsonb_build_object('name',snapshot->'receiver'->>'name'),'currency',snapshot->>'currency','totals',jsonb_build_object('total',snapshot->'totals'->>'total','status',snapshot->'totals'->>'status')) snapshot
- from public.electronic_invoices where tenant_id=$1 and (snapshot->'receiver'->>'name' ilike $2 or id::text ilike $2) order by created_at desc,id limit 51 offset $3`,
-            [tenantId, pattern(q.search), q.cursor],
+ from public.electronic_invoices where tenant_id=$1 and environment=$4 and (snapshot->'receiver'->>'name' ilike $2 or id::text ilike $2) order by created_at desc,id limit 51 offset $3`,
+            [tenantId, pattern(q.search), q.cursor, q.environment],
           )
         ).rows,
         q.cursor,
@@ -252,6 +259,11 @@ export function emissionRoutes(
       const hash = createHash("sha256")
         .update(JSON.stringify(input))
         .digest("hex");
+      // Previous test requests were hashed before environment was part of the contract.
+      const { environment: _environment, ...legacyInput } = input;
+      const legacyHash = createHash("sha256")
+        .update(JSON.stringify(legacyInput))
+        .digest("hex");
       const replay = (
         await db.query(
           "select * from public.electronic_invoices where tenant_id=$1 and created_by=$2 and operation_id=$3",
@@ -259,7 +271,13 @@ export function emissionRoutes(
         )
       ).rows[0];
       if (replay) {
-        if (replay.request_hash !== hash)
+        if (
+          replay.environment !== input.environment ||
+          (replay.request_hash !== hash &&
+            !(
+              input.environment === "test" && replay.request_hash === legacyHash
+            ))
+        )
           throw new HttpError(
             409,
             "Esta operación ya se utilizó con otros datos.",
@@ -285,8 +303,8 @@ export function emissionRoutes(
         );
       const old = (
         await db.query(
-          "select * from public.electronic_invoices where tenant_id=$1 and draft_id=$2",
-          [tenantId, draft.id],
+          "select * from public.electronic_invoices where tenant_id=$1 and draft_id=$2 and environment=$3",
+          [tenantId, draft.id, input.environment],
         )
       ).rows[0];
       if (old) {
@@ -322,7 +340,7 @@ export function emissionRoutes(
       await db.query("reset role");
       const row = (
         await db.query(
-          "insert into public.electronic_invoices(tenant_id,draft_id,draft_version,department_id,snapshot,options,created_by,operation_id,request_hash) values($1,$2,$3,$4,$5,$6,$7,$8,$9) returning *",
+          "insert into public.electronic_invoices(tenant_id,draft_id,draft_version,department_id,snapshot,options,created_by,operation_id,request_hash,environment) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) returning *",
           [
             tenantId,
             draft.id,
@@ -333,6 +351,7 @@ export function emissionRoutes(
             p.userId,
             input.operation_id,
             hash,
+            input.environment,
           ],
         )
       ).rows[0];
@@ -468,7 +487,7 @@ export function emissionRoutes(
       const old = found(
         (
           await db.query(
-            "select * from public.electronic_invoices where tenant_id=$1 and id=$2 for update",
+            "select * from public.electronic_invoices where tenant_id=$1 and id=$2",
             [tenantId, id],
           )
         ).rows[0],
@@ -486,6 +505,7 @@ export function emissionRoutes(
         input.operation_id,
         p.userId,
         config,
+        input.production_confirmation,
       );
       const item = await decorate(db, row, config);
       await db.query("commit");

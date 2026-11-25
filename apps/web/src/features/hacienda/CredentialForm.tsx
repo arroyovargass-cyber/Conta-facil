@@ -1,20 +1,26 @@
 import React, { useEffect, useRef, useState } from "react";
 import { apiRequest } from "../../api/client";
 import { useAlive, type Row } from "../billing/common";
+import type { HaciendaEnvironment } from "../../../../../packages/domain/src/hacienda-environment";
 export function CredentialForm({
   base,
+  environment = "test",
   revision,
   enabled,
   onSaved,
+  onBusyChange,
 }: {
   base: string;
+  environment?: HaciendaEnvironment;
   revision: number;
   enabled: boolean;
   onSaved: (data: Row) => void;
+  onBusyChange?: (busy: boolean) => void;
 }) {
   const form = useRef<HTMLFormElement>(null),
     controller = useRef<AbortController | null>(null),
     alive = useAlive(),
+    pending = useRef(false),
     [busy, setBusy] = useState(false),
     [error, setError] = useState("");
   useEffect(
@@ -26,11 +32,13 @@ export function CredentialForm({
   );
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (busy || !enabled) return;
+    if (pending.current || !enabled) return;
     const element = e.currentTarget,
       data = new FormData(element),
       file = data.get("file") as File;
+    pending.current = true;
     setBusy(true);
+    onBusyChange?.(true);
     setError("");
     let bytes: Uint8Array | undefined;
     controller.current = new AbortController();
@@ -38,6 +46,7 @@ export function CredentialForm({
       if (!file || !file.size || file.size > 2097152)
         throw Error("Selecciona un archivo PKCS#12 de hasta 2 MiB.");
       bytes = new Uint8Array(await file.arrayBuffer());
+      if (!alive.current || controller.current.signal.aborted) return;
       let binary = "";
       for (let i = 0; i < bytes.length; i += 8192)
         binary += String.fromCharCode(...bytes.subarray(i, i + 8192));
@@ -45,7 +54,7 @@ export function CredentialForm({
         method: "POST",
         signal: controller.current.signal,
         body: JSON.stringify({
-          environment: "test",
+          environment,
           expected_revision: revision,
           username: data.get("username"),
           password: data.get("password"),
@@ -61,7 +70,11 @@ export function CredentialForm({
       element.reset();
       for (const name of ["username", "password", "pin", "file"])
         data.delete(name);
-      if (alive.current) setBusy(false);
+      pending.current = false;
+      if (alive.current) {
+        setBusy(false);
+        onBusyChange?.(false);
+      }
     }
   }
   return (
@@ -71,7 +84,10 @@ export function CredentialForm({
       autoComplete="off"
       className="billing-editor"
     >
-      <h3>Credenciales del ambiente de pruebas</h3>
+      <h3>
+        Credenciales del ambiente de{" "}
+        {environment === "production" ? "producción" : "pruebas"}
+      </h3>
       <p>
         El usuario y la contraseña de API son distintos del PIN de la llave. Los
         valores se limpian al terminar cada intento.
@@ -124,7 +140,11 @@ export function CredentialForm({
           línea.
         </p>
         <button className="button primary" disabled={busy || !enabled}>
-          {busy ? "Validando y guardando…" : "Guardar credenciales de pruebas"}
+          {busy
+            ? "Validando y guardando…"
+            : environment === "production"
+              ? "Guardar credenciales de producción"
+              : "Guardar credenciales de pruebas"}
         </button>
       </fieldset>
     </form>

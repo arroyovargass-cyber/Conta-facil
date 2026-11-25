@@ -1,5 +1,9 @@
 import { it, expect } from "vitest";
-import { HaciendaReception } from "../apps/api/src/services/hacienda-reception";
+import { createHash } from "node:crypto";
+import {
+  HaciendaReception,
+  readHaciendaResponseObservation,
+} from "../apps/api/src/services/hacienda-reception";
 const clave = "5".repeat(50);
 const input = {
   clave,
@@ -168,5 +172,162 @@ it("refuses production transport overrides", () => {
     expect(() => new HaciendaReception()).not.toThrow();
   } finally {
     process.env.NODE_ENV = original;
+  }
+});
+const context = {
+  tenantId: "tenant-one",
+  credentialVersion: 3,
+  environment: "production" as const,
+};
+it("selects production reception paths per call without changing the test default", async () => {
+  const seen: string[] = [];
+  const c = client(async (url, init) => {
+    seen.push(String(url));
+    return init?.method === "POST"
+      ? reply(201)
+      : reply(200, { clave, "ind-estado": "procesando" });
+  });
+  await c.submit("s", input, "production");
+  await c.query("s", clave, "production");
+  await c.query("s", clave);
+  expect(seen).toEqual([
+    "https://api.comprobanteselectronicos.go.cr/recepcion/v1/recepcion",
+    "https://api.comprobanteselectronicos.go.cr/recepcion/v1/recepcion/" +
+      clave,
+    "https://api.comprobanteselectronicos.go.cr/recepcion-sandbox/v1/recepcion/" +
+      clave,
+  ]);
+});
+it("keeps test provenance nonserializable and bound to exact object, context and returned bytes", async () => {
+  const responseXml = "<MensajeHacienda/>";
+  const raw = JSON.stringify({
+    clave,
+    "ind-estado": "aceptado",
+    "respuesta-xml": Buffer.from(responseXml).toString("base64"),
+  });
+  const result = await client(async () => new Response(raw)).query(
+    "private-access",
+    clave,
+    "production",
+    context,
+  );
+  const observation = readHaciendaResponseObservation(result, context);
+  const hash = (value: string) =>
+    createHash("sha256").update(value).digest("hex");
+  expect(observation).toMatchObject({
+    method: "official_api",
+    synthetic: true,
+    ...context,
+    clave,
+    responseSha256: hash(responseXml),
+    rawJsonSha256: hash(raw),
+    endpoint:
+      "https://api.comprobanteselectronicos.go.cr/recepcion/v1/recepcion/" +
+      clave,
+  });
+  expect(Object.isFrozen(observation)).toBe(true);
+  expect(JSON.stringify(result)).not.toContain("tenant-one");
+  expect(JSON.stringify(observation)).not.toContain("private-access");
+  for (const copy of [{ ...result }, JSON.parse(JSON.stringify(result))])
+    expect(readHaciendaResponseObservation(copy, context)).toBeUndefined();
+  for (const wrong of [
+    { ...context, tenantId: "tenant-two" },
+    { ...context, credentialVersion: 4 },
+    { ...context, environment: "test" as const },
+  ])
+    expect(readHaciendaResponseObservation(result, wrong)).toBeUndefined();
+  result.responseXml = "<other/>";
+  expect(readHaciendaResponseObservation(result, context)).toBeUndefined();
+});
+it("rejects authoritative field mutation even if toJSON conceals the change", async () => {
+  const result = await client(async () =>
+    reply(200, {
+      clave,
+      "ind-estado": "aceptado",
+      "respuesta-xml": "PHgvPg==",
+    }),
+  ).query("s", clave, "production", context);
+  const original = { ...result };
+  Object.assign(result, { responseXml: "<changed/>", toJSON: () => original });
+  expect(readHaciendaResponseObservation(result, context)).toBeUndefined();
+});
+it("does not mint provenance from errors, absent XML, invalid context or an unbound query", async () => {
+  for (const [http, data, binding] of [
+    [
+      302,
+      { clave, "ind-estado": "aceptado", "respuesta-xml": "PHgvPg==" },
+      context,
+    ],
+    [200, { clave, "ind-estado": "aceptado" }, context],
+    [
+      200,
+      { clave, "ind-estado": "aceptado", "respuesta-xml": "PHgvPg==" },
+      { ...context, credentialVersion: 0 },
+    ],
+    [
+      200,
+      { clave, "ind-estado": "aceptado", "respuesta-xml": "PHgvPg==" },
+      undefined,
+    ],
+  ] as const) {
+    const result = await client(async () => reply(http, data)).query(
+      "s",
+      clave,
+      "production",
+      binding,
+    );
+    expect(readHaciendaResponseObservation(result, context)).toBeUndefined();
+  }
+});
+it("cannot reuse synthetic observations or injected transport outside the test runtime", async () => {
+  const original = process.env.NODE_ENV;
+  let calls = 0;
+  const c = client(async () => {
+    calls++;
+    return reply(200, {
+      clave,
+      "ind-estado": "aceptado",
+      "respuesta-xml": "PHgvPg==",
+    });
+  });
+  const result = await c.query("s", clave, "production", context);
+  try {
+    process.env.NODE_ENV = "production";
+    expect(readHaciendaResponseObservation(result, context)).toBeUndefined();
+    expect(await c.query("s", clave, "production", context)).toEqual({
+      status: "uncertain",
+    });
+    expect(calls).toBe(1);
+  } finally {
+    process.env.NODE_ENV = original;
+  }
+});
+it("blocks the real path when TLS validation is disabled without consulting global fetch", async () => {
+  const previous = process.env.NODE_TLS_REJECT_UNAUTHORIZED;
+  const previousFetch = globalThis.fetch;
+  let calls = 0;
+  try {
+    globalThis.fetch = async () => {
+      calls++;
+      return reply(200, {
+        clave,
+        "ind-estado": "aceptado",
+        "respuesta-xml": "PHgvPg==",
+      });
+    };
+    process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+    const result = await new HaciendaReception().query(
+      "s",
+      clave,
+      "production",
+      context,
+    );
+    expect(result).toEqual({ status: "uncertain" });
+    expect(readHaciendaResponseObservation(result, context)).toBeUndefined();
+    expect(calls).toBe(0);
+  } finally {
+    globalThis.fetch = previousFetch;
+    if (previous === undefined) delete process.env.NODE_TLS_REJECT_UNAUTHORIZED;
+    else process.env.NODE_TLS_REJECT_UNAUTHORIZED = previous;
   }
 });

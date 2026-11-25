@@ -100,7 +100,7 @@ test("server actions confirm the saved recipient and reuse operation after uncer
       .click();
     const confirmation = page.getByRole("alertdialog");
     for (const text of [
-      "STAG",
+      "Pruebas",
       "Emisor guardado",
       "Receptor guardado",
       "original@example.test",

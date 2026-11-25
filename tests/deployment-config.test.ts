@@ -73,3 +73,22 @@ it("reports all missing deployment variables together without exposing configure
   );
   expect(String(failure)).not.toContain(suppliedSecret);
 });
+it("keeps fiscal environments independently disabled and preserves the prior response trust default", () => {
+  const c = parseConfig(env);
+  expect(c.HACIENDA_STAG_PROBE_ENABLED).toBe("false");
+  expect(c.HACIENDA_PRODUCTION_PROBE_ENABLED).toBe("false");
+  expect(c.HACIENDA_STAG_EMISSION_ENABLED).toBe("false");
+  expect(c.HACIENDA_PRODUCTION_EMISSION_ENABLED).toBe("false");
+  expect(c.HACIENDA_RESPONSE_TRUST_POLICY).toBe("pinned_certificate");
+});
+it("accepts an explicit official API response policy without enabling any fiscal environment", () => {
+  const c = parseConfig({
+    ...env,
+    HACIENDA_RESPONSE_TRUST_POLICY: "official_api",
+  });
+  expect(c.HACIENDA_RESPONSE_TRUST_POLICY).toBe("official_api");
+  expect(c.HACIENDA_PRODUCTION_EMISSION_ENABLED).toBe("false");
+  expect(() =>
+    parseConfig({ ...env, HACIENDA_RESPONSE_TRUST_POLICY: "trust_any_xml" }),
+  ).toThrow();
+});

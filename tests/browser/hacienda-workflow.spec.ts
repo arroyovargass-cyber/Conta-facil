@@ -46,10 +46,10 @@ test("registers synthetic credentials, clears secrets after errors and success, 
     await nav(page, "Hacienda");
     await expect(
       page.getByRole("button", { name: "Producción", exact: true }),
-    ).toBeDisabled();
+    ).toBeEnabled();
     await expect(page.getByText(f.tag + "-0", { exact: true })).toBeVisible();
     await expect(
-      page.getByText("XSD oficial vigente: pendiente de verificación.", {
+      page.getByText("Datos fiscales del emisor y del receptor completos.", {
         exact: true,
       }),
     ).toBeVisible();
@@ -205,7 +205,9 @@ test("sets up departments and routes a saved draft to an internal collection rev
     await expect(assign).toBeDisabled();
     await page.getByLabel("Observaciones").fill("");
     await assign.click();
-    await expect(page.getByRole("status")).toContainText("Revisión asignada");
+    await expect(
+      page.getByRole("status").filter({ hasText: "Revisión asignada" }),
+    ).toContainText("Revisión asignada a Cuentas por cobrar.");
     await nav(page, "Cuentas por cobrar");
     await expect(
       page.getByRole("cell", { name: /^Cliente CxC navegador/ }),
@@ -261,7 +263,7 @@ test("ignores a delayed Hacienda error after switching companies", async ({
     let captured: () => void = () => {};
     const started = new Promise<void>((r) => (captured = r));
     await page.route(
-      "**/companies/" + f.tenants[0] + "/hacienda",
+      "**/companies/" + f.tenants[0] + "/hacienda?*",
       async (route) => {
         const response = await route.fetch();
         captured();

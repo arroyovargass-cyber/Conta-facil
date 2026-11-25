@@ -348,8 +348,8 @@ export function identity(pool: pg.Pool, config: AppConfig) {
       const auth = await authClient(req.principal!);
       const { data, error } = await auth.auth.mfa.enroll({
         factorType: "totp",
-        issuer: "Conta Fácil",
-        friendlyName: "Conta Fácil " + Date.now(),
+        issuer: "Conta Ágil",
+        friendlyName: "Conta Ágil " + Date.now(),
       });
       if (error)
         throw new HttpError(400, "No se pudo iniciar el segundo factor.");

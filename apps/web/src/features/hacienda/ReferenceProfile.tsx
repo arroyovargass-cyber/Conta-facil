@@ -21,15 +21,19 @@ export function ReferenceProfile({
         <dd>{company?.identification ?? "Pendiente"}</dd>
       </dl>
       <p>
-        Los datos registrados son referencias de configuración y requieren
-        validación tributaria.
+        Los datos de la empresa se usan en ambos ambientes. Revisa la
+        identificación antes de registrar la autorización de la llave.
       </p>
       <ul>
-        <li>XSD oficial vigente: pendiente de verificación.</li>
-        <li>Política de redondeo: pendiente de validación.</li>
-        <li>Identidad del titular: pendiente de confirmar.</li>
-        <li>Firma XAdES, envío y respuesta definitiva: pendientes.</li>
+        <li>Datos fiscales del emisor y del receptor completos.</li>
+        <li>Llave vigente y revisión del administrador para este ambiente.</li>
+        <li>Acceso a Hacienda y numeración de este ambiente confirmados.</li>
+        <li>En producción, confirmación de una venta real autorizada.</li>
       </ul>
+      <p>
+        Consulta los requisitos de cada factura en Facturación. Comprobar el
+        acceso no implica que Hacienda haya aceptado un documento.
+      </p>
       <button
         type="button"
         className="button secondary"

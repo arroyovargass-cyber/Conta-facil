@@ -110,3 +110,89 @@ it("refuses injected transport and timeout overrides outside tests", () => {
     () => new HaciendaIdp({ environment: "production", timeoutMs: 1 }),
   ).toThrow();
 });
+it("uses the selected fiscal realm and client independently of the test runtime", async () => {
+  const seen: { url: string; client: string | null }[] = [];
+  const idp = new HaciendaIdp({
+    environment: "test",
+    transport: async (url, init) => {
+      seen.push({
+        url: String(url),
+        client: (init!.body as URLSearchParams).get("client_id"),
+      });
+      return String(url).endsWith("/token")
+        ? new Response(
+            JSON.stringify({
+              access_token: "ACCESS",
+              refresh_token: "REFRESH",
+            }),
+          )
+        : new Response(null, { status: 204 });
+    },
+  });
+  expect(
+    (await idp.probe({ username: "u", password: "p" }, "production")).status,
+  ).toBe("success");
+  expect((await idp.probe({ username: "u", password: "p" })).status).toBe(
+    "success",
+  );
+  expect(seen).toEqual(
+    ["token", "logout"]
+      .map((path) => ({
+        url:
+          "https://idp.comprobanteselectronicos.go.cr/auth/realms/rut/protocol/openid-connect/" +
+          path,
+        client: "api-prod",
+      }))
+      .concat(
+        ["token", "logout"].map((path) => ({
+          url:
+            "https://idp.comprobanteselectronicos.go.cr/auth/realms/rut-stag/protocol/openid-connect/" +
+            path,
+          client: "api-stag",
+        })),
+      ),
+  );
+});
+it("refuses real probing when TLS validation is disabled", async () => {
+  const previous = process.env.NODE_TLS_REJECT_UNAUTHORIZED;
+  const originalFetch = globalThis.fetch;
+  let calls = 0;
+  try {
+    globalThis.fetch = async () => {
+      calls++;
+      return new Response("{}", { status: 503 });
+    };
+    process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+    expect(
+      await new HaciendaIdp({ environment: "test" }).probe(
+        { username: "u", password: "p" },
+        "production",
+      ),
+    ).toEqual({ status: "service_unavailable", sessionClosed: false });
+    expect(calls).toBe(0);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (previous === undefined) delete process.env.NODE_TLS_REJECT_UNAUTHORIZED;
+    else process.env.NODE_TLS_REJECT_UNAUTHORIZED = previous;
+  }
+});
+it("refuses an injected probe transport after leaving the test runtime", async () => {
+  const runtime = process.env.NODE_ENV;
+  let calls = 0;
+  const idp = new HaciendaIdp({
+    environment: "test",
+    transport: async () => {
+      calls++;
+      return new Response("{}", { status: 503 });
+    },
+  });
+  try {
+    process.env.NODE_ENV = "production";
+    expect(
+      await idp.probe({ username: "u", password: "p" }, "production"),
+    ).toEqual({ status: "service_unavailable", sessionClosed: false });
+    expect(calls).toBe(0);
+  } finally {
+    process.env.NODE_ENV = runtime;
+  }
+});

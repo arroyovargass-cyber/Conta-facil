@@ -122,3 +122,81 @@ it("bounds login timeout and rejects production overrides", async () => {
     () => new HaciendaTokenSession({ environment: "production", timeoutMs: 1 }),
   ).toThrow();
 });
+it("keeps production and test token/logout endpoints in separate per-call profiles", async () => {
+  const seen: { url: string; client: string | null }[] = [];
+  const session = new HaciendaTokenSession({
+    environment: "test",
+    transport: async (url, init) => {
+      seen.push({
+        url: String(url),
+        client: (init!.body as URLSearchParams).get("client_id"),
+      });
+      return String(url).endsWith("/token")
+        ? reply(tokens)
+        : new Response(null, { status: 204 });
+    },
+  });
+  await Promise.all([
+    session.withAccess(access, async () => 1, "production"),
+    session.withAccess(access, async () => 2),
+  ]);
+  expect(seen).toHaveLength(4);
+  expect(seen.filter((request) => request.client === "api-prod")).toHaveLength(
+    2,
+  );
+  expect(seen.filter((request) => request.client === "api-stag")).toHaveLength(
+    2,
+  );
+  for (const request of seen) {
+    expect(request.url).toMatch(
+      /^https:\/\/idp\.comprobanteselectronicos\.go\.cr\/auth\/realms\/rut(?:-stag)?\/protocol\/openid-connect\/(token|logout)$/,
+    );
+    expect(request.client).toBe(
+      request.url.includes("rut-stag") ? "api-stag" : "api-prod",
+    );
+  }
+});
+it("blocks real sessions when TLS validation is disabled before using credentials", async () => {
+  const previous = process.env.NODE_TLS_REJECT_UNAUTHORIZED;
+  const originalFetch = globalThis.fetch;
+  let calls = 0;
+  try {
+    globalThis.fetch = async () => {
+      calls++;
+      return reply({}, 503);
+    };
+    process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+    await expect(
+      new HaciendaTokenSession({ environment: "test" }).withAccess(
+        access,
+        async () => 1,
+        "production",
+      ),
+    ).rejects.toMatchObject({ code: "SERVICE_UNAVAILABLE" });
+    expect(calls).toBe(0);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (previous === undefined) delete process.env.NODE_TLS_REJECT_UNAUTHORIZED;
+    else process.env.NODE_TLS_REJECT_UNAUTHORIZED = previous;
+  }
+});
+it("refuses an injected token transport after leaving the test runtime", async () => {
+  const runtime = process.env.NODE_ENV;
+  let calls = 0;
+  const session = new HaciendaTokenSession({
+    environment: "test",
+    transport: async () => {
+      calls++;
+      return reply(tokens);
+    },
+  });
+  try {
+    process.env.NODE_ENV = "production";
+    await expect(
+      session.withAccess(access, async () => 1, "production"),
+    ).rejects.toMatchObject({ code: "SERVICE_UNAVAILABLE" });
+    expect(calls).toBe(0);
+  } finally {
+    process.env.NODE_ENV = runtime;
+  }
+});

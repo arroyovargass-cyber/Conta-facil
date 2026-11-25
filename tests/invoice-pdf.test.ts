@@ -111,3 +111,22 @@ it("preserves colones and Spanish identities in extracted PDF text and paginated
     rmSync(dir, { recursive: true, force: true });
   }
 });
+it("identifies the document environment in both the printed text and PDF metadata", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "invoice-pdf-environment-"));
+  try {
+    for (const [environment, label] of [
+      ["test", "Ambiente de pruebas"],
+      ["production", "Ambiente de producción"],
+    ] as const) {
+      const bytes = await renderInvoicePdf({ ...fixture(), environment });
+      const path = join(dir, "invoice.pdf"),
+        output = join(dir, "invoice.txt");
+      writeFileSync(path, bytes);
+      execFileSync("pdftotext", ["-layout", path, output], { stdio: "ignore" });
+      expect(readFileSync(output, "utf8")).toContain(label);
+      expect((await PDFDocument.load(bytes)).getSubject()).toBe(label);
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

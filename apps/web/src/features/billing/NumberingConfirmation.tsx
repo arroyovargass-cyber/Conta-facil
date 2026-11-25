@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { apiRequest, post } from "../../api/client";
 import { Field, useAlive } from "./common";
+import type { HaciendaEnvironment } from "../../../../../packages/domain/src/hacienda-environment";
 
 type NumberingItem = {
   branch_code: string;
@@ -13,16 +14,21 @@ type NumberingOptions = { canConfirm: boolean; items: NumberingItem[] };
 
 export function NumberingConfirmation(props: {
   base: string;
+  environment: HaciendaEnvironment;
   onConfirmed?: () => void;
 }) {
-  return <ConfirmationForm key={props.base} {...props} />;
+  return (
+    <ConfirmationForm key={props.base + ":" + props.environment} {...props} />
+  );
 }
 
 function ConfirmationForm({
   base,
+  environment,
   onConfirmed,
 }: {
   base: string;
+  environment: HaciendaEnvironment;
   onConfirmed?: () => void;
 }) {
   const alive = useAlive();
@@ -34,10 +40,12 @@ function ConfirmationForm({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
+  const label = environment === "production" ? "producción" : "pruebas";
+  const path = base + "/invoices/numbering-options?environment=" + environment;
   useEffect(() => {
     let cancelled = false;
     const controller = new AbortController();
-    apiRequest<NumberingOptions>(base + "/invoices/numbering-options", {
+    apiRequest<NumberingOptions>(path, {
       signal: controller.signal,
     })
       .then((data) => {
@@ -50,7 +58,7 @@ function ConfirmationForm({
       cancelled = true;
       controller.abort();
     };
-  }, [base, alive]);
+  }, [path, alive]);
   const item = options?.items.find(
     (row) => row.branch_code + "/" + row.terminal_code === selection,
   );
@@ -78,6 +86,7 @@ function ConfirmationForm({
     setSuccess(false);
     try {
       await post(base + "/invoices/numbering", {
+        environment,
         branch_code: item.branch_code,
         terminal_code: item.terminal_code,
         starting_value: value,
@@ -86,9 +95,7 @@ function ConfirmationForm({
       setSuccess(true);
       setConfirmed(false);
       onConfirmed?.();
-      const data = await apiRequest<NumberingOptions>(
-        base + "/invoices/numbering-options",
-      );
+      const data = await apiRequest<NumberingOptions>(path);
       if (alive.current) setOptions(data);
     } catch (e: any) {
       if (alive.current) setError(e.message);
@@ -100,10 +107,10 @@ function ConfirmationForm({
   if (!options?.canConfirm) return null;
   return (
     <details>
-      <summary>Numeración STAG</summary>
+      <summary>Numeración de {label}</summary>
       <form onSubmit={submit}>
         <p>
-          Confirma el último consecutivo utilizado en el ambiente de pruebas.
+          Confirma el último consecutivo utilizado en el ambiente de {label}.
         </p>
         <fieldset disabled={busy}>
           <label className="field">
@@ -159,14 +166,14 @@ function ConfirmationForm({
               checked={confirmed}
               onChange={(event) => setConfirmed(event.target.checked)}
             />
-            Confirmo que esta numeración corresponde al ambiente de pruebas y
+            Confirmo que esta numeración corresponde al ambiente de {label} y
             que el último consecutivo es correcto
           </label>
           <button
             className="button primary"
             disabled={busy || !valid || !confirmed}
           >
-            {busy ? "Confirmando…" : "Confirmar numeración de pruebas"}
+            {busy ? "Confirmando…" : "Confirmar numeración de " + label}
           </button>
         </fieldset>
       </form>
@@ -177,7 +184,7 @@ function ConfirmationForm({
       )}
       {success && (
         <p role="status">
-          Numeración de pruebas confirmada. Esto no activa el envío a Hacienda.
+          Numeración de {label} confirmada. Esto no activa el envío a Hacienda.
         </p>
       )}
     </details>

@@ -37,18 +37,23 @@ const config: any = {
   HACIENDA_STAG_EMISSION_ENABLED: "true",
   HACIENDA_SOFTWARE_PROVIDER_ID: "3101234567",
   HACIENDA_RESPONSE_CERTIFICATE_PINS: JSON.stringify(["ab".repeat(32)]),
+  HACIENDA_PRODUCTION_RESPONSE_CERTIFICATE_PINS: JSON.stringify([
+    "cd".repeat(32),
+  ]),
 };
 function harness(kind = "transmit", state = "queued") {
   const job: any = {
     id: "job",
     tenant_id: "tenant",
     invoice_id: "invoice",
+    environment: "test",
     kind,
     lease_token: "lease",
     attempts: 1,
   };
   const doc: any = {
     id: "invoice",
+    tenant_id: "tenant",
     environment: "test",
     document_status: "issued",
     signature_status: "signed",
@@ -93,7 +98,20 @@ function harness(kind = "transmit", state = "queued") {
   };
   const deps: any = {
     jobs: {
-      claim: vi.fn().mockResolvedValue([job]),
+      claim: vi.fn(
+        async (
+          _limit: number,
+          environments: string[],
+          policies?: Record<string, readonly string[]>,
+        ) =>
+          environments.includes(job.environment) &&
+          (!policies ||
+            policies[job.environment]?.includes(
+              doc.response_trust_policy ?? "pinned_certificate",
+            ))
+            ? [job]
+            : [],
+      ),
       finish: vi.fn().mockResolvedValue(true),
     },
     store: {
@@ -265,14 +283,17 @@ describe("emission pipeline fencing and reconciliation", () => {
     ).runBatch();
     expect(h.deps.jobs.claim).not.toHaveBeenCalled();
   });
-  it("pauses missing trust pins without consuming a queue attempt", async () => {
+  it("excludes pinned documents without consuming an attempt when their trust pins are missing", async () => {
     const h = harness();
     await new EmissionPipeline(
       {} as any,
       { ...config, HACIENDA_RESPONSE_CERTIFICATE_PINS: "[]" },
       h.deps,
     ).runBatch();
-    expect(h.deps.jobs.claim).not.toHaveBeenCalled();
+    expect(h.deps.jobs.claim).toHaveBeenCalledWith(1, ["test"], {
+      test: ["official_api"],
+    });
+    expect(h.deps.jobs.finish).not.toHaveBeenCalled();
   });
   it("rejects a response failing full MH XSD before cryptographic verification", async () => {
     const h = harness("query", "sent");
@@ -390,5 +411,206 @@ describe("emission pipeline fencing and reconciliation", () => {
       h.deps,
     ).runBatch();
     expect(h.deps.enqueue).toHaveBeenCalledWith(h.job, "email");
+  });
+  it("routes production jobs through production credentials, token client and reception without claiming STAG", async () => {
+    const h = harness();
+    h.job.environment = h.doc.environment = "production";
+    const encrypted = encryptCredential(
+      Buffer.from(
+        JSON.stringify({ username: "production-user", password: "secret" }),
+      ),
+      {
+        tenantId: "tenant",
+        environment: "production",
+        version: 2,
+        kind: "api_access",
+      },
+      parseKeyring(config.HACIENDA_KEYRING, "a", config.SESSION_KEY)!,
+    );
+    h.deps.store.credentials.mockResolvedValue({
+      tenant_id: "tenant",
+      environment: "production",
+      version: 2,
+      api_key_id: encrypted.keyId,
+      api_ciphertext: encrypted.blob,
+    });
+    await new EmissionPipeline(
+      {} as any,
+      {
+        ...config,
+        HACIENDA_STAG_EMISSION_ENABLED: "false",
+        HACIENDA_PRODUCTION_EMISSION_ENABLED: "true",
+      },
+      h.deps,
+    ).runBatch(2);
+    expect(h.deps.jobs.claim).toHaveBeenCalledWith(2, ["production"], {
+      production: ["official_api", "pinned_certificate"],
+    });
+    expect(h.deps.tokens.withAccess).toHaveBeenCalledWith(
+      expect.any(Object),
+      expect.any(Function),
+      "production",
+    );
+    expect(h.deps.reception.submit).toHaveBeenCalledWith(
+      "token",
+      expect.any(Object),
+      "production",
+    );
+    expect(h.doc.transmission_status).toBe("sent");
+  });
+  it("rejects a credential row from a different environment before opening a token session", async () => {
+    const h = harness();
+    h.job.environment = h.doc.environment = "production";
+    await new EmissionPipeline(
+      {} as any,
+      { ...config, HACIENDA_PRODUCTION_EMISSION_ENABLED: "true" },
+      h.deps,
+    ).runBatch();
+    expect(h.deps.tokens.withAccess).not.toHaveBeenCalled();
+    expect(h.deps.reception.submit).not.toHaveBeenCalled();
+  });
+  it("keeps reported official-API acceptance pending when the result has no authentic provenance", async () => {
+    const h = harness("query", "sent");
+    h.doc.response_trust_policy = "official_api";
+    h.deps.reception.query.mockResolvedValue({
+      status: "reported_accepted",
+      reportedState: "aceptado",
+      responseXml: "<fake/>",
+    });
+    const p = new EmissionPipeline(
+      {} as any,
+      {
+        ...config,
+        HACIENDA_RESPONSE_TRUST_POLICY: "official_api",
+        HACIENDA_RESPONSE_CERTIFICATE_PINS: undefined,
+      },
+      h.deps,
+    );
+    await p.runBatch();
+    expect(h.deps.jobs.claim).toHaveBeenCalledWith(1, ["test"], {
+      test: ["official_api"],
+    });
+    expect(h.deps.reception.query).toHaveBeenCalledWith(
+      "token",
+      h.doc.clave,
+      "test",
+      { tenantId: "tenant", credentialVersion: 2 },
+    );
+    expect(h.doc.hacienda_status).toBe("pending");
+  });
+  it("persists official-API evidence before promoting a correlated signed result to final status", async () => {
+    const h = harness("query", "sent");
+    h.doc.response_trust_policy = "official_api";
+    const result = { status: "reported_accepted", responseXml: "<verified/>" };
+    const evidence = {
+      method: "official_api",
+      synthetic: false,
+      responseSha256: "ab".repeat(32),
+    };
+    h.deps.reception.query.mockResolvedValue(result);
+    h.deps.verifyOfficial = vi
+      .fn()
+      .mockResolvedValue({ status: "accepted", issues: [] });
+    h.deps.readEvidence = vi.fn().mockReturnValue(evidence);
+    h.deps.observeResponse = vi.fn(async () => {
+      expect(h.doc.hacienda_status).toBe("pending");
+      expect(h.deps.artifact).toHaveBeenCalledWith(
+        h.job,
+        "hacienda_response",
+        Buffer.from("<verified/>"),
+      );
+      return true;
+    });
+    await new EmissionPipeline(
+      {} as any,
+      {
+        ...config,
+        HACIENDA_RESPONSE_TRUST_POLICY: "official_api",
+        HACIENDA_RESPONSE_CERTIFICATE_PINS: undefined,
+      },
+      h.deps,
+    ).runBatch();
+    expect(h.deps.verifyOfficial).toHaveBeenCalledWith(
+      result,
+      expect.objectContaining({
+        issuerIdentificationType: "02",
+        receiverIdentificationType: "01",
+      }),
+      { tenantId: "tenant", environment: "test", credentialVersion: 2 },
+    );
+    expect(h.deps.observeResponse).toHaveBeenCalledWith(
+      h.job,
+      expect.any(String),
+      evidence,
+    );
+    expect(h.doc.hacienda_status).toBe("accepted");
+  });
+  it("does not accept an API result when its immutable evidence could not be stored", async () => {
+    const h = harness("query", "sent");
+    h.doc.response_trust_policy = "official_api";
+    h.deps.reception.query.mockResolvedValue({
+      status: "reported_accepted",
+      responseXml: "<verified/>",
+    });
+    h.deps.verifyOfficial = vi
+      .fn()
+      .mockResolvedValue({ status: "accepted", issues: [] });
+    h.deps.readEvidence = vi
+      .fn()
+      .mockReturnValue({ method: "official_api", synthetic: false });
+    h.deps.observeResponse = vi.fn().mockResolvedValue(false);
+    await new EmissionPipeline(
+      {} as any,
+      { ...config, HACIENDA_RESPONSE_TRUST_POLICY: "official_api" },
+      h.deps,
+    ).runBatch();
+    expect(h.doc.hacienda_status).toBe("pending");
+    expect(h.deps.enqueue).not.toHaveBeenCalled();
+  });
+  it("rejects a claimed job whose document belongs to another tenant or fiscal environment", async () => {
+    for (const field of ["tenant_id", "environment"]) {
+      const h = harness();
+      h.doc[field] = field === "tenant_id" ? "other-tenant" : "production";
+      await h.pipeline.runBatch();
+      expect(h.deps.store.credentials).not.toHaveBeenCalled();
+      expect(h.deps.reception.submit).not.toHaveBeenCalled();
+    }
+  });
+  it("preserves a document's pinned policy when server defaults later change to official API", async () => {
+    const h = harness("query", "sent");
+    h.doc.response_trust_policy = "pinned_certificate";
+    h.deps.verifyOfficial = vi.fn().mockResolvedValue({ status: "accepted" });
+    h.deps.reception.query.mockResolvedValue({
+      status: "reported_accepted",
+      responseXml: "<untrusted/>",
+    });
+    await new EmissionPipeline(
+      {} as any,
+      {
+        ...config,
+        HACIENDA_RESPONSE_TRUST_POLICY: "official_api",
+        HACIENDA_RESPONSE_CERTIFICATE_PINS: undefined,
+      },
+      h.deps,
+    ).runBatch();
+    expect(h.deps.verifyOfficial).not.toHaveBeenCalled();
+    expect(h.doc.hacienda_status).toBe("pending");
+  });
+  it("keeps processing an official-API document when the new-document default changes to pins without configured pins", async () => {
+    const h = harness("query", "sent");
+    h.doc.response_trust_policy = "official_api";
+    const pipeline = new EmissionPipeline(
+      {} as any,
+      {
+        ...config,
+        HACIENDA_RESPONSE_TRUST_POLICY: "pinned_certificate",
+        HACIENDA_RESPONSE_CERTIFICATE_PINS: undefined,
+      },
+      h.deps,
+    );
+    expect(await pipeline.runBatch()).toEqual({ processed: 1 });
+    expect(h.deps.reception.query).toHaveBeenCalled();
+    expect(h.doc.transmission_status).toBe("processing");
+    expect(h.doc.hacienda_status).toBe("pending");
   });
 });

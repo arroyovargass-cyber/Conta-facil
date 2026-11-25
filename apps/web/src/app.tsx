@@ -58,7 +58,7 @@ const nav = [
   { id: "audit", name: "Auditoría", icon: ShieldCheck },
 ];
 const headings: Record<string, [string, string]> = {
-  hacienda: ["Hacienda", "Credenciales y preparación del ambiente de pruebas."],
+  hacienda: ["Hacienda", "Credenciales y revisión en pruebas y producción."],
   collections: [
     "Cuentas por cobrar",
     "Bandeja de revisión documental por departamento.",
@@ -72,7 +72,10 @@ const headings: Record<string, [string, string]> = {
     "Productos y servicios",
     "Tu catálogo comercial, con precios y monedas.",
   ],
-  invoices: ["Facturación", "Prepara y revisa facturas nacionales en STAG."],
+  invoices: [
+    "Facturación",
+    "Prepara y revisa facturas nacionales en pruebas y producción.",
+  ],
   drafts: [
     "Borradores",
     "Prepara una factura antes de su validación tributaria.",
@@ -105,7 +108,7 @@ function Logo() {
         <i />
       </span>
       <span>
-        conta<span className="logo-light">fácil</span>
+        conta<span className="logo-light">ágil</span>
         <b>CR</b>
       </span>
     </div>
@@ -468,13 +471,11 @@ export function App() {
               <ShieldCheck /> Cada empresa, en su propio espacio.
             </div>
           </div>
-          <small>Conta Fácil · Tu empresa en orden.</small>
+          <small>Conta Ágil · Tu empresa en orden.</small>
         </div>
         <main className="auth-main">
           <span className="phase-label">PLATAFORMA EMPRESARIAL</span>
-          <h2>
-            {recovery ? "Recupera tu acceso" : "Bienvenido a Conta Fácil"}
-          </h2>
+          <h2>{recovery ? "Recupera tu acceso" : "Bienvenido a Conta Ágil"}</h2>
           <p>
             {recovery
               ? "Te enviaremos las instrucciones a tu correo registrado."
@@ -780,7 +781,7 @@ export function App() {
             <div>
               <span className="eyebrow">
                 {view === "home"
-                  ? "BIENVENIDO A CONTA FÁCIL"
+                  ? "BIENVENIDO A CONTA ÁGIL"
                   : "ADMINISTRACIÓN DE EMPRESA"}
               </span>
               <h1>{headings[view][0]}</h1>
@@ -881,7 +882,7 @@ export function App() {
                   <div className="art-sheet">
                     <div className="art-logo">
                       <span className="mini-mark" />
-                      CONTA FÁCIL
+                      CONTA ÁGIL
                     </div>
                     <div className="art-line long" />
                     <div className="art-line" />
@@ -1507,7 +1508,7 @@ export function App() {
             </section>
           )}
           <footer className="page-footer">
-            <span>© {new Date().getFullYear()} Conta Fácil</span>
+            <span>© {new Date().getFullYear()} Conta Ágil</span>
             <span>
               Hecho para tu empresa. Hecho para Costa Rica.
               <span className="cr-flag" />

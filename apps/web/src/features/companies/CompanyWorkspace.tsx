@@ -75,6 +75,7 @@ export function CompanyWorkspace({
 }) {
   const alive = useAlive(),
     generation = useRef(0),
+    credentialContext = useRef(""),
     submitLock = useRef(false),
     operation = useRef(crypto.randomUUID());
   const [canManage, setCanManage] = useState(false),
@@ -93,7 +94,11 @@ export function CompanyWorkspace({
     [lookup, setLookup] = useState<Row | null>(null),
     [activitySearch, setActivitySearch] = useState(""),
     [credentials, setCredentials] = useState<Row | null>(null),
+    [credentialsContext, setCredentialsContext] = useState(""),
     [sequences, setSequences] = useState<Row[]>([]);
+  const fiscalEnvironment = value.configuration.billing.environment;
+  const currentCredentialContext = id + ":" + fiscalEnvironment;
+  credentialContext.current = currentCredentialContext;
   useEffect(() => {
     let current = true;
     const seq = ++generation.current;
@@ -140,19 +145,34 @@ export function CompanyWorkspace({
   }, [tenantId]);
   useEffect(() => {
     const controller = new AbortController();
+    const context = currentCredentialContext;
     setCredentials(null);
+    setCredentialsContext("");
     if (tab === 3 && id && canManage && value.active)
-      void apiRequest("/companies/" + id + "/hacienda", {
-        signal: controller.signal,
-      })
+      void apiRequest(
+        "/companies/" + id + "/hacienda?environment=" + fiscalEnvironment,
+        { signal: controller.signal },
+      )
         .then((r) => {
-          if (alive.current && !controller.signal.aborted) setCredentials(r);
+          if (
+            alive.current &&
+            !controller.signal.aborted &&
+            credentialContext.current === context
+          ) {
+            setCredentials(r);
+            setCredentialsContext(context);
+          }
         })
         .catch((e) => {
-          if (alive.current && !controller.signal.aborted) setNotice(e.message);
+          if (
+            alive.current &&
+            !controller.signal.aborted &&
+            credentialContext.current === context
+          )
+            setNotice(e.message);
         });
     return () => controller.abort();
-  }, [tab, id, canManage, value.active]);
+  }, [tab, id, fiscalEnvironment, canManage, value.active]);
   function change(path: string, next: any) {
     setValue((old) => {
       const copy = structuredClone(old) as any;
@@ -195,6 +215,7 @@ export function CompanyWorkspace({
       {label}
       {required ? " *" : ""}
       <select
+        aria-label={label + (required ? " *" : "")}
         value={String(get(path))}
         disabled={!editing || busy}
         onChange={(e) =>
@@ -520,7 +541,7 @@ export function CompanyWorkspace({
           {tab === 1 && (
             <>
               <p>
-                Catálogo territorial oficial aportado a Conta Fácil. Puedes
+                Catálogo territorial oficial aportado a Conta Ágil. Puedes
                 completar el domicilio después del alta.
               </p>
               <div className="form-grid">
@@ -811,7 +832,7 @@ export function CompanyWorkspace({
                   "configuration.billing.environment",
                   [
                     ["test", "Pruebas"],
-                    ["production", "Producción · pendiente de habilitación"],
+                    ["production", "Producción"],
                   ],
                 )}
                 {select(
@@ -1022,17 +1043,15 @@ export function CompanyWorkspace({
             <p>
               Guarda primero la empresa para registrar su llave criptográfica.
             </p>
-          ) : value.configuration.billing.environment === "production" ? (
-            <p>
-              La custodia de credenciales de producción está pendiente. No se
-              solicitan ni se guardan secretos de producción.
-            </p>
-          ) : credentials ? (
+          ) : credentials && credentialsContext === currentCredentialContext ? (
             <>
               <p>
                 Estado de credenciales:{" "}
                 {credentials.configuration.active_version
-                  ? "Registradas · identidad tributaria pendiente de verificar"
+                  ? credentials.configuration.enrollment?.status ===
+                    "operator_verified"
+                    ? "Registradas · revisión del administrador registrada"
+                    : "Registradas · revisión del administrador pendiente"
                   : "Pendientes"}
                 . Vencimiento:{" "}
                 {credentials.configuration.certificate_metadata?.valid_until ??
@@ -1043,8 +1062,13 @@ export function CompanyWorkspace({
                 <p>Reactiva la empresa para gestionar sus credenciales.</p>
               ) : (
                 <CredentialForm
-                  key={id + ":" + credentials.configuration.revision}
+                  key={
+                    currentCredentialContext +
+                    ":" +
+                    credentials.configuration.revision
+                  }
                   base={"/companies/" + id}
+                  environment={fiscalEnvironment}
                   revision={credentials.configuration.revision}
                   enabled={
                     credentials.capabilities.can_store_credentials &&
@@ -1052,14 +1076,25 @@ export function CompanyWorkspace({
                     !editing
                   }
                   onSaved={(r) => {
+                    if (
+                      !alive.current ||
+                      credentialContext.current !== currentCredentialContext
+                    )
+                      return;
                     setCredentials(r);
-                    setNotice("Credenciales guardadas en la bóveda cifrada.");
+                    setCredentialsContext(currentCredentialContext);
+                    setNotice(
+                      "Credenciales guardadas para el ambiente seleccionado. Completa la revisión del administrador en Hacienda.",
+                    );
                   }}
                 />
               )}
             </>
           ) : (
-            <p>Consultando disponibilidad de la bóveda de pruebas…</p>
+            <p>
+              Consultando credenciales de{" "}
+              {fiscalEnvironment === "production" ? "producción" : "pruebas"}…
+            </p>
           )}
         </div>
       )}

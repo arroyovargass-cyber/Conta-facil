@@ -30,14 +30,24 @@ export function parseConfig(environment: NodeJS.ProcessEnv) {
       HACIENDA_KEYRING: z.string().optional(),
       HACIENDA_ACTIVE_KEY_ID: z.string().optional(),
       HACIENDA_STAG_PROBE_ENABLED: z.enum(["true", "false"]).default("false"),
+      HACIENDA_PRODUCTION_PROBE_ENABLED: z
+        .enum(["true", "false"])
+        .default("false"),
       HACIENDA_STAG_EMISSION_ENABLED: z
         .enum(["true", "false"])
         .default("false"),
+      HACIENDA_PRODUCTION_EMISSION_ENABLED: z
+        .enum(["true", "false"])
+        .default("false"),
+      HACIENDA_RESPONSE_TRUST_POLICY: z
+        .enum(["pinned_certificate", "official_api"])
+        .default("pinned_certificate"),
       HACIENDA_SOFTWARE_PROVIDER_ID: z
         .string()
         .regex(/^[1-9][0-9]{8,11}$/)
         .optional(),
       HACIENDA_RESPONSE_CERTIFICATE_PINS: z.string().optional(),
+      HACIENDA_PRODUCTION_RESPONSE_CERTIFICATE_PINS: z.string().optional(),
       SMTP_HOST: z.string().max(253).optional(),
       SMTP_PORT: z.coerce.number().int().min(1).max(65535).optional(),
       SMTP_SECURE: z.enum(["true", "false"]).default("true"),

@@ -5,7 +5,12 @@ import { createHash, X509Certificate } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import type { AppConfig } from "../config";
-import { EmissionJobs, type Job, type JobKind } from "./emission-jobs";
+import {
+  EmissionJobs,
+  type Job,
+  type JobKind,
+  type JobTrustEligibility,
+} from "./emission-jobs";
 import { EmissionWorkerStore } from "./emission-worker-store";
 import { parseKeyring, decryptCredential } from "../security/credential-vault";
 import { generateInvoiceXml } from "./invoice-xml";
@@ -13,7 +18,13 @@ import { signInvoicePkcs12 } from "../security/invoice-pkcs12-signing";
 import { validateSignedInvoiceXml } from "./invoice-schema-validation";
 import { HaciendaTokenSession } from "./hacienda-token-session";
 import { HaciendaReception } from "./hacienda-reception";
-import { verifyHaciendaResponse } from "./hacienda-response";
+import {
+  verifyHaciendaResponse,
+  verifyOfficialApiHaciendaResponse,
+  readHaciendaResponseEvidence,
+} from "./hacienda-response";
+import { enabledEmissionEnvironments } from "./emission-settings";
+import type { HaciendaEnvironment } from "../../../../packages/domain/src/hacienda-environment";
 import { renderInvoicePdf } from "./invoice-pdf";
 import { InvoiceMail } from "./invoice-mail";
 const hash = (b: Buffer) => createHash("sha256").update(b).digest("hex");
@@ -42,6 +53,8 @@ export class EmissionPipeline {
       sign: signInvoicePkcs12,
       validate: validateSignedInvoiceXml,
       verify: verifyHaciendaResponse,
+      verifyOfficial: verifyOfficialApiHaciendaResponse,
+      readEvidence: readHaciendaResponseEvidence,
       validateResponse: validateHaciendaResponseSchema,
       verifyInvoice: verifyInvoiceSignature,
       pdf: renderInvoicePdf,
@@ -50,33 +63,72 @@ export class EmissionPipeline {
       ...overrides,
     };
   }
-  private enabled() {
+  private enabled(
+    environment: HaciendaEnvironment,
+    policy = this.settings.HACIENDA_RESPONSE_TRUST_POLICY ??
+      "pinned_certificate",
+  ) {
     const c = this.settings;
     let pins: unknown;
-    try {
-      pins = JSON.parse(c.HACIENDA_RESPONSE_CERTIFICATE_PINS ?? "[]");
-    } catch {
-      fail();
+    if (policy === "pinned_certificate") {
+      try {
+        pins = JSON.parse(
+          (environment === "production"
+            ? c.HACIENDA_PRODUCTION_RESPONSE_CERTIFICATE_PINS
+            : c.HACIENDA_RESPONSE_CERTIFICATE_PINS) ?? "[]",
+        );
+      } catch {
+        fail();
+      }
     }
     if (
-      c.HACIENDA_STAG_EMISSION_ENABLED !== "true" ||
+      !enabledEmissionEnvironments(c).includes(environment) ||
       !/^\d{9,12}$/.test(c.HACIENDA_SOFTWARE_PROVIDER_ID ?? "") ||
-      !Array.isArray(pins) ||
-      !pins.length ||
-      !pins.every((p) => typeof p === "string" && /^[a-f0-9]{64}$/i.test(p)) ||
+      !["official_api", "pinned_certificate"].includes(policy) ||
+      (policy === "pinned_certificate" &&
+        (!Array.isArray(pins) ||
+          !pins.length ||
+          !pins.every(
+            (p) => typeof p === "string" && /^[a-f0-9]{64}$/i.test(p),
+          ))) ||
+      (policy === "official_api" &&
+        process.env.NODE_TLS_REJECT_UNAUTHORIZED === "0") ||
       !parseKeyring(c.HACIENDA_KEYRING, c.HACIENDA_ACTIVE_KEY_ID, c.SESSION_KEY)
     )
       fail();
-    return pins as string[];
+    return policy === "pinned_certificate" ? (pins as string[]) : [];
   }
   private async document(j: Job) {
     const d = await this.deps.store.document(j);
-    if (!d || d.environment !== "test" || d.document_status !== "issued")
+    if (
+      !d ||
+      d.id !== j.invoice_id ||
+      d.tenant_id !== j.tenant_id ||
+      !["test", "production"].includes(d.environment) ||
+      d.environment !== j.environment ||
+      d.document_status !== "issued"
+    )
       fail();
     return d;
   }
   private async update(j: Job, p: object) {
     if (!(await this.deps.store.update(j, p))) fail();
+  }
+  private async observeResponse(
+    j: Job,
+    responseHash: string,
+    evidence: any,
+  ): Promise<void> {
+    if (!evidence || evidence.synthetic !== false) fail();
+    if (this.deps.observeResponse) {
+      if (!(await this.deps.observeResponse(j, responseHash, evidence))) fail();
+      return;
+    }
+    const r = await this.pool.query(
+      "select private.emission_job_observe_response($1,$2,$3,$4::jsonb) id",
+      [j.id, j.lease_token, responseHash, JSON.stringify(evidence)],
+    );
+    if (!r.rows[0]?.id) fail();
   }
   private async artifact(
     j: Job,
@@ -178,10 +230,18 @@ export class EmissionPipeline {
     use: (value: any) => Promise<T>,
   ) {
     const row = await this.deps.store.credentials(j);
-    if (!row || row.tenant_id !== j.tenant_id || row.environment !== "test")
+    if (
+      !row ||
+      row.tenant_id !== j.tenant_id ||
+      row.environment !== j.environment
+    )
       fail();
     const d = await this.document(j);
-    if (row.version !== d.credential_version) fail();
+    if (
+      row.version !== d.credential_version ||
+      row.environment !== d.environment
+    )
+      fail();
     const keyring = parseKeyring(
       this.settings.HACIENDA_KEYRING,
       this.settings.HACIENDA_ACTIVE_KEY_ID,
@@ -196,7 +256,7 @@ export class EmissionPipeline {
         { keyId: row[prefix + "_key_id"], blob: row[prefix + "_ciphertext"] },
         {
           tenantId: j.tenant_id,
-          environment: "test",
+          environment: d.environment,
           version: row.version,
           kind,
         },
@@ -211,6 +271,7 @@ export class EmissionPipeline {
   }
   private input(d: any) {
     return {
+      environment: d.environment,
       snapshot: d.snapshot,
       options: d.options,
       clave: d.clave,
@@ -220,8 +281,9 @@ export class EmissionPipeline {
     };
   }
   private async execute(j: Job) {
-    const pins = this.enabled();
     const d = await this.document(j);
+    const policy = d.response_trust_policy ?? "pinned_certificate";
+    const pins = this.enabled(d.environment, policy);
     if (j.kind === "sign") {
       let signed = await this.artifact(j, "signed_xml");
       let certificate = d.public_certificate_pem;
@@ -322,85 +384,126 @@ export class EmissionPipeline {
           typeof access.password !== "string"
         )
           fail();
-        await this.deps.tokens.withAccess(access, async (token: string) => {
-          await this.document(j);
-          if (j.kind === "transmit") {
-            if (d.transmission_status !== "queued") fail();
-            await this.update(j, { transmission_status: "uncertain" });
-            const s = d.snapshot;
-            const identity = (x: any) => ({
-              tipoIdentificacion: x.identification_type,
-              numeroIdentificacion: x.identification,
-            });
-            const result = await this.deps.reception.submit(token, {
-              clave: d.clave,
-              fecha: this.input(d).issued_at,
-              emisor: identity(s.issuer),
-              ...(s.receiver.identification
-                ? { receptor: identity(s.receiver) }
-                : {}),
-              comprobanteXml: xml!.toString(),
-            });
-            if (
-              result.status === "rejected_request" ||
-              result.status === "authentication_failed"
-            ) {
-              await this.update(j, { transmission_status: "technical_error" });
-              throw Error("SUBMISSION_REJECTED");
-            }
-            await this.update(j, {
-              transmission_status:
-                result.status === "received" ? "sent" : "uncertain",
-            });
-            await this.next(j, "query");
-          } else {
-            const result = await this.deps.reception.query(token, d.clave);
-            if (
-              ["reported_accepted", "reported_rejected"].includes(result.status)
-            ) {
-              if (!result.responseXml) fail();
-              if (!(await this.deps.validateResponse(result.responseXml)).valid)
-                fail();
-              const totals = d.snapshot.totals;
-              const units = (s: string) => {
-                const [a, b = ""] = s.split(".");
-                return BigInt(a) * 100000n + BigInt(b.padEnd(5, "0"));
-              };
-              const tax = units(totals.tax) - units(totals.exonerations);
-              const taxText = `${tax / 100000n}.${(tax % 100000n).toString().padStart(5, "0")}`;
-              const verified = this.deps.verify(
-                result.responseXml,
+        await this.deps.tokens.withAccess(
+          access,
+          async (token: string) => {
+            await this.document(j);
+            if (j.kind === "transmit") {
+              if (d.transmission_status !== "queued") fail();
+              await this.update(j, { transmission_status: "uncertain" });
+              const s = d.snapshot;
+              const identity = (x: any) => ({
+                tipoIdentificacion: x.identification_type,
+                numeroIdentificacion: x.identification,
+              });
+              const result = await this.deps.reception.submit(
+                token,
                 {
                   clave: d.clave,
+                  fecha: this.input(d).issued_at,
+                  emisor: identity(s.issuer),
+                  ...(s.receiver.identification
+                    ? { receptor: identity(s.receiver) }
+                    : {}),
+                  comprobanteXml: xml!.toString(),
+                },
+                d.environment,
+              );
+              if (
+                result.status === "rejected_request" ||
+                result.status === "authentication_failed"
+              ) {
+                await this.update(j, {
+                  transmission_status: "technical_error",
+                });
+                throw Error("SUBMISSION_REJECTED");
+              }
+              await this.update(j, {
+                transmission_status:
+                  result.status === "received" ? "sent" : "uncertain",
+              });
+              await this.next(j, "query");
+            } else {
+              const context = {
+                tenantId: j.tenant_id,
+                environment: d.environment,
+                credentialVersion: d.credential_version,
+              };
+              const result = await this.deps.reception.query(
+                token,
+                d.clave,
+                d.environment,
+                {
+                  tenantId: j.tenant_id,
+                  credentialVersion: d.credential_version,
+                },
+              );
+              if (
+                ["reported_accepted", "reported_rejected"].includes(
+                  result.status,
+                )
+              ) {
+                if (!result.responseXml) fail();
+                // The official-API verifier performs this same full pinned XSD check.
+                if (
+                  policy === "pinned_certificate" &&
+                  !(await this.deps.validateResponse(result.responseXml)).valid
+                )
+                  fail();
+                const totals = d.snapshot.totals;
+                const units = (s: string) => {
+                  const [a, b = ""] = s.split(".");
+                  return BigInt(a) * 100000n + BigInt(b.padEnd(5, "0"));
+                };
+                const tax = units(totals.tax) - units(totals.exonerations);
+                const taxText = `${tax / 100000n}.${(tax % 100000n).toString().padStart(5, "0")}`;
+                const expected = {
+                  clave: d.clave,
                   issuerIdentification: d.snapshot.issuer.identification,
+                  issuerIdentificationType:
+                    d.snapshot.issuer.identification_type,
                   receiverIdentification: d.snapshot.receiver.identification,
+                  receiverIdentificationType:
+                    d.snapshot.receiver.identification_type,
                   total: totals.total,
                   tax: taxText,
-                },
-                pins,
-              );
-              const status =
-                result.status === "reported_accepted" ? "accepted" : "rejected";
-              if (verified.status !== status) fail();
-              await this.artifact(
-                j,
-                "hacienda_response",
-                Buffer.from(result.responseXml),
-              );
-              await this.update(j, {
-                hacienda_status: status,
-                transmission_status: "sent",
-              });
-              if (status === "accepted") await this.next(j, "pdf");
-            } else if (result.status === "not_found") {
-              throw Error("MANUAL_RECONCILIATION_REQUIRED");
-            } else {
-              if (result.status === "pending")
-                await this.update(j, { transmission_status: "processing" });
-              throw Error("QUERY_RETRY");
+                };
+                const verified =
+                  policy === "official_api"
+                    ? await this.deps.verifyOfficial(result, expected, context)
+                    : this.deps.verify(result.responseXml, expected, pins);
+                const status =
+                  result.status === "reported_accepted"
+                    ? "accepted"
+                    : "rejected";
+                if (verified.status !== status) fail();
+                await this.artifact(
+                  j,
+                  "hacienda_response",
+                  Buffer.from(result.responseXml),
+                );
+                if (policy === "official_api")
+                  await this.observeResponse(
+                    j,
+                    hash(Buffer.from(result.responseXml)),
+                    this.deps.readEvidence(result, context),
+                  );
+                await this.update(j, {
+                  hacienda_status: status,
+                  transmission_status: "sent",
+                });
+                if (status === "accepted") await this.next(j, "pdf");
+              } else if (result.status === "not_found") {
+                throw Error("MANUAL_RECONCILIATION_REQUIRED");
+              } else {
+                if (result.status === "pending")
+                  await this.update(j, { transmission_status: "processing" });
+                throw Error("QUERY_RETRY");
+              }
             }
-          }
-        });
+          },
+          d.environment,
+        );
       });
     } else if (j.kind === "pdf") {
       if (d.hacienda_status !== "accepted") fail();
@@ -451,6 +554,7 @@ export class EmissionPipeline {
           environment: c.NODE_ENV === "test" ? "test" : "production",
         });
       const result = await mail.send({
+        fiscalEnvironment: d.environment,
         invoiceId: d.email_dispatch_id
           ? `${d.id}:${d.email_dispatch_id}`
           : d.id,
@@ -478,12 +582,28 @@ export class EmissionPipeline {
   async runBatch(limit = 1): Promise<{ processed: number }> {
     if (!Number.isInteger(limit) || limit < 1 || limit > 4)
       throw Error("INVALID_CLAIM_LIMIT");
-    try {
-      this.enabled();
-    } catch {
-      return { processed: 0 };
-    }
-    const jobs: Job[] = await this.deps.jobs.claim(limit);
+    const eligible: JobTrustEligibility = {};
+    const environments = enabledEmissionEnvironments(this.config).filter(
+      (environment) => {
+        eligible[environment] = (
+          ["official_api", "pinned_certificate"] as const
+        ).filter((policy) => {
+          try {
+            this.enabled(environment, policy);
+            return true;
+          } catch {
+            return false;
+          }
+        });
+        return eligible[environment]!.length > 0;
+      },
+    );
+    if (!environments.length) return { processed: 0 };
+    const jobs: Job[] = await this.deps.jobs.claim(
+      limit,
+      environments,
+      eligible,
+    );
     for (const j of jobs) {
       try {
         await this.execute(j);
