@@ -49,6 +49,7 @@ const nav = [
   { id: "customers", name: "Clientes", icon: Users },
   { id: "catalog", name: "Productos y servicios", icon: FolderTree },
   { id: "drafts", name: "Borradores", icon: FileText },
+  { id: "invoices", name: "Facturación", icon: FileText },
   { id: "home", name: "Inicio", icon: LayoutDashboard },
   { id: "company", name: "Mi empresa", icon: Building2 },
   { id: "users", name: "Usuarios y permisos", icon: Users },
@@ -71,6 +72,7 @@ const headings: Record<string, [string, string]> = {
     "Productos y servicios",
     "Tu catálogo comercial, con precios y monedas.",
   ],
+  invoices: ["Facturación", "Prepara y revisa facturas nacionales en STAG."],
   drafts: [
     "Borradores",
     "Prepara una factura antes de su validación tributaria.",
@@ -826,11 +828,11 @@ export function App() {
               </button>
             </div>
           )}
-          {["customers", "catalog", "drafts"].includes(view) && (
+          {["customers", "catalog", "drafts", "invoices"].includes(view) && (
             <BillingWorkspace
               key={tenant + ":" + view + ":" + session.user.id}
               tenantId={tenant}
-              view={view as "customers" | "catalog" | "drafts"}
+              view={view as "customers" | "catalog" | "drafts" | "invoices"}
               permissions={overview?.permissions ?? []}
             />
           )}
@@ -1605,6 +1607,8 @@ export function App() {
                       "catalog.manage",
                       "invoices.read",
                       "invoices.manage",
+                      "invoices.emit",
+                      "invoices.download",
                       "hacienda.read",
                       "hacienda.credentials.manage",
                       "hacienda.connection.test",
@@ -1628,8 +1632,13 @@ export function App() {
                               "customers.manage": "Gestionar clientes",
                               "catalog.read": "Ver productos",
                               "catalog.manage": "Gestionar productos",
-                              "invoices.read": "Ver borradores",
-                              "invoices.manage": "Gestionar borradores",
+                              "invoices.read": "Ver facturas y borradores",
+                              "invoices.manage":
+                                "Preparar facturas y borradores",
+                              "invoices.emit":
+                                "Emitir facturas electrónicas (MFA)",
+                              "invoices.download":
+                                "Descargar XML, PDF y respuestas",
                               "hacienda.read": "Consultar Hacienda",
                               "hacienda.credentials.manage":
                                 "Gestionar credenciales de Hacienda",

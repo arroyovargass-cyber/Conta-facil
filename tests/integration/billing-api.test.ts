@@ -292,12 +292,63 @@ it("supports custom billing permissions without unrelated organization permissio
     "insert into public.role_permissions select tenant_id,id,'users.manage' from public.roles where tenant_id=$1 and code='billing' on conflict do nothing",
     [f.tenants[0]],
   );
-  const r = await request("/roles", "POST", {
+  const roleInput = {
     name: "Facturación personalizada",
     permissions: ["customers.manage", "catalog.read", "invoices.manage"],
-  });
-  expect(r.statusCode, r.body).toBe(200);
-  const role = r.json().item.id;
+  };
+  const denied = await request("/roles", "POST", roleInput);
+  expect(denied.statusCode, denied.body).toBe(403);
+
+  // Access administration belongs to the MFA-verified system owner, even when
+  // a billing role has been explicitly granted users.manage.
+  const owner = await workspace({ role: "admin", systemAdmin: true });
+  let role: string;
+  try {
+    await owner.pool.query(
+      "insert into public.memberships(tenant_id,user_id,scope) values($1,$2,'company')",
+      [f.tenants[0], owner.userId],
+    );
+    await owner.pool.query(
+      "insert into public.membership_roles select tenant_id,$2,id from public.roles where tenant_id=$1 and code='admin'",
+      [f.tenants[0], owner.userId],
+    );
+    const ownerSession = await owner.login(app);
+    const ownerHeaders = {
+      cookie: ownerSession.cookie,
+      origin: f.config.APP_ORIGIN,
+      "x-csrf-token": ownerSession.csrf,
+    };
+    const enrollment = await app.inject({
+      method: "POST",
+      url: "/api/auth/mfa/enroll",
+      headers: ownerHeaders,
+    });
+    expect(enrollment.statusCode, enrollment.body).toBe(200);
+    const verified = await app.inject({
+      method: "POST",
+      url: "/api/auth/mfa/verify",
+      headers: ownerHeaders,
+      payload: {
+        factorId: enrollment.json().factorId,
+        code: totp(enrollment.json().secret),
+      },
+    });
+    expect(verified.statusCode, verified.body).toBe(200);
+    const session = await app.inject({
+      url: "/api/auth/session",
+      headers: ownerHeaders,
+    });
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/companies/" + f.tenants[0] + "/roles",
+      headers: { ...ownerHeaders, "x-csrf-token": session.json().csrf },
+      payload: roleInput,
+    });
+    expect(created.statusCode, created.body).toBe(200);
+    role = created.json().item.id;
+  } finally {
+    await owner.pool.end();
+  }
   expect(
     (
       await f.pool.query(

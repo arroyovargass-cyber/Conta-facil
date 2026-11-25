@@ -23,7 +23,7 @@ const request = (
     payload,
   });
 beforeAll(async () => {
-  f = await workspace({ role: "admin" });
+  f = await workspace({ role: "admin", systemAdmin: true });
   app = await createApp(await runtimeConfig(f.config));
   ({ cookie, csrf } = await f.login(app));
   const e = await app.inject({

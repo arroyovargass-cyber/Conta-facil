@@ -24,7 +24,7 @@ def report(status, issues, **extra):
                 signatureVerification='not_run', haciendaStatus='not_sent',
                 emissionEnabled=False, **extra)
 
-def inspect_input(content):
+def inspect_input(content, expected_root=None):
     if len(content) > MAX_BYTES:
         raise InputFailure('XML_SIZE_EXCEEDED')
     try:
@@ -45,7 +45,7 @@ def inspect_input(content):
         elements += 1
         if depth > 64 or elements > 20000 or len(attrs) > 64:
             fail('XML_STRUCTURE_LIMIT_EXCEEDED')
-        if elements == 1 and name != NAMESPACE + '|FacturaElectronica':
+        if elements == 1 and name != (expected_root or NAMESPACE + '|FacturaElectronica'):
             fail('XML_DOCUMENT_UNSUPPORTED')
     def end(name):
         nonlocal depth

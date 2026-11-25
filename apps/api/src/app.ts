@@ -1,3 +1,7 @@
+import { emissionActionRoutes } from "./modules/emission-actions";
+import { emissionNumberingRoutes } from "./modules/emission-numbering";
+import { EmissionPipeline } from "./services/emission-pipeline";
+import { emissionRoutes } from "./modules/emission";
 import { companyRegistrationRoutes } from "./modules/company-registration";
 import { fiscalLookupRoutes } from "./modules/fiscal-lookups";
 import { haciendaConfigurationRoutes } from "./modules/hacienda-configuration";
@@ -32,6 +36,40 @@ export async function createApp(
       : false,
   });
   const pool = new pg.Pool(databaseOptions(config));
+  const emissionPipeline = new EmissionPipeline(pool, config);
+  let emissionWork: Promise<void> | undefined,
+    closing = false;
+  const wakeEmission = () => {
+    if (
+      closing ||
+      emissionWork ||
+      config.HACIENDA_STAG_EMISSION_ENABLED !== "true"
+    )
+      return;
+    emissionWork = (async () => {
+      await pool.query("select private.recover_uncertain_emissions()");
+      await emissionPipeline.runBatch(4);
+    })()
+      .catch(() => {
+        process.stderr.write(
+          JSON.stringify({ event: "emission_batch_failed" }) + "\n",
+        );
+      })
+      .finally(() => {
+        emissionWork = undefined;
+      });
+  };
+  app.addHook("onListen", async () => {
+    wakeEmission();
+  });
+  app.addHook("onResponse", async (request) => {
+    if (
+      request.principal &&
+      request.url.startsWith("/api/companies/") &&
+      request.url.includes("/invoices")
+    )
+      wakeEmission();
+  });
   app.addHook("onSend", async (_request, reply, payload) => {
     reply.header("Cache-Control", "no-store");
     reply.header("Vary", "Cookie, Origin");
@@ -41,6 +79,8 @@ export async function createApp(
   await app.register(helmet, { contentSecurityPolicy: false });
   app.decorate("configOrigin", config.APP_ORIGIN);
   app.addHook("onClose", async () => {
+    closing = true;
+    await emissionWork;
     await pool.end();
   });
   app.setErrorHandler((error, req, reply) => {
@@ -91,6 +131,9 @@ export async function createApp(
   customerRoutes(app, pool, auth);
   catalogRoutes(app, pool, auth);
   invoicingRoutes(app, pool, auth);
+  emissionRoutes(app, pool, auth, config);
+  emissionNumberingRoutes(app, pool, auth);
+  emissionActionRoutes(app, pool, auth);
   fiscalLookupRoutes(app, pool, auth);
   fiscalPreparationRoutes(app, pool, auth);
   documentWorkflowRoutes(app, pool, auth);
