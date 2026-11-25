@@ -1,7 +1,7 @@
 {
-  "retrieved_on": "2026-11-23",
-  "status": "uploaded-package-under-review",
-  "source_url": null,
+  "retrieved_on": "2026-11-24",
+  "status": "official-package-revision-confirmed",
+  "source_url": "https://www.hacienda.go.cr/docs/FacturaElectronica_V4.4.xsd",
   "file": "FacturaElectronica.uploaded-20261123.xsd",
   "bytes": 119689,
   "sha256": "926ba81325bc21102755bd8e4e570a63caaca086e680a877c3a6d15d6ee8a62f",
@@ -11,7 +11,12 @@
   "dependencies": [
     {
       "namespace": "http://www.w3.org/2000/09/xmldsig#",
-      "schemaLocation": "../../xmldsig-core-schema.xsd"
+      "schemaLocation": "../../xmldsig-core-schema.xsd",
+      "local_file": "xmldsig-core-schema.w3c-2002.xsd",
+      "bytes": 10293,
+      "sha256": "35cf8197da812c85e40d57891b35c94187569ed474a2dac813ce5090dafcd35c",
+      "source_url": "https://www.w3.org/TR/2002/REC-xmldsig-core-20020212/xmldsig-core-schema.xsd",
+      "mapping": "Explicit offline namespace mapping; W3C bytes, not Hacienda-hosted bytes; original relative import unavailable"
     }
   ],
   "annex": {
@@ -66,8 +71,8 @@
     "signature_max_occurs": "5",
     "reference_code_17": "annex_note_35_exclusive_to_payment_receipt"
   },
-  "runtime_use_allowed": false,
-  "last_rechecked_on": "2026-11-23",
+  "runtime_use_allowed": true,
+  "last_rechecked_on": "2026-11-24",
   "previous_snapshot": {
     "file": "FacturaElectronica.downloaded.xsd",
     "bytes": 118627,
@@ -75,5 +80,5 @@
     "source_url": "https://www.hacienda.go.cr/docs/FacturaElectronica_V4.4.xsd.xml",
     "status": "official-download-revision-unconfirmed"
   },
-  "source_origin": "user_upload_from_displayed_hacienda_downloads"
+  "source_origin": "anonymous_official_download_byte_identical_to_upload"
 }

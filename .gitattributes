@@ -1,0 +1,6 @@
+# Preserve cryptographic checksums of the reviewed official package on all OSes.
+docs/reference/hacienda/v4.4/** -text
+docs/reference/hacienda/v4.4/*.xsd -whitespace
+# Vendored font and verbatim redistribution license.
+apps/api/assets/fonts/* -text
+apps/api/assets/fonts/LICENSE -whitespace

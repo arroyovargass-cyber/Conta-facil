@@ -26,7 +26,7 @@ const request = (
     payload,
   });
 beforeAll(async () => {
-  f = await workspace({ role: "admin", companies: 2 });
+  f = await workspace({ role: "admin", companies: 2, systemAdmin: true });
   const guardian = await workspace({ role: "admin" });
   await f.pool.query(
     "insert into public.memberships(tenant_id,user_id,scope) values($1,$2,'company')",
@@ -277,6 +277,11 @@ it("rejects a foreign destination and keeps historical tasks in their original t
   expect(repeat.json()).toEqual({ assigned: true, id: task });
 });
 it("lets destination managers review the task without reading origin documents or Hacienda", async () => {
+  // Subsequent cases exercise ordinary departmental actors, without owner authority.
+  await f.pool.query(
+    "delete from private.platform_operators where user_id=$1",
+    [f.userId],
+  );
   const target = (
     await f.pool.query(
       "select target_department_id from public.document_work_items where id=$1",

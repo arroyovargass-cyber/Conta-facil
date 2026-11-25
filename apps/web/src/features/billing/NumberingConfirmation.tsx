@@ -1,0 +1,185 @@
+import React, { useEffect, useRef, useState } from "react";
+import { apiRequest, post } from "../../api/client";
+import { Field, useAlive } from "./common";
+
+type NumberingItem = {
+  branch_code: string;
+  terminal_code: string;
+  last_value: string;
+  legacy_floor: string;
+  confirmed_at: string | null;
+};
+type NumberingOptions = { canConfirm: boolean; items: NumberingItem[] };
+
+export function NumberingConfirmation(props: {
+  base: string;
+  onConfirmed?: () => void;
+}) {
+  return <ConfirmationForm key={props.base} {...props} />;
+}
+
+function ConfirmationForm({
+  base,
+  onConfirmed,
+}: {
+  base: string;
+  onConfirmed?: () => void;
+}) {
+  const alive = useAlive();
+  const pending = useRef(false);
+  const [options, setOptions] = useState<NumberingOptions | null>(null);
+  const [selection, setSelection] = useState("");
+  const [value, setValue] = useState("");
+  const [confirmed, setConfirmed] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    const controller = new AbortController();
+    apiRequest<NumberingOptions>(base + "/invoices/numbering-options", {
+      signal: controller.signal,
+    })
+      .then((data) => {
+        if (!cancelled && alive.current) setOptions(data);
+      })
+      .catch(() => {
+        // Do not expose an owner-only form when permission cannot be verified.
+      });
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [base, alive]);
+  const item = options?.items.find(
+    (row) => row.branch_code + "/" + row.terminal_code === selection,
+  );
+  const valid = Boolean(
+    item &&
+    /^\d{1,10}$/.test(value) &&
+    /^\d+$/.test(item.last_value) &&
+    /^\d+$/.test(item.legacy_floor) &&
+    BigInt(value) >= BigInt(item.last_value) &&
+    BigInt(value) >= BigInt(item.legacy_floor),
+  );
+  async function submit(event: React.FormEvent) {
+    event.preventDefault();
+    if (
+      pending.current ||
+      !options?.canConfirm ||
+      !item ||
+      !confirmed ||
+      !valid
+    )
+      return;
+    pending.current = true;
+    setBusy(true);
+    setError("");
+    setSuccess(false);
+    try {
+      await post(base + "/invoices/numbering", {
+        branch_code: item.branch_code,
+        terminal_code: item.terminal_code,
+        starting_value: value,
+      });
+      if (!alive.current) return;
+      setSuccess(true);
+      setConfirmed(false);
+      onConfirmed?.();
+      const data = await apiRequest<NumberingOptions>(
+        base + "/invoices/numbering-options",
+      );
+      if (alive.current) setOptions(data);
+    } catch (e: any) {
+      if (alive.current) setError(e.message);
+    } finally {
+      pending.current = false;
+      if (alive.current) setBusy(false);
+    }
+  }
+  if (!options?.canConfirm) return null;
+  return (
+    <details>
+      <summary>Numeración STAG</summary>
+      <form onSubmit={submit}>
+        <p>
+          Confirma el último consecutivo utilizado en el ambiente de pruebas.
+        </p>
+        <fieldset disabled={busy}>
+          <label className="field">
+            Sucursal / terminal
+            <select
+              required
+              value={selection}
+              onChange={(event) => {
+                setSelection(event.target.value);
+                setValue("");
+                setConfirmed(false);
+                setSuccess(false);
+                setError("");
+              }}
+            >
+              <option value="">Selecciona…</option>
+              {options.items.map((row) => {
+                const key = row.branch_code + "/" + row.terminal_code;
+                return (
+                  <option key={key} value={key}>
+                    {row.branch_code} / {row.terminal_code}
+                  </option>
+                );
+              })}
+            </select>
+          </label>
+          {item && (
+            <>
+              <p>Último consecutivo registrado: {item.last_value}</p>
+              <p>Piso histórico: {item.legacy_floor}</p>
+              <Field
+                label="Último consecutivo confirmado"
+                value={value}
+                required
+                maxLength={10}
+                onChange={(next) => {
+                  setValue(next);
+                  setConfirmed(false);
+                  setSuccess(false);
+                }}
+              />
+              {value && !valid && (
+                <p role="alert">
+                  Ingresa hasta 10 dígitos, sin disminuir el último consecutivo
+                  ni el piso histórico.
+                </p>
+              )}
+            </>
+          )}
+          <label>
+            <input
+              type="checkbox"
+              checked={confirmed}
+              onChange={(event) => setConfirmed(event.target.checked)}
+            />
+            Confirmo que esta numeración corresponde al ambiente de pruebas y
+            que el último consecutivo es correcto
+          </label>
+          <button
+            className="button primary"
+            disabled={busy || !valid || !confirmed}
+          >
+            {busy ? "Confirmando…" : "Confirmar numeración de pruebas"}
+          </button>
+        </fieldset>
+      </form>
+      {error && (
+        <p className="alert" role="alert">
+          {error}
+        </p>
+      )}
+      {success && (
+        <p role="status">
+          Numeración de pruebas confirmada. Esto no activa el envío a Hacienda.
+        </p>
+      )}
+    </details>
+  );
+}

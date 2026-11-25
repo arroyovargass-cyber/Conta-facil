@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { apiRequest } from "../../api/client";
 import { Customers } from "./Customers";
 import { Catalog } from "./Catalog";
+import { Invoices } from "./Invoices";
 import { Drafts } from "./Drafts";
 import type { Row } from "./common";
 import "./billing.css";
@@ -10,7 +11,7 @@ export function BillingWorkspace({
   view,
 }: {
   tenantId: string;
-  view: "customers" | "catalog" | "drafts";
+  view: "customers" | "catalog" | "drafts" | "invoices";
   permissions: string[];
 }) {
   const base = "/companies/" + tenantId,
@@ -50,5 +51,7 @@ export function BillingWorkspace({
         canManage={options.permissions.includes("catalog.manage")}
       />
     );
+  if (view === "invoices")
+    return <Invoices key={base} base={base} options={options} />;
   return <Drafts base={base} options={options} />;
 }

@@ -167,7 +167,7 @@ export function invoicingRoutes(
     return scoped(pool, p.claims, async (db) => {
       const departments = (
         await db.query(
-          "select id,name,active,private.has_access(tenant_id,'invoices.manage',id) can_manage,private.has_access(tenant_id,'document_workflow.assign',id) can_assign from public.departments where tenant_id=$1 and private.has_access(tenant_id,'invoices.read',id) order by name,id",
+          "select id,name,active,private.has_access(tenant_id,'invoices.manage',id) can_manage,private.has_access(tenant_id,'document_workflow.assign',id) can_assign,private.has_access(tenant_id,'invoices.emit',id) can_emit,private.has_access(tenant_id,'invoices.download',id) can_download from public.departments where tenant_id=$1 and private.has_access(tenant_id,'invoices.read',id) order by name,id",
           [tenantId],
         )
       ).rows;
@@ -192,7 +192,7 @@ export function invoicingRoutes(
       page(
         (
           await db.query(
-            "select id,customer_snapshot,department_id,currency,status,archived_at,version,created_at from public.invoice_drafts where tenant_id=$1 and (customer_snapshot->>'name' ilike $2 or id::text ilike $2) and ($3::boolean is null or (archived_at is not null)=$3) order by created_at desc,id limit 51 offset $4",
+            "select id,document_type,customer_snapshot,department_id,currency,status,archived_at,version,created_at from public.invoice_drafts where tenant_id=$1 and (customer_snapshot->>'name' ilike $2 or id::text ilike $2) and ($3::boolean is null or (archived_at is not null)=$3) order by created_at desc,id limit 51 offset $4",
             [tenantId, pattern(q.search), q.archived ?? null, q.cursor],
           )
         ).rows,

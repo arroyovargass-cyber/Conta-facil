@@ -1,6 +1,6 @@
 # Facturación electrónica nacional: emisión y entrega al cliente
 
-Estado: alcance elegido por el usuario; diseño propuesto para aprobación. No se implementa ni se anuncia emisión operativa con este documento.
+Estado: diseño aprobado por el usuario. Implementación del circuito de pruebas integrada; la emisión real permanece sujeta a las dependencias oficiales y no se declara operativa por este documento.
 
 ## Objetivo y enfoque elegido
 
