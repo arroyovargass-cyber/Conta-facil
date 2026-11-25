@@ -42,7 +42,7 @@ async function login(
 for (const owner of [true, false]) {
   test(
     owner
-      ? "owner explicitly confirms STAG numbering"
+      ? "owner explicitly confirms test numbering"
       : "non-owner cannot see numbering confirmation",
     async ({ page }) => {
       const f = await workspace({
@@ -54,9 +54,13 @@ for (const owner of [true, false]) {
         let payload: unknown;
         let gets = 0;
         await page.route(
-          "**/api/companies/*/invoices/numbering-options",
+          "**/api/companies/*/invoices/numbering-options?*",
           async (route) => {
             gets++;
+            const environment = new URL(route.request().url()).searchParams.get(
+              "environment",
+            );
+            expect(["test", "production"]).toContain(environment);
             await route.fulfill({
               json: {
                 canConfirm: owner,
@@ -64,7 +68,7 @@ for (const owner of [true, false]) {
                   {
                     branch_code: "001",
                     terminal_code: "00001",
-                    last_value: "120",
+                    last_value: environment === "production" ? "400" : "120",
                     legacy_floor: "100",
                     confirmed_at: null,
                   },
@@ -82,7 +86,9 @@ for (const owner of [true, false]) {
         );
         await login(page, f);
         await nav(page, "Facturación");
-        const summary = page.getByText("Numeración STAG", { exact: true });
+        const summary = page.getByText("Numeración de pruebas", {
+          exact: true,
+        });
         await expect.poll(() => gets).toBeGreaterThan(0);
         if (!owner) {
           await expect(summary).toHaveCount(0);
@@ -131,11 +137,49 @@ for (const owner of [true, false]) {
           ),
         ).toBeVisible();
         expect(payload).toEqual({
+          environment: "test",
           branch_code: "001",
           terminal_code: "00001",
           starting_value: "125",
         });
         await expect.poll(() => gets).toBeGreaterThan(1);
+        await page
+          .getByRole("button", { name: "Producción", exact: true })
+          .click();
+        await page
+          .getByText("Numeración de producción", { exact: true })
+          .click();
+        await expect(select).toHaveValue("");
+        await select.selectOption("001/00001");
+        await expect(value).toHaveValue("");
+        await expect(
+          page.getByText("Último consecutivo registrado: 400", { exact: true }),
+        ).toBeVisible();
+        const productionSubmit = page.getByRole("button", {
+          name: "Confirmar numeración de producción",
+          exact: true,
+        });
+        await value.fill("405");
+        await expect(productionSubmit).toBeDisabled();
+        await page
+          .getByRole("checkbox", {
+            name: "Confirmo que esta numeración corresponde al ambiente de producción y que el último consecutivo es correcto",
+            exact: true,
+          })
+          .check();
+        await productionSubmit.click();
+        await expect(
+          page.getByText(
+            "Numeración de producción confirmada. Esto no activa el envío a Hacienda.",
+            { exact: true },
+          ),
+        ).toBeVisible();
+        expect(payload).toEqual({
+          environment: "production",
+          branch_code: "001",
+          terminal_code: "00001",
+          starting_value: "405",
+        });
       } finally {
         await f.pool.end();
       }

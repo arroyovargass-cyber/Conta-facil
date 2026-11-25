@@ -1,5 +1,5 @@
-const endpoint =
-  "https://idp.comprobanteselectronicos.go.cr/auth/realms/rut-stag/protocol/openid-connect/";
+import type { HaciendaEnvironment } from "../../../../packages/domain/src/hacienda-environment";
+import { haciendaProfile } from "./hacienda-environments";
 export class TokenSessionError extends Error {
   constructor(readonly code: "AUTHENTICATION_FAILED" | "SERVICE_UNAVAILABLE") {
     super(code);
@@ -9,18 +9,21 @@ export class TokenSessionError extends Error {
 export class HaciendaTokenSession {
   private transport: typeof fetch;
   private timeout: number;
+  #testOverrides: boolean;
   constructor(options: {
     environment: string;
     transport?: typeof fetch;
     timeoutMs?: number;
   }) {
     if (
-      options.environment !== "test" &&
+      (options.environment !== "test" || process.env.NODE_ENV !== "test") &&
       (options.transport !== undefined || options.timeoutMs !== undefined)
     )
       throw Error("Transport overrides are test-only");
     this.transport = options.transport ?? fetch;
     this.timeout = options.timeoutMs ?? 10000;
+    this.#testOverrides =
+      options.transport !== undefined || options.timeoutMs !== undefined;
     if (
       !Number.isFinite(this.timeout) ||
       this.timeout <= 0 ||
@@ -52,13 +55,20 @@ export class HaciendaTokenSession {
   private async post(
     path: "token" | "logout",
     body: URLSearchParams,
+    environment: HaciendaEnvironment,
   ): Promise<{ status: number; text: string }> {
+    if (
+      process.env.NODE_TLS_REJECT_UNAUTHORIZED === "0" ||
+      (this.#testOverrides && process.env.NODE_ENV !== "test")
+    )
+      throw new TokenSessionError("SERVICE_UNAVAILABLE");
+    const profile = haciendaProfile(environment);
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
       return await Promise.race([
         (async () => {
-          const response = await this.transport(endpoint + path, {
+          const response = await this.transport(profile.idpBase + path, {
             method: "POST",
             headers: {
               "content-type": "application/x-www-form-urlencoded",
@@ -86,7 +96,9 @@ export class HaciendaTokenSession {
   async withAccess<T>(
     access: { username: string; password: string },
     use: (token: string) => Promise<T>,
+    environment: HaciendaEnvironment = "test",
   ): Promise<T> {
+    const profile = haciendaProfile(environment);
     let accessToken = "",
       refreshToken = "";
     try {
@@ -94,10 +106,11 @@ export class HaciendaTokenSession {
         "token",
         new URLSearchParams({
           grant_type: "password",
-          client_id: "api-stag",
+          client_id: profile.clientId,
           username: access.username,
           password: access.password,
         }),
+        environment,
       );
       let data: unknown;
       try {
@@ -133,9 +146,10 @@ export class HaciendaTokenSession {
           await this.post(
             "logout",
             new URLSearchParams({
-              client_id: "api-stag",
+              client_id: profile.clientId,
               refresh_token: refreshToken,
             }),
+            environment,
           );
       } catch {
         /* Best-effort closure must preserve the caller's result or error. */

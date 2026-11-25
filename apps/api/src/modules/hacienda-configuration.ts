@@ -2,6 +2,7 @@ import type { IdpClient } from "../services/hacienda-idp";
 import type { FastifyInstance } from "fastify";
 import type pg from "pg";
 import { z } from "zod";
+import { haciendaEnvironmentInput } from "../../../../packages/domain/src/hacienda-environment";
 import type { AppConfig } from "../config";
 import type { identity } from "./identity";
 import { HttpError } from "../db";
@@ -9,8 +10,23 @@ import { CredentialStore } from "../services/credential-store";
 const params = z.object({ tenantId: z.uuid() }).strict();
 const revision = z
   .object({
-    environment: z.literal("test"),
+    environment: haciendaEnvironmentInput,
     expected_revision: z.number().int().min(0).max(2147483646),
+  })
+  .strict();
+const query = z.object({ environment: haciendaEnvironmentInput }).strict();
+const enrollment = revision
+  .extend({
+    confirmed: z.literal(true),
+    evidence_reference: z
+      .string()
+      .refine(
+        (value) => !/[\x00-\x1f\x7f]/.test(value),
+        "La referencia no puede contener caracteres de control.",
+      )
+      .trim()
+      .min(1)
+      .max(500),
   })
   .strict();
 const secret = z.string().min(1).max(1024);
@@ -36,8 +52,9 @@ export function haciendaConfigurationRoutes(
     base = "/api/companies/:tenantId/hacienda";
   app.get(base, async (req) => {
     const p = await auth.authenticate(req),
-      { tenantId } = params.parse(req.params);
-    return store.metadata(p.claims, tenantId);
+      { tenantId } = params.parse(req.params),
+      { environment } = query.parse(req.query);
+    return store.metadata(p.claims, tenantId, environment);
   });
   app.post(
     base + "/credentials",
@@ -69,14 +86,32 @@ export function haciendaConfigurationRoutes(
     const input = revision.parse(req.body);
     await auth.limit("hacienda:credentials:tenant:" + tenantId, 5);
     await auth.limit("hacienda:credentials:user:" + p.claims.sub, 10);
-    return store.deactivate(p.claims, tenantId, input.expected_revision);
+    return store.deactivate(
+      p.claims,
+      tenantId,
+      input.expected_revision,
+      input.environment,
+    );
+  });
+  app.post(base + "/credentials/enroll", async (req) => {
+    const p = req.principal!,
+      { tenantId } = params.parse(req.params);
+    await store.authorize(p.claims, tenantId, "hacienda.credentials.manage");
+    const input = enrollment.parse(req.body);
+    await auth.limit("hacienda:credentials:tenant:" + tenantId, 5);
+    await auth.limit("hacienda:credentials:user:" + p.claims.sub, 10);
+    return store.enroll(p.claims, tenantId, input);
   });
   app.post(base + "/connection-test", async (req) => {
     const p = req.principal!,
       { tenantId } = params.parse(req.params);
     await store.authorize(p.claims, tenantId, "hacienda.connection.test");
     const input = revision.parse(req.body);
-    if (config.HACIENDA_STAG_PROBE_ENABLED !== "true")
+    if (
+      (input.environment === "test"
+        ? config.HACIENDA_STAG_PROBE_ENABLED
+        : config.HACIENDA_PRODUCTION_PROBE_ENABLED) !== "true"
+    )
       throw new HttpError(
         503,
         "La prueba externa de Hacienda está pendiente de habilitación.",
@@ -88,6 +123,7 @@ export function haciendaConfigurationRoutes(
       tenantId,
       input.expected_revision,
       idp,
+      input.environment,
     );
   });
 }

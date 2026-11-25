@@ -3,6 +3,7 @@ import type pg from "pg";
 import { z } from "zod";
 import type { identity } from "./identity";
 import { HttpError, requirePermission } from "../db";
+import { haciendaEnvironmentInput } from "../../../../packages/domain/src/hacienda-environment";
 const params = z.object({ tenantId: z.uuid() });
 export function emissionNumberingRoutes(
   app: FastifyInstance,
@@ -39,21 +40,25 @@ export function emissionNumberingRoutes(
     ).rows[0].allowed;
   app.get(base + "/numbering-options", async (req) => {
     const p = await auth.authenticate(req),
-      { tenantId } = params.parse(req.params);
+      { tenantId } = params.parse(req.params),
+      { environment } = z
+        .object({ environment: haciendaEnvironmentInput })
+        .strict()
+        .parse(req.query ?? {});
     return transaction(p.claims, async (db) => {
       if (!(await allowed(db, tenantId)))
-        return { canConfirm: false, items: [] };
+        return { canConfirm: false, environment, items: [] };
       const items = (
         await db.query(
           `select b.code branch_code,t.code terminal_code,coalesce(s.last_value,0)::text last_value,
     coalesce((select max(d.last_value) from public.document_sequences d where d.tenant_id=b.tenant_id and d.branch_id=b.id and d.terminal_id=t.id and d.document_type='FE'),0)::text legacy_floor,s.confirmed_at
     from public.branches b join public.terminals t on t.tenant_id=b.tenant_id and t.branch_id=b.id
-    left join private.emission_sequences s on s.tenant_id=b.tenant_id and s.environment='test' and s.branch_code=b.code and s.terminal_code=t.code
+    left join private.emission_sequences s on s.tenant_id=b.tenant_id and s.environment=$2 and s.branch_code=b.code and s.terminal_code=t.code
     where b.tenant_id=$1 and b.active and t.active order by b.code,t.code limit 101`,
-          [tenantId],
+          [tenantId, environment],
         )
       ).rows;
-      return { canConfirm: true, items: items.slice(0, 100) };
+      return { canConfirm: true, environment, items: items.slice(0, 100) };
     });
   });
   app.post(base + "/numbering", async (req) => {
@@ -69,6 +74,7 @@ export function emissionNumberingRoutes(
             .regex(/^[0-9]{5}$/)
             .refine((s) => s !== "00000"),
           starting_value: z.string().regex(/^(0|[1-9][0-9]{0,9})$/),
+          environment: haciendaEnvironmentInput,
         })
         .strict()
         .parse(req.body);
@@ -81,12 +87,13 @@ export function emissionNumberingRoutes(
       await requirePermission(db, tenantId, "tax.manage");
       try {
         await db.query(
-          "select private.confirm_emission_numbering($1,$2,$3,$4::numeric)",
+          "select private.confirm_emission_numbering($1,$2,$3,$4::numeric,$5::text)",
           [
             tenantId,
             input.branch_code,
             input.terminal_code,
             input.starting_value,
+            input.environment,
           ],
         );
       } catch (e) {
@@ -105,7 +112,7 @@ export function emissionNumberingRoutes(
         throw e;
       }
       await requirePermission(db, tenantId, "tax.manage");
-      return { confirmed: true, environment: "test" };
+      return { confirmed: true, environment: input.environment };
     });
   });
 }

@@ -1,6 +1,9 @@
 import { SaxesParser } from "saxes";
-const endpoint =
-  "https://api.comprobanteselectronicos.go.cr/recepcion-sandbox/v1/recepcion";
+import { createHash } from "node:crypto";
+import { request as httpsRequest } from "node:https";
+import { checkServerIdentity, TLSSocket } from "node:tls";
+import type { HaciendaEnvironment } from "../../../../packages/domain/src/hacienda-environment";
+import { haciendaProfile } from "./hacienda-environments";
 type Identity = { tipoIdentificacion: string; numeroIdentificacion: string };
 export type ReceptionInput = {
   clave: string;
@@ -30,6 +33,92 @@ export type QueryResult = {
   reportedState?: string;
   retryAfterSeconds?: number;
 };
+export type HaciendaResponseContext = {
+  tenantId: string;
+  credentialVersion: number;
+  environment: HaciendaEnvironment;
+};
+export type HaciendaResponseObservation = Readonly<{
+  method: "official_api";
+  tenantId: string;
+  credentialVersion: number;
+  environment: HaciendaEnvironment;
+  profile: HaciendaEnvironment;
+  clave: string;
+  responseSha256: string;
+  rawJsonSha256: string;
+  observedAt: string;
+  endpoint: string;
+  httpStatus: 200;
+  policyVersion: "official-api-v1";
+  synthetic: boolean;
+}>;
+const observations = new WeakMap<
+  QueryResult,
+  {
+    snapshot: string;
+    evidence: HaciendaResponseObservation;
+  }
+>();
+const hash = (value: string) =>
+  createHash("sha256").update(value, "utf8").digest("hex");
+function querySnapshot(result: QueryResult): string {
+  // Never invoke a caller-added toJSON/getter when testing a capability's bytes.
+  const fields = [
+    "status",
+    "reportedState",
+    "responseXml",
+    "retryAfterSeconds",
+  ] as const;
+  const values = fields.map((name) => {
+    const descriptor = Object.getOwnPropertyDescriptor(result, name);
+    if (descriptor && !("value" in descriptor))
+      throw Error("Changed response field");
+    const value: unknown = descriptor?.value;
+    if (
+      value !== undefined &&
+      typeof value !== (name === "retryAfterSeconds" ? "number" : "string")
+    )
+      throw Error("Changed response field");
+    return value ?? null;
+  });
+  return JSON.stringify(values);
+}
+function validContext(
+  context: Omit<HaciendaResponseContext, "environment"> | undefined,
+): context is Omit<HaciendaResponseContext, "environment"> {
+  return (
+    !!context &&
+    typeof context.tenantId === "string" &&
+    context.tenantId.length > 0 &&
+    context.tenantId.length <= 128 &&
+    Number.isSafeInteger(context.credentialVersion) &&
+    context.credentialVersion > 0
+  );
+}
+/** Read-only capability lookup. Serialized fields or copies cannot create an observation. */
+export function readHaciendaResponseObservation(
+  result: QueryResult,
+  context: HaciendaResponseContext,
+): HaciendaResponseObservation | undefined {
+  const record = observations.get(result);
+  if (
+    !record ||
+    !validContext(context) ||
+    record.evidence.tenantId !== context.tenantId ||
+    record.evidence.environment !== context.environment ||
+    record.evidence.credentialVersion !== context.credentialVersion ||
+    (record.evidence.synthetic && process.env.NODE_ENV !== "test") ||
+    process.env.NODE_TLS_REJECT_UNAUTHORIZED === "0"
+  )
+    return;
+  try {
+    if (record.snapshot !== querySnapshot(result)) return;
+    return record.evidence;
+  } catch {
+    return;
+  }
+}
 function safeXml(bytes: Buffer) {
   const xml = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
   if (/<!DOCTYPE|<!ENTITY/i.test(xml)) throw Error("Unsafe XML");
@@ -64,20 +153,20 @@ function safeXml(bytes: Buffer) {
   return xml;
 }
 export class HaciendaReception {
-  private fetcher: typeof fetch;
-  private timeoutMs: number;
+  #fetcher: typeof fetch | undefined;
+  #timeoutMs: number;
   constructor(options: { fetcher?: typeof fetch; timeoutMs?: number } = {}) {
     if (
       process.env.NODE_ENV !== "test" &&
       (options.fetcher !== undefined || options.timeoutMs !== undefined)
     )
       throw Error("Transport overrides are test-only");
-    this.fetcher = options.fetcher ?? fetch;
-    this.timeoutMs = options.timeoutMs ?? 10000;
+    this.#fetcher = options.fetcher;
+    this.#timeoutMs = options.timeoutMs ?? 10000;
     if (
-      !Number.isFinite(this.timeoutMs) ||
-      this.timeoutMs <= 0 ||
-      this.timeoutMs > 60000
+      !Number.isFinite(this.#timeoutMs) ||
+      this.#timeoutMs <= 0 ||
+      this.#timeoutMs > 60000
     )
       throw Error("Invalid timeout");
   }
@@ -102,18 +191,89 @@ export class HaciendaReception {
       reader.releaseLock();
     }
   }
-  private async request(
+  async #directRequest(
+    url: URL,
+    init: RequestInit,
+    signal: AbortSignal,
+  ): Promise<{ response: Response; text: string }> {
+    return new Promise((resolve, reject) => {
+      const request = httpsRequest(
+        url,
+        {
+          method: init.method,
+          headers: init.headers as Record<string, string>,
+          signal,
+          // Do not inherit a replaceable global fetch dispatcher or HTTPS agent.
+          agent: false,
+          rejectUnauthorized: true,
+          checkServerIdentity,
+          servername: url.hostname,
+        },
+        (response) => {
+          void (async () => {
+            try {
+              const socket = response.socket;
+              if (
+                !(socket instanceof TLSSocket) ||
+                !socket.authorized ||
+                checkServerIdentity(url.hostname, socket.getPeerCertificate())
+              )
+                throw Error("Unverified HTTPS peer");
+              const chunks: Buffer[] = [];
+              let size = 0;
+              for await (const chunk of response) {
+                const bytes = Buffer.from(chunk);
+                size += bytes.length;
+                if (size > 2800000) throw Error("Response size");
+                chunks.push(bytes);
+              }
+              const headers = new Headers();
+              for (const [name, value] of Object.entries(response.headers))
+                if (value !== undefined)
+                  headers.set(
+                    name,
+                    Array.isArray(value) ? value.join(", ") : value,
+                  );
+              resolve({
+                response: new Response(null, {
+                  status: response.statusCode,
+                  headers,
+                }),
+                text: new TextDecoder("utf-8", { fatal: true }).decode(
+                  Buffer.concat(chunks),
+                ),
+              });
+            } catch (error) {
+              response.destroy();
+              reject(error);
+            }
+          })();
+        },
+      );
+      request.on("error", reject);
+      request.end(init.body === undefined ? undefined : String(init.body));
+    });
+  }
+  async #request(
     token: string,
     path: string,
+    environment: HaciendaEnvironment,
     body?: unknown,
   ): Promise<{ response: Response; text: string } | null> {
+    const profile = haciendaProfile(environment);
     if (!token || /[\r\n]/.test(token)) return null;
+    if (
+      process.env.NODE_TLS_REJECT_UNAUTHORIZED === "0" ||
+      (this.#fetcher && process.env.NODE_ENV !== "test")
+    )
+      return null;
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
       return await Promise.race([
         (async () => {
-          const response = await this.fetcher(endpoint + path, {
+          const url = new URL(profile.receptionBase + "recepcion" + path);
+          const init: RequestInit = {
             method: body === undefined ? "GET" : "POST",
             headers: {
               authorization: "Bearer " + token,
@@ -125,14 +285,17 @@ export class HaciendaReception {
             ...(body === undefined ? {} : { body: JSON.stringify(body) }),
             redirect: "error",
             signal: controller.signal,
-          });
+          };
+          if (!this.#fetcher)
+            return this.#directRequest(url, init, controller.signal);
+          const response = await this.#fetcher(url.href, init);
           return { response, text: await this.body(response) };
         })(),
         new Promise<null>((resolve) => {
           timer = setTimeout(() => {
             controller.abort();
             resolve(null);
-          }, this.timeoutMs);
+          }, this.#timeoutMs);
         }),
       ]);
     } catch {
@@ -166,6 +329,7 @@ export class HaciendaReception {
   async submit(
     token: string,
     input: ReceptionInput,
+    environment: HaciendaEnvironment = "test",
   ): Promise<SubmissionResult> {
     const identity = (i: Identity) =>
       i &&
@@ -193,7 +357,7 @@ export class HaciendaReception {
       tipoIdentificacion: i.tipoIdentificacion,
       numeroIdentificacion: i.numeroIdentificacion,
     });
-    const result = await this.request(token, "", {
+    const result = await this.#request(token, "", environment, {
       clave: input.clave,
       fecha: input.fecha,
       emisor: pick(input.emisor),
@@ -213,9 +377,20 @@ export class HaciendaReception {
       }
     );
   }
-  async query(token: string, clave: string): Promise<QueryResult> {
+  async query(
+    token: string,
+    clave: string,
+    environment: HaciendaEnvironment = "test",
+    context?: Omit<HaciendaResponseContext, "environment">,
+  ): Promise<QueryResult> {
     if (!/^\d{50}$/.test(clave)) return { status: "uncertain" };
-    const result = await this.request(token, "/" + clave);
+    const binding = validContext(context)
+      ? {
+          tenantId: context.tenantId,
+          credentialVersion: context.credentialVersion,
+        }
+      : undefined;
+    const result = await this.#request(token, "/" + clave, environment);
     if (!result) return { status: "uncertain" };
     const { response, text } = result;
     const failure = this.failure(response);
@@ -257,11 +432,36 @@ export class HaciendaReception {
           throw Error("Base64");
         responseXml = safeXml(bytes);
       }
-      return {
+      const query: QueryResult = {
         status: states[reportedState],
         reportedState,
         ...(responseXml === undefined ? {} : { responseXml }),
       };
+      if (
+        responseXml !== undefined &&
+        binding &&
+        process.env.NODE_TLS_REJECT_UNAUTHORIZED !== "0" &&
+        (!this.#fetcher || process.env.NODE_ENV === "test")
+      ) {
+        const evidence = Object.freeze({
+          method: "official_api" as const,
+          tenantId: binding.tenantId,
+          credentialVersion: binding.credentialVersion,
+          environment,
+          profile: environment,
+          clave,
+          responseSha256: hash(responseXml),
+          rawJsonSha256: hash(text),
+          observedAt: new Date().toISOString(),
+          endpoint:
+            haciendaProfile(environment).receptionBase + "recepcion/" + clave,
+          httpStatus: 200 as const,
+          policyVersion: "official-api-v1" as const,
+          synthetic: this.#fetcher !== undefined,
+        });
+        observations.set(query, { evidence, snapshot: querySnapshot(query) });
+      }
+      return query;
     } catch {
       return { status: "uncertain" };
     }

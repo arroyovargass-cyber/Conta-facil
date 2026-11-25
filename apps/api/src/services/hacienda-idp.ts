@@ -1,29 +1,35 @@
-const endpoint =
-  "https://idp.comprobanteselectronicos.go.cr/auth/realms/rut-stag/protocol/openid-connect/";
+import type { HaciendaEnvironment } from "../../../../packages/domain/src/hacienda-environment";
+import { haciendaProfile } from "./hacienda-environments";
 export type ProbeResult = {
   status: "success" | "authentication_failed" | "service_unavailable";
   sessionClosed: boolean;
 };
 export interface IdpClient {
-  probe(access: { username: string; password: string }): Promise<ProbeResult>;
+  probe(
+    access: { username: string; password: string },
+    environment?: HaciendaEnvironment,
+  ): Promise<ProbeResult>;
 }
 export class HaciendaIdp implements IdpClient {
   private transport: typeof fetch;
   private timeout: number;
+  #testOverrides: boolean;
   constructor(options: {
     environment: string;
     transport?: typeof fetch;
     timeoutMs?: number;
   }) {
     if (
-      options.environment !== "test" &&
-      (options.transport || options.timeoutMs !== undefined)
+      (options.environment !== "test" || process.env.NODE_ENV !== "test") &&
+      (options.transport !== undefined || options.timeoutMs !== undefined)
     )
       throw Error(
         "Las sustituciones de transporte solo se admiten en pruebas.",
       );
     this.transport = options.transport ?? fetch;
     this.timeout = options.timeoutMs ?? 10000;
+    this.#testOverrides =
+      options.transport !== undefined || options.timeoutMs !== undefined;
   }
   private async responseBody(response: Response) {
     const reader = response.body?.getReader();
@@ -44,14 +50,23 @@ export class HaciendaIdp implements IdpClient {
       reader.releaseLock();
     }
   }
-  async probe(access: {
-    username: string;
-    password: string;
-  }): Promise<ProbeResult> {
+  async probe(
+    access: {
+      username: string;
+      password: string;
+    },
+    environment: HaciendaEnvironment = "test",
+  ): Promise<ProbeResult> {
+    const profile = haciendaProfile(environment);
+    if (
+      process.env.NODE_TLS_REJECT_UNAUTHORIZED === "0" ||
+      (this.#testOverrides && process.env.NODE_ENV !== "test")
+    )
+      return { status: "service_unavailable", sessionClosed: false };
     const controller = new AbortController(),
       timer = setTimeout(() => controller.abort(), this.timeout);
     const post = (path: string, body: URLSearchParams) =>
-      this.transport(endpoint + path, {
+      this.transport(profile.idpBase + path, {
         method: "POST",
         headers: {
           "content-type": "application/x-www-form-urlencoded",
@@ -66,7 +81,7 @@ export class HaciendaIdp implements IdpClient {
         "token",
         new URLSearchParams({
           grant_type: "password",
-          client_id: "api-stag",
+          client_id: profile.clientId,
           username: access.username,
           password: access.password,
         }),
@@ -92,7 +107,7 @@ export class HaciendaIdp implements IdpClient {
         const logout = await post(
           "logout",
           new URLSearchParams({
-            client_id: "api-stag",
+            client_id: profile.clientId,
             refresh_token: data.refresh_token,
           }),
         );

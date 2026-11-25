@@ -9,13 +9,20 @@ import {
   IVA_TARIFFS,
 } from "../../../../packages/domain/src/invoice-fiscal";
 import type { InvoiceXmlInput } from "./invoice-xml";
+import { haciendaEnvironmentInput } from "../../../../packages/domain/src/hacienda-environment";
 export async function renderInvoicePdf(input: {
   snapshot: InvoiceXmlInput["snapshot"];
   clave: string;
   consecutivo: string;
   issued_at: string;
   hacienda_status: "pending" | "accepted" | "rejected";
+  environment?: "test" | "production";
 }): Promise<Buffer> {
+  const environment = haciendaEnvironmentInput.parse(input.environment);
+  const environmentLabel =
+    environment === "production"
+      ? "Ambiente de producción"
+      : "Ambiente de pruebas";
   const { snapshot: s } = input;
   const t = calculateInvoice(s.lines);
   if (t.status !== "complete" || !isDeepStrictEqual(t, s.totals))
@@ -37,6 +44,7 @@ export async function renderInvoicePdf(input: {
   )
     throw Error("INVOICE_PDF_FONT_INTEGRITY");
   const doc = await PDFDocument.create();
+  doc.setSubject(environmentLabel);
   doc.registerFontkit(fontkit);
   const font = await doc.embedFont(fontBytes, { subset: true });
   const characters = new Set(font.getCharacterSet());
@@ -70,7 +78,7 @@ export async function renderInvoicePdf(input: {
     }
   }
   line("Factura electrónica nacional", 16);
-  line("Ambiente de pruebas", 12);
+  line(environmentLabel, 12);
   line("Representación gráfica del comprobante electrónico");
   line(
     `Estado de Hacienda: ${{ pending: "Pendiente", accepted: "Aceptado", rejected: "Rechazado" }[input.hacienda_status]}`,

@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, expect, it } from "vitest";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { workspace } from "../support/workspace";
 import { totp } from "../support/totp";
 import { runtimeConfig } from "../support/runtime-config";
@@ -8,6 +8,7 @@ import {
   receiverInput,
   lineFiscalInput,
 } from "../../packages/domain/src/invoice-fiscal";
+import { emissionOptionsInput } from "../../packages/domain/src/emission";
 let f: Awaited<ReturnType<typeof workspace>>,
   app: Awaited<ReturnType<typeof createApp>>,
   cookie = "",
@@ -102,6 +103,7 @@ it("prepares server-calculated snapshot, preserves receiver and prevents double-
   const a = await request("/invoices", "POST", payload);
   expect(a.statusCode, a.body).toBe(200);
   const row = a.json().item;
+  expect(row.environment).toBe("test");
   expect(row.snapshot.totals).toMatchObject({
     subtotal: "2000.00000",
     tax: "260.00000",
@@ -112,6 +114,31 @@ it("prepares server-calculated snapshot, preserves receiver and prevents double-
   expect(row.readiness.canEmit).toBe(false);
   const b = await request("/invoices", "POST", payload);
   expect(b.json().item.id).toBe(row.id);
+  // Simulate a request persisted before environment was part of the hash contract.
+  await f.pool.query(
+    "update public.electronic_invoices set request_hash=$2 where id=$1",
+    [
+      row.id,
+      createHash("sha256")
+        .update(
+          JSON.stringify({
+            ...payload,
+            options: emissionOptionsInput.parse(payload.options),
+          }),
+        )
+        .digest("hex"),
+    ],
+  );
+  for (const body of [payload, { ...payload, environment: "test" }]) {
+    const legacyReplay = await request("/invoices", "POST", body);
+    expect(legacyReplay.statusCode, legacyReplay.body).toBe(200);
+    expect(legacyReplay.json().item.id).toBe(row.id);
+  }
+  const crossReplay = await request("/invoices", "POST", {
+    ...payload,
+    environment: "production",
+  });
+  expect(crossReplay.statusCode, crossReplay.body).toBe(409);
   const c = await request("/invoices", "POST", { ...input() });
   expect(c.json().item.id).toBe(row.id);
   await f.pool.query(
@@ -288,6 +315,26 @@ it("reserves numbering administration to the explicit owner and preserves confir
     starting_value: "5",
   });
   expect(ok.statusCode, ok.body).toBe(200);
+  expect(ok.json().environment).toBe("test");
+  const production = await request("/invoices/numbering", "POST", {
+    ...payload,
+    starting_value: "11",
+    environment: "production",
+  });
+  expect(production.statusCode, production.body).toBe(200);
+  expect(production.json().environment).toBe("production");
+  expect((await request("/invoices/numbering-options")).json()).toMatchObject({
+    environment: "test",
+    items: [expect.objectContaining({ last_value: "5" })],
+  });
+  expect(
+    (
+      await request("/invoices/numbering-options?environment=production")
+    ).json(),
+  ).toMatchObject({
+    environment: "production",
+    items: [expect.objectContaining({ last_value: "11" })],
+  });
   const lower = await request("/invoices/numbering", "POST", payload);
   expect(lower.statusCode).toBe(409);
   const other = await request(
@@ -310,4 +357,82 @@ it("audits invoice state changes without copying recipient details or credential
   expect(rows[0].details.document_status).toBe("prepared");
   expect(rows[0].details).not.toHaveProperty("snapshot");
   expect(JSON.stringify(rows[0].details)).not.toContain("cliente@example.test");
+});
+it("prepares the same draft per environment and requires real-operation confirmation in production", async () => {
+  await f.pool.query(
+    "insert into public.role_permissions select tenant_id,id,'invoices.emit' from public.roles where tenant_id=$1 and code='admin' on conflict do nothing",
+    [f.tenants[0]],
+  );
+  const payload = {
+    ...input(),
+    expected_version: draft.version + 1,
+    environment: "production",
+  };
+  const prepared = await request("/invoices", "POST", payload);
+  expect(prepared.statusCode, prepared.body).toBe(200);
+  const production = prepared.json().item;
+  expect(production.environment).toBe("production");
+  const test = (await request("/invoices")).json().items;
+  expect(test).toHaveLength(1);
+  expect(test[0].environment).toBe("test");
+  expect(test[0].id).not.toBe(production.id);
+  expect(
+    (await request("/invoices?environment=production"))
+      .json()
+      .items.map((i: any) => i.id),
+  ).toEqual([production.id]);
+  expect(
+    (await request("/invoices/" + production.id)).json().item.environment,
+  ).toBe("production");
+  expect(
+    (
+      await request("/invoices", "POST", {
+        ...payload,
+        operation_id: randomUUID(),
+      })
+    ).json().item.id,
+  ).toBe(production.id);
+  expect(
+    (await request("/invoices", "POST", { ...payload, environment: "test" }))
+      .statusCode,
+  ).toBe(409);
+  const missingConfirmation = await request(
+    "/invoices/" + production.id + "/issue",
+    "POST",
+    {
+      version: production.version,
+      operation_id: randomUUID(),
+    },
+  );
+  expect(missingConfirmation.statusCode, missingConfirmation.body).toBe(409);
+  expect(missingConfirmation.json().message).toContain("Confirma expresamente");
+  const stillDisabled = await request(
+    "/invoices/" + production.id + "/issue",
+    "POST",
+    {
+      version: production.version,
+      operation_id: randomUUID(),
+      production_confirmation: true,
+    },
+  );
+  expect(stillDisabled.statusCode, stillDisabled.body).toBe(409);
+  const detail = (await request("/invoices/" + production.id)).json().item;
+  expect(detail.document_status).toBe("prepared");
+  expect(detail.readiness.issues).toContainEqual(
+    expect.objectContaining({ code: "EMISSION_DISABLED" }),
+  );
+  expect(
+    (await request("/invoices/numbering-options?environment=production")).json()
+      .items[0].last_value,
+  ).toBe("11");
+  expect(
+    (
+      await request("/invoices/" + production.id, "PATCH", {
+        version: production.version,
+        expected_version: draft.version + 1,
+        options: payload.options,
+        environment: "test",
+      })
+    ).statusCode,
+  ).toBe(400);
 });

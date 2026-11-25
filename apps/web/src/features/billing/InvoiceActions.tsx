@@ -12,7 +12,12 @@ type Action = keyof typeof labels;
 type Props = { base: string; item: Row; onUpdated: () => void };
 
 export function InvoiceActions(props: Props) {
-  return <Actions key={`${props.base}:${props.item.id}`} {...props} />;
+  return (
+    <Actions
+      key={`${props.base}:${props.item.id}:${props.item.environment}`}
+      {...props}
+    />
+  );
 }
 function Actions({ base, item, onUpdated }: Props) {
   const [actions, setActions] = useState<Action[]>([]);
@@ -38,7 +43,7 @@ function Actions({ base, item, onUpdated }: Props) {
     setError("");
     void apiRequest(path)
       .then((data) => {
-        if (generation.current === token)
+        if (alive.current && generation.current === token)
           setActions(
             Array.isArray(data.actions)
               ? data.actions.filter((a: string) => Object.hasOwn(labels, a))
@@ -46,7 +51,7 @@ function Actions({ base, item, onUpdated }: Props) {
           );
       })
       .catch((e: Error) => {
-        if (generation.current === token) setError(e.message);
+        if (alive.current && generation.current === token) setError(e.message);
       });
     return () => {
       generation.current++;
@@ -72,14 +77,14 @@ function Actions({ base, item, onUpdated }: Props) {
       operations.current.set(key, crypto.randomUUID());
     try {
       await post(path, { operation_id: operations.current.get(key), action });
-      if (generation.current !== token) return;
+      if (!alive.current || generation.current !== token) return;
       setConfirm(null);
       setNotice(
         "Solicitud guardada. Actualiza el estado para consultar el resultado.",
       );
       onUpdated();
     } catch (e: any) {
-      if (generation.current === token) setError(e.message);
+      if (alive.current && generation.current === token) setError(e.message);
     } finally {
       pending.current = false;
       if (alive.current) setBusy(false);
@@ -107,7 +112,10 @@ function Actions({ base, item, onUpdated }: Props) {
           role="alertdialog"
           aria-label={`Confirmar: ${labels[confirm]}`}
         >
-          <h4>{labels[confirm]} · STAG</h4>
+          <h4>
+            {labels[confirm]} ·{" "}
+            {item.environment === "production" ? "Producción" : "Pruebas"}
+          </h4>
           <p>Emisor: {snapshot?.issuer?.legal_name || "Sin nombre"}</p>
           <p>Receptor: {snapshot?.receiver?.name || "Sin nombre"}</p>
           <p>

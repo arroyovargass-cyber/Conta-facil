@@ -12,6 +12,8 @@ import {
   formatInvoiceNumber,
 } from "../../../../packages/domain/src/invoice-numbering";
 import { parseKeyring } from "../security/credential-vault";
+import { haciendaEnvironmentInput } from "../../../../packages/domain/src/hacienda-environment";
+import { enabledEmissionEnvironments } from "./emission-settings";
 
 function validatorAvailable(): boolean {
   try {
@@ -86,8 +88,13 @@ export async function emissionReadiness(
       "Actualiza la preparación fiscal de la factura.",
     );
   }
-  if (config.HACIENDA_STAG_EMISSION_ENABLED !== "true")
-    add("EMISSION_DISABLED", "La emisión STAG no está habilitada.");
+  const environment = haciendaEnvironmentInput.parse(invoice.environment),
+    environmentLabel = environment === "production" ? "Producción" : "Pruebas";
+  if (!enabledEmissionEnvironments(config).includes(environment))
+    add(
+      "EMISSION_DISABLED",
+      `La emisión en ${environmentLabel} no está habilitada.`,
+    );
   let keyring;
   try {
     keyring = parseKeyring(
@@ -103,25 +110,46 @@ export async function emissionReadiness(
       "SOFTWARE_PROVIDER_REQUIRED",
       "Configura la identificación del proveedor del sistema.",
     );
-  let pins: unknown;
-  try {
-    pins = JSON.parse(config.HACIENDA_RESPONSE_CERTIFICATE_PINS ?? "");
-  } catch {}
-  if (
-    !Array.isArray(pins) ||
-    !pins.length ||
-    !pins.every((p) => typeof p === "string" && /^[a-f0-9]{64}$/i.test(p))
-  )
+  const trustPolicy =
+    config.HACIENDA_RESPONSE_TRUST_POLICY ?? "pinned_certificate";
+  if (trustPolicy === "pinned_certificate") {
+    let pins: unknown;
+    try {
+      pins = JSON.parse(
+        (environment === "production"
+          ? config.HACIENDA_PRODUCTION_RESPONSE_CERTIFICATE_PINS
+          : config.HACIENDA_RESPONSE_CERTIFICATE_PINS) ?? "",
+      );
+    } catch {}
+    if (
+      !Array.isArray(pins) ||
+      !pins.length ||
+      !pins.every((p) => typeof p === "string" && /^[a-f0-9]{64}$/i.test(p))
+    )
+      add(
+        "RESPONSE_TRUST_REQUIRED",
+        "Configura la confianza del certificado de respuesta.",
+      );
+  } else if (trustPolicy !== "official_api")
     add(
       "RESPONSE_TRUST_REQUIRED",
-      "Configura la confianza del certificado de respuesta.",
+      "Configura una política válida de confianza de respuesta.",
+    );
+  if (
+    trustPolicy === "official_api" &&
+    process.env.NODE_TLS_REJECT_UNAUTHORIZED === "0"
+  )
+    add(
+      "RESPONSE_TLS_REQUIRED",
+      "Activa la verificación TLS para consultar la API oficial de Hacienda.",
     );
   const m = await metadata(db, invoice),
-    cert = m?.certificate_metadata;
+    cert = m?.certificate_metadata,
+    company = m?.company;
   if (!m?.credential_version || m.api_status !== "success")
     add(
       "CREDENTIALS_UNVERIFIED",
-      "Verifica las credenciales y la conexión STAG.",
+      `Verifica las credenciales y la conexión en ${environmentLabel}.`,
     );
   const now = Date.now();
   if (
@@ -135,23 +163,39 @@ export async function emissionReadiness(
       "CERTIFICATE_INVALID",
       "Verifica la vigencia y validez técnica del certificado.",
     );
-  // No manual override: the current inspector reports pending until validated identity binding exists.
-  if (cert?.identity_status !== "verified")
+  // This is an administrative review, never a claim of identity attestation by Hacienda.
+  const enrollment = m?.enrollment;
+  if (
+    enrollment?.status !== "operator_verified" ||
+    enrollment.environment !== environment ||
+    !Number.isInteger(enrollment?.version) ||
+    enrollment.version !== m?.credential_version ||
+    !Number.isFinite(Date.parse(enrollment?.confirmed_at)) ||
+    !company?.identification ||
+    !company?.identification_type ||
+    enrollment.issuer_identification !== company.identification ||
+    enrollment.issuer_identification_type !== company.identification_type ||
+    enrollment.certificate_fingerprint !==
+      String(cert?.fingerprint ?? "")
+        .replace(/:/g, "")
+        .toLowerCase()
+  )
     add(
-      "CERTIFICATE_IDENTITY_UNVERIFIED",
-      "Falta verificar que el certificado corresponde al emisor.",
+      "CERTIFICATE_ENROLLMENT_REQUIRED",
+      "El superadministrador debe registrar la revisión administrativa de la llave vigente para esta empresa y ambiente. Esta revisión no verifica la identidad ante Hacienda.",
     );
   if (!m?.numbering?.confirmed_at)
     add(
       "NUMBERING_UNCONFIRMED",
-      "El propietario debe confirmar explícitamente la numeración STAG.",
+      `El propietario debe confirmar explícitamente la numeración en ${environmentLabel}.`,
     );
-  const company = m?.company;
   if (
     !company ||
     company.configuration_version !==
       invoice.snapshot?.issuer?.configuration_version ||
-    company.identification !== invoice.snapshot?.issuer?.identification
+    company.identification !== invoice.snapshot?.issuer?.identification ||
+    company.identification_type !==
+      invoice.snapshot?.issuer?.identification_type
   )
     add(
       "ISSUER_SNAPSHOT_STALE",
@@ -224,6 +268,7 @@ export async function issuePreparedInvoice(
   operationId: string,
   actorId: string,
   config: AppConfig,
+  productionConfirmation = false,
 ): Promise<any> {
   const fresh = (
     await db.query(
@@ -246,7 +291,27 @@ export async function issuePreparedInvoice(
       403,
       "Confirma tu identidad con autenticación multifactor.",
     );
+  if (
+    haciendaEnvironmentInput.parse(fresh.environment) !==
+    haciendaEnvironmentInput.parse(invoice.environment)
+  )
+    throw new HttpError(
+      409,
+      "El ambiente de la factura cambió. Recarga antes de confirmar.",
+    );
   if (fresh.document_status === "issued") return fresh;
+  if (fresh.version !== invoice.version)
+    throw new HttpError(409, "La factura cambió. Recarga antes de confirmar.");
+  if (fresh.environment === "production" && productionConfirmation !== true)
+    throw new HttpError(
+      409,
+      "Confirma expresamente que esta factura corresponde a una operación real de Producción.",
+    );
+  // Custody replacement and issuer edits take a tenant write lock. Keep the
+  // reviewed key and company identity stable through readiness and issuance.
+  await db.query("select id from public.tenants where id=$1 for share", [
+    fresh.tenant_id,
+  ]);
   const readiness = await emissionReadiness(db, fresh, config);
   if (!readiness.canEmit)
     throw new HttpError(
@@ -284,7 +349,7 @@ export async function issuePreparedInvoice(
   });
   const row = (
     await db.query(
-      `update public.electronic_invoices set document_status='issued',signature_status='pending',transmission_status='queued',consecutivo=$3,clave=$4,issued_at=$5,credential_version=$6,certificate_fingerprint=$7,issue_operation_id=$8,issued_by=$9,version=version+1 where tenant_id=$1 and id=$2 returning *`,
+      `update public.electronic_invoices set document_status='issued',signature_status='pending',transmission_status='queued',consecutivo=$3,clave=$4,issued_at=$5,credential_version=$6,certificate_fingerprint=$7,issue_operation_id=$8,issued_by=$9,response_trust_policy=$10,version=version+1 where tenant_id=$1 and id=$2 returning *`,
       [
         fresh.tenant_id,
         fresh.id,
@@ -295,6 +360,7 @@ export async function issuePreparedInvoice(
         m.certificate_metadata.fingerprint.replace(/:/g, "").toLowerCase(),
         operationId,
         actorId,
+        config.HACIENDA_RESPONSE_TRUST_POLICY ?? "pinned_certificate",
       ],
     )
   ).rows[0];

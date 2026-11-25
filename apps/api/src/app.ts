@@ -1,6 +1,7 @@
 import { emissionActionRoutes } from "./modules/emission-actions";
 import { emissionNumberingRoutes } from "./modules/emission-numbering";
 import { EmissionPipeline } from "./services/emission-pipeline";
+import { enabledEmissionEnvironments } from "./services/emission-settings";
 import { emissionRoutes } from "./modules/emission";
 import { companyRegistrationRoutes } from "./modules/company-registration";
 import { fiscalLookupRoutes } from "./modules/fiscal-lookups";
@@ -40,14 +41,13 @@ export async function createApp(
   let emissionWork: Promise<void> | undefined,
     closing = false;
   const wakeEmission = () => {
-    if (
-      closing ||
-      emissionWork ||
-      config.HACIENDA_STAG_EMISSION_ENABLED !== "true"
-    )
+    if (closing || emissionWork || !enabledEmissionEnvironments(config).length)
       return;
     emissionWork = (async () => {
-      await pool.query("select private.recover_uncertain_emissions()");
+      await pool.query(
+        "select private.recover_uncertain_emissions($1::text[])",
+        [enabledEmissionEnvironments(config)],
+      );
       await emissionPipeline.runBatch(4);
     })()
       .catch(() => {
@@ -146,7 +146,7 @@ export async function createApp(
   );
   app.get("/api/health", async () => {
     await pool.query("select 1");
-    return { name: "Conta Fácil", phase: 1, status: "ok" };
+    return { name: "Conta Ágil", phase: 1, status: "ok" };
   });
   if (config.STATIC_DIRECTORY) await hosting(app, config.STATIC_DIRECTORY);
   return app;

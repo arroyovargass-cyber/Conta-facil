@@ -2,6 +2,10 @@ import { createHash } from "node:crypto";
 import nodemailer from "nodemailer";
 import type Mail from "nodemailer/lib/mailer";
 import { z } from "zod";
+import {
+  haciendaEnvironmentInput,
+  type HaciendaEnvironment,
+} from "../../../../packages/domain/src/hacienda-environment";
 type Transport = {
   sendMail(
     message: Mail.Options,
@@ -65,6 +69,7 @@ export class InvoiceMail {
       });
   }
   async send(input: {
+    fiscalEnvironment?: HaciendaEnvironment;
     invoiceId: string;
     recipient: string;
     companyName: string;
@@ -75,6 +80,7 @@ export class InvoiceMail {
     status: "provider_accepted" | "rejected" | "uncertain";
     messageId: string;
   }> {
+    const environment = haciendaEnvironmentInput.parse(input.fiscalEnvironment);
     z.email().parse(input.recipient);
     if (
       !input.invoiceId ||
@@ -93,8 +99,8 @@ export class InvoiceMail {
         from: this.config.from,
         to: input.recipient,
         messageId,
-        subject: `Comprobante electrónico - ${input.companyName}`,
-        text: `${input.companyName}\nSe adjuntan el XML del comprobante electrónico, su representación gráfica y la respuesta de Hacienda.`,
+        subject: `${environment === "test" ? "[PRUEBAS] " : ""}Comprobante electrónico - ${input.companyName}`,
+        text: `${input.companyName}\nAmbiente de ${environment === "test" ? "pruebas" : "producción"}.\nSe adjuntan el XML del comprobante electrónico, su representación gráfica y la respuesta de Hacienda.`,
         disableFileAccess: true,
         disableUrlAccess: true,
         attachments: [

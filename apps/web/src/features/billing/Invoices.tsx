@@ -4,6 +4,12 @@ import React, { useRef, useState } from "react";
 import { apiRequest, post } from "../../api/client";
 import { Drafts } from "./Drafts";
 import { Field, useAlive, useListing, type Row } from "./common";
+import { usePaged } from "../workflow/usePaged";
+import {
+  EnvironmentSelector,
+  environmentLabel,
+} from "../hacienda/EnvironmentSelector";
+import type { HaciendaEnvironment } from "../../../../../packages/domain/src/hacienda-environment";
 
 const labels: Record<string, string> = {
   prepared: "Preparada",
@@ -67,12 +73,44 @@ const emptyOptions = () => ({
   issuer_activity: "",
   payment_methods: [] as { code: string; amount: string }[],
 });
-export function Invoices({ base, options }: { base: string; options: Row }) {
+type Props = { base: string; options: Row };
+
+export function Invoices(props: Props) {
+  return <InvoiceEnvironments key={props.base} {...props} />;
+}
+
+function InvoiceEnvironments(props: Props) {
+  const [environment, setEnvironment] = useState<HaciendaEnvironment>("test");
+  return (
+    <section className="panel">
+      <EnvironmentSelector
+        label="Ambiente de facturación"
+        environment={environment}
+        onChange={setEnvironment}
+      />
+      <p>
+        Cada factura conserva el ambiente elegido al prepararla. La lista y la
+        numeración corresponden al ambiente seleccionado.
+      </p>
+      <InvoiceWorkspace
+        key={environment}
+        {...props}
+        environment={environment}
+      />
+    </section>
+  );
+}
+
+function InvoiceWorkspace({
+  base,
+  options,
+  environment,
+}: Props & { environment: HaciendaEnvironment }) {
   const alive = useAlive(),
     pending = useRef(false),
     generation = useRef(0);
   const operation = useRef<{ fingerprint: string; id: string } | null>(null);
-  const list = useListing(base + "/invoices", "status");
+  const list = usePaged(base + "/invoices", { environment });
   const drafts = useListing(base + "/invoice-drafts", "archived", "false");
   const [embeddedDrafts, setEmbeddedDrafts] = useState(false),
     [draftId, setDraftId] = useState("");
@@ -81,7 +119,8 @@ export function Invoices({ base, options }: { base: string; options: Row }) {
     [item, setItem] = useState<Row | null>(null);
   const [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
-    [confirm, setConfirm] = useState(false);
+    [confirm, setConfirm] = useState(false),
+    [productionConfirmed, setProductionConfirmed] = useState(false);
   function change(key: string, value: any) {
     setForm((old) => ({ ...old, [key]: value }));
   }
@@ -90,6 +129,7 @@ export function Invoices({ base, options }: { base: string; options: Row }) {
     setDraftId("");
     setForm(emptyOptions());
     setConfirm(false);
+    setProductionConfirmed(false);
     setError("");
     operation.current = null;
   }
@@ -107,6 +147,7 @@ export function Invoices({ base, options }: { base: string; options: Row }) {
       payment_methods: item.options.payment_methods ?? [],
     });
     setConfirm(false);
+    setProductionConfirmed(false);
     setError("");
   }
   async function open(id: string) {
@@ -133,6 +174,7 @@ export function Invoices({ base, options }: { base: string; options: Row }) {
       if (alive.current && token === generation.current) {
         setItem(data.item);
         setConfirm(false);
+        setProductionConfirmed(false);
         list.refresh();
       }
     } catch (e: any) {
@@ -149,6 +191,7 @@ export function Invoices({ base, options }: { base: string; options: Row }) {
     setBusy(true);
     setError("");
     setConfirm(false);
+    setProductionConfirmed(false);
     const token = ++generation.current;
     try {
       const draft = (await apiRequest(base + "/invoice-drafts/" + draftId))
@@ -157,6 +200,7 @@ export function Invoices({ base, options }: { base: string; options: Row }) {
       if (draft.archived_at || draft.document_type !== "FE")
         throw new Error("Selecciona un borrador nacional FE sin archivar.");
       const payload = {
+        environment,
         draft_id: draftId,
         expected_version: draft.version,
         options: {
@@ -201,6 +245,7 @@ export function Invoices({ base, options }: { base: string; options: Row }) {
       pending.current ||
       !item ||
       !confirm ||
+      (item.environment === "production" && !productionConfirmed) ||
       !item.readiness?.canEmit ||
       !department?.can_emit
     )
@@ -217,10 +262,14 @@ export function Invoices({ base, options }: { base: string; options: Row }) {
       const data = await post(base + "/invoices/" + selected.id + "/issue", {
         version: selected.version,
         operation_id: operation.current!.id,
+        ...(selected.environment === "production"
+          ? { production_confirmation: true }
+          : {}),
       });
       if (alive.current && token === generation.current) {
         setItem(data.item);
         setConfirm(false);
+        setProductionConfirmed(false);
         list.refresh();
       }
     } catch (e: any) {
@@ -231,6 +280,10 @@ export function Invoices({ base, options }: { base: string; options: Row }) {
     }
   }
   const snapshot = item?.snapshot;
+  const documentEnvironment: HaciendaEnvironment =
+    item?.environment === "production" ? "production" : "test";
+  const issueLabel =
+    documentEnvironment === "production" ? "producción" : "pruebas";
   const department = options.departments?.find(
     (d: Row) => d.id === item?.department_id,
   );
@@ -240,9 +293,10 @@ export function Invoices({ base, options }: { base: string; options: Row }) {
   const canEmit =
     department?.can_emit === true && item?.readiness?.canEmit === true;
   return (
-    <section className="panel">
+    <div>
       <NumberingConfirmation
         base={base}
+        environment={environment}
         onConfirmed={() => {
           list.refresh();
           if (item) void open(item.id);
@@ -250,7 +304,7 @@ export function Invoices({ base, options }: { base: string; options: Row }) {
       />
       <div className="table-toolbar">
         <div>
-          <h3>Facturación nacional · STAG</h3>
+          <h3>Facturación nacional · {environmentLabel(environment)}</h3>
           <p>Guardar una preparación no firma, transmite ni envía correo.</p>
         </div>
         <button
@@ -473,7 +527,7 @@ export function Invoices({ base, options }: { base: string; options: Row }) {
           {item && snapshot && (
             <section aria-label="Detalle de factura">
               <h3>Detalle de factura</h3>
-              <p>Ambiente: STAG · Pruebas</p>
+              <p>Ambiente: {environmentLabel(documentEnvironment)}</p>
               <dl className="fiscal-preview-totals">
                 <dt>Emisor</dt>
                 <dd>{snapshot.issuer?.legal_name || "Sin nombre"}</dd>
@@ -663,36 +717,67 @@ export function Invoices({ base, options }: { base: string; options: Row }) {
                   <button
                     className="button secondary"
                     disabled={busy || !canEmit}
-                    onClick={() => setConfirm(true)}
+                    onClick={() => {
+                      setProductionConfirmed(false);
+                      setConfirm(true);
+                    }}
                   >
-                    Revisar emisión en STAG
+                    Revisar emisión en {issueLabel}
                   </button>
                   {confirm && (
                     <div
                       role="dialog"
                       aria-modal="true"
-                      aria-label="Confirmar emisión en STAG"
+                      aria-label={"Confirmar emisión en " + issueLabel}
                     >
-                      <h4>Confirmar emisión en STAG</h4>
+                      <h4>Confirmar emisión en {issueLabel}</h4>
                       <p>
                         Emisor: {snapshot.issuer?.legal_name}. Receptor:{" "}
                         {snapshot.receiver?.name}. Total: {money(snapshot)}.
                         Departamento: {department?.name || item.department_id}.
                         Correo: {snapshot.receiver?.email || "Sin correo"}.
                       </p>
+                      {documentEnvironment === "production" && (
+                        <>
+                          <p>
+                            Esta operación emite un comprobante fiscal real en
+                            producción.
+                          </p>
+                          <label className="billing-check">
+                            <input
+                              type="checkbox"
+                              checked={productionConfirmed}
+                              disabled={busy}
+                              onChange={(event) =>
+                                setProductionConfirmed(event.target.checked)
+                              }
+                            />
+                            Confirmo que esta factura corresponde a una venta
+                            real autorizada y que se emitirá en producción
+                          </label>
+                        </>
+                      )}
                       <button
                         className="button secondary"
                         disabled={busy}
-                        onClick={() => setConfirm(false)}
+                        onClick={() => {
+                          setConfirm(false);
+                          setProductionConfirmed(false);
+                        }}
                       >
                         Cancelar
                       </button>
                       <button
                         className="button primary"
-                        disabled={busy || !canEmit}
+                        disabled={
+                          busy ||
+                          !canEmit ||
+                          (documentEnvironment === "production" &&
+                            !productionConfirmed)
+                        }
                         onClick={() => void issue()}
                       >
-                        Confirmar emisión en STAG
+                        Confirmar emisión en {issueLabel}
                       </button>
                     </div>
                   )}
@@ -707,6 +792,6 @@ export function Invoices({ base, options }: { base: string; options: Row }) {
           {error}
         </p>
       )}
-    </section>
+    </div>
   );
 }

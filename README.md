@@ -1,8 +1,8 @@
-# Conta Fácil · Hacienda y bandejas departamentales
+# Conta Ágil · Facturación 4.4 y bandejas departamentales
 
-Administración multiempresa, clientes, productos y borradores comerciales para Costa Rica. **Desarrollo local; no está certificada ni lista para producción.** No emite comprobantes, no firma XML y no se conecta a Hacienda.
+Sistema multiempresa de Costa Rica con clientes, productos, borradores y un circuito de factura electrónica nacional 4.4: XML, firma, transmisión, consulta de respuestas, PDF y correo. Pruebas y producción tienen credenciales, revisión de llave y numeración independientes. **La operación real requiere configurar cada ambiente y comprobar una aceptación auténtica de Hacienda; los tests sintéticos no equivalen a certificación.**
 
-Estado de publicación: [base alojada y conexiones pendientes](docs/deployment/test-publication-status.md). Todavía no hay URL pública de acceso.
+Sitio de pruebas: https://conta-facil-pruebas.onrender.com. Configuración, activación y recuperación: [guía de ambos ambientes](docs/runbooks/national-invoice-environments.md). La marca visible es **Conta Ágil**; el repositorio y la dirección existente conservan sus identificadores de infraestructura.
 
 ## Ejecutar
 
@@ -100,7 +100,7 @@ No se publicó una interfaz aislada: el despliegue funcional necesita API Node, 
 
 La preparación para **Render Free + Supabase Free** está en [esta guía](docs/deployment/render-supabase.md) y `render.yaml`. El build genera web y backend; `npm start` sirve ambos desde el mismo dominio. Se añadieron migraciones para el rol limitado del backend y el refuerzo de permisos/RLS en Supabase alojado. La publicación solo se declara completada después de verificar el servicio remoto y su URL; el build local no la sustituye.
 
-El proyecto independiente **Conta Fácil Pruebas** ya está creado en Supabase Free y su esquema está instalado. Ver [evidencia remota](docs/deployment/supabase-provisioning-evidence.md). La aplicación web aún requiere publicación en Render y configuración de secretos.
+El proyecto independiente **Conta Fácil Pruebas** ya está creado en Supabase Free y su esquema está instalado. Ver [evidencia remota](docs/deployment/supabase-provisioning-evidence.md). El sitio de pruebas está publicado en https://conta-facil-pruebas.onrender.com. La activación de Hacienda y correo requiere su configuración privada y validación real por ambiente.
 
 El README inicial del repositorio GitHub se conserva en [esta referencia](docs/reference/github-initial-readme.md). Su commit original permanece en el historial integrado.
 

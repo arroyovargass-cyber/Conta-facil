@@ -157,7 +157,7 @@ test("prepared invoice edits refresh the snapshot and render only monetary total
       detail.getByText("CRC 2260.00000", { exact: true }).first(),
     ).toBeVisible();
     await expect(
-      page.getByRole("button", { name: "Revisar emisión en STAG" }),
+      page.getByRole("button", { name: "Revisar emisión en pruebas" }),
     ).toBeDisabled();
     await page
       .getByRole("button", { name: "Editar preparación", exact: true })
@@ -252,7 +252,7 @@ test("prepares a fiscal invoice through the real API and retains server totals",
     ).toBeVisible();
     await expect(detail.getByText(/Tarifa 08 · 13%/)).toBeVisible();
     await expect(
-      detail.getByRole("button", { name: "Revisar emisión en STAG" }),
+      detail.getByRole("button", { name: "Revisar emisión en pruebas" }),
     ).toBeDisabled();
     await detail
       .getByRole("button", { name: "Actualizar estado", exact: true })
@@ -273,7 +273,7 @@ test("prepares a fiscal invoice through the real API and retains server totals",
       detail.getByText("CRC 2260.00000", { exact: true }).first(),
     ).toBeVisible();
     await expect(
-      detail.getByRole("button", { name: "Revisar emisión en STAG" }),
+      detail.getByRole("button", { name: "Revisar emisión en pruebas" }),
     ).toBeDisabled();
     await expect(
       detail.getByRole("link", { name: "Descargar XML" }),

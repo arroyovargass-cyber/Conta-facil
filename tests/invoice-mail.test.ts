@@ -70,3 +70,13 @@ it("rejects production injection, remote plaintext, and header injection", async
     }),
   ).rejects.toThrow();
 });
+it("labels the fiscal environment without weakening SMTP transport security", async () => {
+  const sendMail = vi.fn().mockResolvedValue({ accepted: [input.recipient] });
+  const mail = new InvoiceMail({ ...config, transport: { sendMail } });
+  await mail.send({ ...input, fiscalEnvironment: "test" });
+  expect(sendMail.mock.calls[0][0].subject).toContain("[PRUEBAS]");
+  expect(sendMail.mock.calls[0][0].text).toContain("Ambiente de pruebas");
+  await mail.send({ ...input, fiscalEnvironment: "production" });
+  expect(sendMail.mock.calls[1][0].subject).not.toContain("[PRUEBAS]");
+  expect(sendMail.mock.calls[1][0].text).toContain("Ambiente de producción");
+});

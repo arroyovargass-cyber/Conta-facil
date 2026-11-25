@@ -1,5 +1,5 @@
 import { it, expect } from "vitest";
-import { randomBytes, randomUUID } from "node:crypto";
+import { createCipheriv, randomBytes, randomUUID } from "node:crypto";
 import {
   encryptCredential,
   decryptCredential,
@@ -58,6 +58,43 @@ it("supports old key versions without reusing the session key", () => {
   expect(() => parseKeyring("{}", "missing", "different")).toThrow();
   expect(parseKeyring(undefined, undefined, "session")).toBeUndefined();
   expect(() => parseKeyring("{}", undefined, "session")).toThrow();
+});
+it("opens existing test AAD bytes and isolates production ciphertext", () => {
+  const iv = Buffer.alloc(12, 7),
+    legacy = createCipheriv("aes-256-gcm", key, iv);
+  legacy.setAAD(
+    Buffer.from(
+      JSON.stringify([
+        "conta-facil:hacienda:v1",
+        context.tenantId,
+        "test",
+        1,
+        "api_access",
+      ]),
+    ),
+  );
+  const body = Buffer.concat([
+    legacy.update(Buffer.from("synthetic-legacy")),
+    legacy.final(),
+  ]);
+  const old = {
+    keyId: "v1",
+    blob: Buffer.concat([iv, legacy.getAuthTag(), body]),
+  };
+  expect(decryptCredential(old, context, keys).toString()).toBe(
+    "synthetic-legacy",
+  );
+  const production: VaultContext = { ...context, environment: "production" };
+  const encrypted = encryptCredential(
+    Buffer.from("synthetic-production"),
+    production,
+    keys,
+  );
+  expect(decryptCredential(encrypted, production, keys).toString()).toBe(
+    "synthetic-production",
+  );
+  expect(() => decryptCredential(encrypted, context, keys)).toThrow();
+  expect(() => decryptCredential(old, production, keys)).toThrow();
 });
 it("restores a serialized ciphertext backup using a separately supplied versioned keyring", () => {
   const original = encryptCredential(

@@ -1,7 +1,8 @@
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
+import type { HaciendaEnvironment } from "../../../../packages/domain/src/hacienda-environment";
 export type VaultContext = {
   tenantId: string;
-  environment: "test";
+  environment: HaciendaEnvironment;
   version: number;
   kind: "api_access" | "pkcs12";
 };

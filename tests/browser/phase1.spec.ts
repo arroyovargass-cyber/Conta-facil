@@ -53,7 +53,11 @@ async function createDepartment(page: Page, name: string) {
 test("completes login, MFA, organization and immediate activity refresh", async ({
   page,
 }, testInfo) => {
-  const fixture = await workspace({ role: "admin", companies: 2 });
+  const fixture = await workspace({
+    role: "admin",
+    companies: 2,
+    systemAdmin: true,
+  });
   try {
     await login(page, fixture);
     await createDepartment(page, "Mantenimiento de prueba");
@@ -63,7 +67,7 @@ test("completes login, MFA, organization and immediate activity refresh", async 
     await dialog
       .getByLabel("Nombre", { exact: true })
       .fill("Actividad de prueba");
-    await dialog.getByLabel("Código oficial").fill("PRUEBA-NO-FISCAL");
+    await dialog.getByLabel("Código oficial").fill("123456");
     await dialog
       .getByLabel("URL de la fuente oficial")
       .fill("https://www.hacienda.go.cr/");
@@ -95,7 +99,11 @@ test("keeps the first tab writable and returns to login after revocation", async
   page,
   context,
 }) => {
-  const fixture = await workspace({ role: "admin", companies: 2 });
+  const fixture = await workspace({
+    role: "admin",
+    companies: 2,
+    systemAdmin: true,
+  });
   try {
     await login(page, fixture);
     const second = await context.newPage();
@@ -110,7 +118,7 @@ test("keeps the first tab writable and returns to login after revocation", async
     );
     await navigate(page, "Mi empresa");
     await expect(
-      page.getByRole("heading", { name: "Bienvenido a Conta Fácil" }),
+      page.getByRole("heading", { name: "Bienvenido a Conta Ágil" }),
     ).toBeVisible();
     await expect(
       page.getByText("Tu sesión terminó. Ingresa nuevamente para continuar."),
@@ -241,7 +249,7 @@ test("never shows the previous user company list after logout and a new login", 
       .getByRole("button", { name: "Cerrar sesión", exact: true })
       .click();
     await expect(
-      page.getByRole("heading", { name: "Bienvenido a Conta Fácil" }),
+      page.getByRole("heading", { name: "Bienvenido a Conta Ágil" }),
     ).toBeVisible();
     await enter(fresh);
     await expect(
