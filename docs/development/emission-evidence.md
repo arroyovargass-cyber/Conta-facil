@@ -49,4 +49,12 @@ No hubo factura enviada ni aceptada realmente por STAG, ni se declara listo para
 
 ## Publicación
 
-Pendiente de registrar PR, migraciones remotas, despliegue y comprobaciones HTTP de la versión publicada. Un deploy en cola no se declara disponible hasta estado `live` y verificación posterior.
+PR preparada: https://github.com/arroyovargass-cyber/Conta-facil/pull/4. Código verificado: `a043575a87527530fee8921567be7378873e46e1`. La revisión automática rechazó fusionar esta PR en la rama principal sin autorización explícita; no se intentó eludirla mediante otra vía de publicación.
+
+Las11 migraciones se aplicaron al proyecto separado `ryobvhcarlpayqzaumdf`, en el mismo orden del listado anterior. Versiones remotas: `20261125125544`, `20261125125550`, `20261125125556`, `20261125125601`, `20261125125605`, `20261125125610`, `20261125125615`, `20261125125620`, `20261125125624`, `20261125125628`, `20261125125632`.
+
+Comprobación remota posterior: RLS activo en electronic_invoices y las cuatro tablas privadas nuevas; el rol authenticated no puede insertar/actualizar facturas ni leer bytes de artefactos o abrir credenciales. Anon no puede abrir credenciales; conta_facil_api solo dispone de la capacidad interna prevista. La tabla histórica de secuencias conserva0 filas antes y después, sin reinicio o modificación. El asesor de seguridad no añadió incidencias: mantiene el aviso previo de protección de contraseñas filtradas deshabilitada en Auth.
+
+Render conserva el plan gratuito y la rama main con auto-deploy desactivado. La configuración de bloqueo de emisión quedó guardada sin reemplazar variables existentes. La versión live observada es `25383998592ceae0e1bf7c14dc5f2cb336efd820`, deploy `dep-dc33mlflot8c738v363g`: corresponde a la versión anterior de la aplicación, no a esta funcionalidad.
+
+Pendiente de autorización: fusionar PR4 en main, desplegarla en Conta Fácil Pruebas y comprobar la nueva aplicación publicada. Esto no autoriza activar emisiones STAG reales o producción ni elimina las dependencias oficiales pendientes.
