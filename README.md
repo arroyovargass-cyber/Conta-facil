@@ -109,3 +109,5 @@ El README inicial del repositorio GitHub se conserva en [esta referencia](docs/r
 Se cerraron los pendientes de sesión entre pestañas, logout vencido y búsqueda de servidor. Las actividades se actualizan después de guardar y las respuestas tardías se descartan al cambiar de vista, empresa o usuario. Ver [evidencia](docs/development/phase1-closure-evidence.md).
 
 `npm run test:browser` ejecuta Chromium contra la aplicación compilada y servicios locales reales. Requiere Chromium en `/usr/bin/chromium`, otro ejecutable indicado por `CHROMIUM_PATH`, o el navegador instalado de Playwright. El runner no usa datos remotos y guarda resultados/capturas en `.local/`. Última batería: 50 pruebas de aplicación, 9 SQL y 10 de navegador aprobadas.
+
+<!-- Verificación de sincronización GitHub–Graphify: 2026-11-26. Cambio exclusivamente documental. -->
