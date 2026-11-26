@@ -351,37 +351,46 @@ it("keeps issuer identity and reviewed credentials stable while issuance is chec
   }
 });
 it("serializes two confirmations into one issued invoice and one sign job", async () => {
-  const ready = await run((db) => emissionReadiness(db, row, config));
-  expect(ready.issues).toEqual([]);
-  const [a, b] = await Promise.all([
-    run((db) => issuePreparedInvoice(db, row, randomUUID(), f.userId, config)),
-    run((db) => issuePreparedInvoice(db, row, randomUUID(), f.userId, config)),
-  ]);
-  expect(a.clave).toBe(b.clave);
-  expect(a.consecutivo).toBe("00100001010000000001");
-  expect(a.issued_by).toBe(f.userId);
-  expect(
-    (
-      await f.pool.query(
-        "select last_value from private.emission_sequences where tenant_id=$1",
-        [row.tenant_id],
-      )
-    ).rows[0].last_value,
-  ).toBe("1");
-  expect(
-    (
-      await f.pool.query(
-        "select count(*) from private.emission_jobs where invoice_id=$1",
+  await f.pool.query("revoke usage on schema auth from conta_facil_api");
+  try {
+    const ready = await run((db) => emissionReadiness(db, row, config));
+    expect(ready.issues).toEqual([]);
+    const [a, b] = await Promise.all([
+      run((db) =>
+        issuePreparedInvoice(db, row, randomUUID(), f.userId, config),
+      ),
+      run((db) =>
+        issuePreparedInvoice(db, row, randomUUID(), f.userId, config),
+      ),
+    ]);
+    expect(a.clave).toBe(b.clave);
+    expect(a.consecutivo).toBe("00100001010000000001");
+    expect(a.issued_by).toBe(f.userId);
+    expect(
+      (
+        await f.pool.query(
+          "select last_value from private.emission_sequences where tenant_id=$1",
+          [row.tenant_id],
+        )
+      ).rows[0].last_value,
+    ).toBe("1");
+    expect(
+      (
+        await f.pool.query(
+          "select count(*) from private.emission_jobs where invoice_id=$1",
+          [row.id],
+        )
+      ).rows[0].count,
+    ).toBe("1");
+    await expect(
+      f.pool.query(
+        "update public.electronic_invoices set snapshot='{}' where id=$1",
         [row.id],
-      )
-    ).rows[0].count,
-  ).toBe("1");
-  await expect(
-    f.pool.query(
-      "update public.electronic_invoices set snapshot='{}' where id=$1",
-      [row.id],
-    ),
-  ).rejects.toThrow("IMMUTABLE");
+      ),
+    ).rejects.toThrow("IMMUTABLE");
+  } finally {
+    await f.pool.query("grant usage on schema auth to conta_facil_api");
+  }
 });
 it("does not permit decreasing a confirmed sequence or direct authenticated confirmation", async () => {
   await expect(

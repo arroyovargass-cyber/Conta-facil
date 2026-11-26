@@ -75,7 +75,7 @@ function fixture(environment = "test") {
     async query(sql: string, values: any[] = []) {
       if (sql.includes("select private.has_access"))
         return { rows: [{ allowed: true, aal: "aal2" }] };
-      if (sql.startsWith("select auth.uid()"))
+      if (sql.includes("::uuid actor"))
         return { rows: [{ actor: actorId, aal: "aal2" }] };
       if (sql.startsWith("select * from public.electronic_invoices"))
         return { rows: [stored] };
