@@ -57,7 +57,7 @@ export async function emissionReadiness(
   const add = (code: string, message: string) => issues.push({ code, message });
   const actor = (
     await db.query(
-      "select private.has_access($1,'invoices.emit',$2) allowed, auth.jwt()->>'aal' aal",
+      "select private.has_access($1,'invoices.emit',$2) allowed, nullif(current_setting('request.jwt.claims',true),'')::jsonb->>'aal' aal",
       [invoice.tenant_id, invoice.department_id],
     )
   ).rows[0];
@@ -284,7 +284,9 @@ export async function issuePreparedInvoice(
     fresh.department_id,
   );
   const auth = (
-    await db.query("select auth.uid() actor, auth.jwt()->>'aal' aal")
+    await db.query(
+      "select (nullif(current_setting('request.jwt.claims',true),'')::jsonb->>'sub')::uuid actor, nullif(current_setting('request.jwt.claims',true),'')::jsonb->>'aal' aal",
+    )
   ).rows[0];
   if (auth.aal !== "aal2" || auth.actor !== actorId)
     throw new HttpError(
