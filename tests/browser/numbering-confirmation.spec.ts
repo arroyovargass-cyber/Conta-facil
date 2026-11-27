@@ -33,7 +33,10 @@ async function login(
       .fill(totp(await page.locator("details code").innerText()));
     await page.getByRole("button", { name: "Verificar y continuar" }).click();
   }
-  await page.getByRole("button", { name: /Empresa Norte/ }).click();
+  await page
+    .getByRole("button", { name: /Empresa Norte/ })
+    .filter({ hasText: f.tag })
+    .click();
   await expect(
     page.getByRole("heading", { name: "Tu empresa, en orden." }),
   ).toBeVisible();

@@ -194,7 +194,7 @@ it("limits fenced patches by job kind and requires response evidence", async () 
     store.update(sign, { public_certificate_pem: "replacement" }),
   ).rejects.toThrow("INVALID_WORKER_TRANSITION");
 });
-it("requires current membership permission and department scope, with no operator bypass", async () => {
+it("honors the global issuer and enforces membership and department scope after its platform role is revoked", async () => {
   await f.pool.query(
     "update public.electronic_invoices set transmission_status='not_sent' where id=$1",
     [invoice],
@@ -207,6 +207,11 @@ it("requires current membership permission and department scope, with no operato
   await f.pool.query(
     "update public.memberships set active=false where tenant_id=$1 and user_id=$2",
     [f.tenants[0], f.userId],
+  );
+  expect((await store.document(sign)).id).toBe(invoice);
+  await f.pool.query(
+    "delete from private.platform_operators where user_id=$1",
+    [f.userId],
   );
   expect(await store.document(sign)).toBeNull();
   await f.pool.query(

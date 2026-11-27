@@ -171,7 +171,7 @@ it("persists independent parameters and activities, rejects stale edits and reta
     ).statusCode,
   ).toBe(200);
 });
-it("rejects unrelated company even for operator and rejects secrets in configuration", async () => {
+it("allows the global operator to open a company without membership and rejects secrets in configuration", async () => {
   const foreign = (
     await f.pool.query(
       "insert into public.tenants(legal_name,identification_type,identification) values('Ajena','other',$1) returning id",
@@ -179,7 +179,7 @@ it("rejects unrelated company even for operator and rejects secrets in configura
     )
   ).rows[0].id;
   expect((await request("/company-administration/" + foreign)).statusCode).toBe(
-    404,
+    200,
   );
   expect(
     (

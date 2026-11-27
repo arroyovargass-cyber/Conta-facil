@@ -32,7 +32,10 @@ async function login(page: Page, f: Awaited<ReturnType<typeof workspace>>) {
     .getByLabel("Código de 6 dígitos")
     .fill(totp(await page.locator("details code").innerText()));
   await page.getByRole("button", { name: "Verificar y continuar" }).click();
-  await page.getByRole("button", { name: /Empresa Norte/ }).click();
+  await page
+    .getByRole("button", { name: /Empresa Norte/ })
+    .filter({ hasText: f.tag })
+    .click();
   await expect(
     page.getByRole("heading", { name: "Tu empresa, en orden." }),
   ).toBeVisible();
@@ -533,7 +536,10 @@ test("detail and charges tabs retain their values and reopen the exact saved com
     });
     expect(row.commercial.payment_methods[0].amount).toBe("2360");
     await page.reload();
-    await page.getByRole("button", { name: /Empresa Norte/ }).click();
+    await page
+      .getByRole("button", { name: /Empresa Norte/ })
+      .filter({ hasText: f.tag })
+      .click();
     await expect(
       page.getByRole("heading", { name: "Tu empresa, en orden." }),
     ).toBeVisible();

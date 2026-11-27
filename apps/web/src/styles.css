@@ -96,6 +96,8 @@ p {
   display: flex;
   flex-direction: column;
   z-index: 30;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 .logo {
   display: flex;

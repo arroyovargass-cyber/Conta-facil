@@ -31,7 +31,10 @@ async function login(page: Page, f: Awaited<ReturnType<typeof workspace>>) {
     .getByLabel("Código de 6 dígitos")
     .fill(totp(await page.locator("details code").innerText()));
   await page.getByRole("button", { name: "Verificar y continuar" }).click();
-  await page.getByRole("button", { name: /Empresa Norte/ }).click();
+  await page
+    .getByRole("button", { name: /Empresa Norte/ })
+    .filter({ hasText: f.tag })
+    .click();
   await expect(
     page.getByRole("heading", { name: "Tu empresa, en orden." }),
   ).toBeVisible();
@@ -131,7 +134,10 @@ test("registers synthetic credentials, clears secrets after errors and success, 
     await page
       .getByRole("button", { name: /Empresa Norte Espacio de empresa/ })
       .click();
-    await page.getByRole("button", { name: /Empresa Sur/ }).click();
+    await page
+      .getByRole("button", { name: /Empresa Sur/ })
+      .filter({ hasText: f.tag })
+      .click();
     await nav(page, "Hacienda");
     await expect(page.getByLabel("Usuario de API")).toHaveValue("");
     await expect(page.getByLabel("Contraseña de API")).toHaveValue("");
@@ -282,7 +288,10 @@ test("ignores a delayed Hacienda error after switching companies", async ({
     await page
       .getByRole("button", { name: /Empresa Norte Espacio de empresa/ })
       .click();
-    await page.getByRole("button", { name: /Empresa Sur/ }).click();
+    await page
+      .getByRole("button", { name: /Empresa Sur/ })
+      .filter({ hasText: f.tag })
+      .click();
     await nav(page, "Hacienda");
     await expect(
       page.getByText("Sin credenciales activas", { exact: true }),

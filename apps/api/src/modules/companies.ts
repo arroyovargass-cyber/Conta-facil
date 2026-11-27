@@ -19,7 +19,7 @@ export function companyRoutes(
     return scoped(pool, p.claims, async (db) => ({
       items: (
         await db.query(
-          "select t.*,m.scope from public.tenants t join public.memberships m on m.tenant_id=t.id where m.user_id=$1 and m.active and t.active order by t.legal_name",
+          "with platform as materialized(select private.is_system_administrator() as is_global) select t.*,case when platform.is_global then 'company' else m.scope end as scope from platform cross join public.tenants t left join public.memberships m on m.tenant_id=t.id and m.user_id=$1 and m.active where t.active and (platform.is_global or m.user_id is not null) order by t.legal_name,t.id",
           [p.userId],
         )
       ).rows,

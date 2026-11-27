@@ -36,7 +36,10 @@ async function login(
       .fill(totp(await page.locator("details code").innerText()));
     await page.getByRole("button", { name: "Verificar y continuar" }).click();
   }
-  await page.getByRole("button", { name: /Empresa Norte/ }).click();
+  await page
+    .getByRole("button", { name: /Empresa Norte/ })
+    .filter({ hasText: f.tag })
+    .click();
   await expect(
     page.getByRole("heading", { name: "Tu empresa, en orden." }),
   ).toBeVisible();
@@ -352,7 +355,10 @@ test("discards delayed preview when another editor or company is selected", asyn
     await page
       .getByRole("button", { name: /Empresa Norte Espacio de empresa/ })
       .click();
-    await page.getByRole("button", { name: /Empresa Sur/ }).click();
+    await page
+      .getByRole("button", { name: /Empresa Sur/ })
+      .filter({ hasText: f.tag })
+      .click();
     await nav(page, "Borradores");
     const oldCompany = page.waitForResponse((r) =>
       r.url().endsWith("/" + id + "/fiscal-preview"),

@@ -260,17 +260,23 @@ it("uses the existing branch/terminal mechanism and never resets an existing con
   ]);
 });
 
-it("denies ordinary administrators and does not let a platform operator modify an unauthorized company", async () => {
+it("denies ordinary administrators and lets the global owner edit another company independently", async () => {
   const read = (await request(owner.tenants[0])).json().item;
   const body = Object.fromEntries(keys.map((key) => [key, read[key]]));
   const payload = { ...body, expected_version: read.configuration_version };
   expect(
     (await request(owner.tenants[0], "PATCH", payload, outsider)).statusCode,
   ).toBe(403);
-  expect((await request(other.tenants[0], "PATCH", payload)).statusCode).toBe(
-    404,
-  );
-  expect((await request(other.tenants[0])).statusCode).toBe(404);
+  const foreign = await request(other.tenants[0]);
+  expect(foreign.statusCode, foreign.body).toBe(200);
+  const item = foreign.json().item;
+  const update = await request(other.tenants[0], "PATCH", {
+    ...Object.fromEntries(keys.map((key) => [key, item[key]])),
+    trade_name: "Edición global independiente",
+    expected_version: item.configuration_version,
+  });
+  expect(update.statusCode, update.body).toBe(200);
+  expect(update.json().item.updated_by).toBe(owner.userId);
   const unchanged = (await request(owner.tenants[0])).json().item;
   expect(unchanged.configuration_version).toBe(read.configuration_version);
 });

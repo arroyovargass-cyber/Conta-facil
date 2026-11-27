@@ -25,7 +25,10 @@ async function login(page: Page, f: Awaited<ReturnType<typeof workspace>>) {
     .getByLabel("Código de 6 dígitos")
     .fill(totp(await page.locator("details code").innerText()));
   await page.getByRole("button", { name: "Verificar y continuar" }).click();
-  await page.getByRole("button", { name: /Empresa Norte/ }).click();
+  await page
+    .getByRole("button", { name: /Empresa Norte/ })
+    .filter({ hasText: f.tag })
+    .click();
   await expect(
     page.getByRole("heading", { name: "Tu empresa, en orden." }),
   ).toBeVisible();
@@ -226,7 +229,10 @@ test("discards delayed catalog responses after changing company", async ({
     await page
       .getByRole("button", { name: /Empresa Norte Espacio de empresa/ })
       .click();
-    await page.getByRole("button", { name: /Empresa Sur/ }).click();
+    await page
+      .getByRole("button", { name: /Empresa Sur/ })
+      .filter({ hasText: f.tag })
+      .click();
     await nav(page, "Clientes");
     await expect(
       page.getByText("No hay registros para estos filtros."),

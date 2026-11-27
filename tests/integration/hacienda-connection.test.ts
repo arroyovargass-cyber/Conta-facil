@@ -144,7 +144,7 @@ it("stores only final API access status while emission and identity remain block
   ])
     expect(r.body).not.toContain(secret);
 });
-it("does not start a stale probe or bypass the specific permission", async () => {
+it("does not start a stale probe or a probe after platform authority is revoked", async () => {
   const before = calls;
   expect(
     (
@@ -160,6 +160,10 @@ it("does not start a stale probe or bypass the specific permission", async () =>
     [f.tenants[0]],
   );
   try {
+    await f.pool.query(
+      "delete from private.platform_operators where user_id=$1",
+      [f.userId],
+    );
     expect(
       (
         await request("/connection-test", "POST", {
@@ -170,6 +174,10 @@ it("does not start a stale probe or bypass the specific permission", async () =>
     ).toBe(403);
     expect(calls).toBe(before);
   } finally {
+    await f.pool.query(
+      "insert into private.platform_operators(user_id) values($1) on conflict do nothing",
+      [f.userId],
+    );
     await f.pool.query(
       "insert into public.role_permissions select tenant_id,id,'hacienda.connection.test' from public.roles where tenant_id=$1 and code='admin'",
       [f.tenants[0]],

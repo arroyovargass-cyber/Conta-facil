@@ -67,17 +67,6 @@ export function companyRegistrationRoutes(
       db.release();
     }
   }
-  async function membership(db: Db, id: string, user: string) {
-    if (
-      !(
-        await db.query(
-          "select 1 from public.memberships where tenant_id=$1 and user_id=$2 and active and scope='company'",
-          [id, user],
-        )
-      ).rowCount
-    )
-      throw new HttpError(404, "Empresa no disponible.");
-  }
   async function read(db: Db, id: string) {
     const row = (
       await db.query("select " + columns + " from public.tenants where id=$1", [
@@ -204,6 +193,32 @@ export function companyRegistrationRoutes(
       }
     }
   }
+  async function initialize(db: Db, id: string, value: CompanyInput) {
+    const departments = (
+      await db.query(
+        "insert into public.departments(tenant_id,name) values($1,'Facturación'),($1,'Cuentas por cobrar'),($1,'Cuentas por pagar') returning id,name",
+        [id],
+      )
+    ).rows;
+    for (const environment of ["test", "production"]) {
+      await db.query(
+        "insert into public.tax_settings(tenant_id,environment,currency) values($1,$2,$3)",
+        [id, environment, value.configuration.billing.currency],
+      );
+      await db.query(
+        "insert into public.hacienda_configuration(tenant_id,environment) values($1,$2)",
+        [id, environment],
+      );
+    }
+    for (const [flow, name] of [
+      ["collections", "Cuentas por cobrar"],
+      ["payables", "Cuentas por pagar"],
+    ])
+      await db.query(
+        "insert into public.document_routes(tenant_id,flow,target_department_id,enabled) values($1,$2,$3,false)",
+        [id, flow, departments.find((d) => d.name === name)!.id],
+      );
+  }
   app.get(base, async (req) => {
     const p = await auth.authenticate(req);
     return transaction(
@@ -219,8 +234,7 @@ export function companyRegistrationRoutes(
             await db.query(
               "select " +
                 columns +
-                " from public.tenants where id in(select tenant_id from public.memberships where user_id=$1 and active and scope='company') order by legal_name,id",
-              [p.userId],
+                " from public.tenants order by legal_name,id",
             )
           ).rows,
         };
@@ -251,7 +265,6 @@ export function companyRegistrationRoutes(
     const p = await auth.authenticate(req),
       { id } = params.parse(req.params);
     return transaction(p.claims, async (db) => {
-      await membership(db, id, p.userId);
       return {
         item: await read(db, id),
         sequences: (
@@ -297,7 +310,6 @@ export function companyRegistrationRoutes(
             409,
             "La operación ya fue utilizada con otros datos.",
           );
-        await membership(db, old.tenant_id, p.userId);
         return { item: await read(db, old.tenant_id) };
       }
       await duplicate(db, value);
@@ -332,6 +344,7 @@ export function companyRegistrationRoutes(
         [id, p.userId],
       );
       await children(db, id, value);
+      await initialize(db, id, value);
       await db.query(
         "insert into private.company_operations values($1,$2,$3,$4,now())",
         [p.userId, operation_id, fingerprint, id],
@@ -355,13 +368,13 @@ export function companyRegistrationRoutes(
     const p = req.principal!,
       { id } = params.parse(req.params);
     return transaction(p.claims, async (db) => {
-      await membership(db, id, p.userId);
       const old = (
         await db.query(
           "select configuration_version,identification_type,identification from public.tenants where id=$1 for update",
           [id],
         )
       ).rows[0];
+      if (!old) throw new HttpError(404, "Empresa no disponible.");
       const { expected_version, ...value } = updateCompanyInput.parse(req.body);
       if (expected_version !== old.configuration_version)
         throw new HttpError(

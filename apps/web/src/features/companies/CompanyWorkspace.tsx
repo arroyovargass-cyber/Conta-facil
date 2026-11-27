@@ -4,6 +4,7 @@ import {
   companyInput,
   companyPreparation,
   documentTypes,
+  initialBillingLocation,
   type CompanyInput,
 } from "../../../../../packages/domain/src/company";
 import { CredentialForm } from "../hacienda/CredentialForm";
@@ -270,6 +271,10 @@ export function CompanyWorkspace({
     operation.current = crypto.randomUUID();
     persistedActivityCount.current = 0;
     const next = blank();
+    next.configuration.billing = {
+      ...next.configuration.billing,
+      ...initialBillingLocation,
+    };
     next.legal_name = "";
     next.identification = "";
     setValue(next);
