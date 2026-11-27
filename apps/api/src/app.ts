@@ -130,7 +130,7 @@ export async function createApp(
   companyRegistrationRoutes(app, pool, auth);
   customerRoutes(app, pool, auth);
   catalogRoutes(app, pool, auth);
-  invoicingRoutes(app, pool, auth);
+  invoicingRoutes(app, pool, auth, config);
   emissionRoutes(app, pool, auth, config);
   emissionNumberingRoutes(app, pool, auth);
   emissionActionRoutes(app, pool, auth);

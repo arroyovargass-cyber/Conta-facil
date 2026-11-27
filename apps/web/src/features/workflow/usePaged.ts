@@ -6,6 +6,7 @@ export function usePaged(path: string | null, filters: Record<string, string>) {
     sequence = useRef(0),
     context = useRef("");
   const [rows, setRows] = useState<Row[]>([]),
+    [summary, setSummary] = useState<Row | null>(null),
     [next, setNext] = useState<number | null>(null),
     [search, setSearch] = useState(""),
     [loading, setLoading] = useState(false),
@@ -31,6 +32,7 @@ export function usePaged(path: string | null, filters: Record<string, string>) {
       ) {
         setRows((old) => (more ? [...old, ...data.items] : data.items));
         setNext(data.nextCursor);
+        setSummary(data.summary ?? null);
       }
     } catch (e: any) {
       if (
@@ -52,6 +54,7 @@ export function usePaged(path: string | null, filters: Record<string, string>) {
     sequence.current++;
     setRows([]);
     setNext(null);
+    setSummary(null);
     setError("");
     if (!path) {
       setLoading(false);
@@ -66,6 +69,7 @@ export function usePaged(path: string | null, filters: Record<string, string>) {
   }, [key, revision]);
   return {
     rows,
+    summary,
     next,
     search,
     setSearch,

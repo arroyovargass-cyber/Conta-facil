@@ -35,7 +35,7 @@ function fixture() {
   const db = {
     async query(sql: string, values: any[] = []) {
       if (
-        /^(begin|commit|rollback|set local|reset role|select set_config)/.test(
+        /^(begin|commit|rollback|set local|reset role|select set_config|select pg_advisory_xact_lock)/.test(
           sql,
         )
       )
@@ -215,7 +215,11 @@ it("keeps numbering confirmation and options in the requested environment", asyn
   const f = fixture(),
     body = { branch_code: "001", terminal_code: "00001", starting_value: "7" };
   const test = await f.request("/invoices/numbering", "POST", body);
-  expect(test.json()).toEqual({ confirmed: true, environment: "test" });
+  expect(test.json()).toEqual({
+    confirmed: true,
+    environment: "test",
+    document_type: "FE",
+  });
   const production = await f.request("/invoices/numbering", "POST", {
     ...body,
     starting_value: "11",
@@ -225,6 +229,7 @@ it("keeps numbering confirmation and options in the requested environment", asyn
   expect(production.json()).toEqual({
     confirmed: true,
     environment: "production",
+    document_type: "FE",
   });
   expect((await f.request("/invoices/numbering-options")).json()).toMatchObject(
     { environment: "test", items: [{ last_value: "7" }] },

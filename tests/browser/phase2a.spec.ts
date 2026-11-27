@@ -83,7 +83,9 @@ test("creates catalogs and edits, archives and restores a commercial draft", asy
     await page
       .getByRole("button", { name: "Guardar borrador", exact: true })
       .click();
-    await expect(page.getByRole("status")).toContainText("Borrador guardado");
+    await expect(
+      page.getByRole("status", { name: "Resultado del borrador" }),
+    ).toContainText("Borrador guardado");
     await expect(
       page.getByText("Borrador — sin validez tributaria", { exact: true }),
     ).toBeVisible();
@@ -104,7 +106,9 @@ test("creates catalogs and edits, archives and restores a commercial draft", asy
     await page
       .getByRole("button", { name: "Guardar borrador", exact: true })
       .click();
-    await expect(page.getByRole("status")).toContainText("Borrador guardado");
+    await expect(
+      page.getByRole("status", { name: "Resultado del borrador" }),
+    ).toContainText("Borrador guardado");
     await page
       .getByRole("button", { name: "Abrir borrador", exact: true })
       .click();
@@ -127,7 +131,9 @@ test("creates catalogs and edits, archives and restores a commercial draft", asy
     await page
       .getByRole("button", { name: "Archivar borrador", exact: true })
       .click();
-    await expect(page.getByRole("status")).toContainText("Borrador archivado");
+    await expect(
+      page.getByRole("status", { name: "Resultado del borrador" }),
+    ).toContainText("Borrador archivado");
     await page.getByLabel("Estado de borradores").selectOption("true");
     await page
       .getByRole("button", { name: "Abrir borrador", exact: true })
@@ -135,7 +141,9 @@ test("creates catalogs and edits, archives and restores a commercial draft", asy
     await page
       .getByRole("button", { name: "Restaurar borrador", exact: true })
       .click();
-    await expect(page.getByRole("status")).toContainText("Borrador restaurado");
+    await expect(
+      page.getByRole("status", { name: "Resultado del borrador" }),
+    ).toContainText("Borrador restaurado");
   } finally {
     await f.pool.end();
   }

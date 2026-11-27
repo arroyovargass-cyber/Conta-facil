@@ -310,8 +310,8 @@ it("requires details for discount other and accepts ordinary discount codes", ()
 it("captures conditional receiver evidence and requires explicit FE domicile", () => {
   const base = {
     name: "Cliente",
-    identification_type: "06",
-    identification: "123",
+    identification_type: "01",
+    identification: "123456789",
   };
   const check = (extra = {}) =>
     validateInvoiceForIssuance({

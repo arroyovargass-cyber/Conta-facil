@@ -15,6 +15,28 @@ it("normalizes identification and saves basic configuration without fiscal prere
   expect(value.configuration.billing.environment).toBe("test");
   expect(companyPreparation(value).status).toBe("pending");
 });
+it("accepts an explicit customer email delivery opt-in while keeping send_email an address", () => {
+  const value = companyInput.parse({
+    ...basic,
+    configuration: {
+      billing: {
+        email_delivery_enabled: true,
+        send_email: "billing@example.com",
+      },
+    },
+  });
+  expect(value.configuration.billing.email_delivery_enabled).toBe(true);
+  expect(value.configuration.billing.send_email).toBe("billing@example.com");
+  expect(
+    companyInput.parse(basic).configuration.billing.email_delivery_enabled,
+  ).toBe(false);
+  expect(
+    companyInput.safeParse({
+      ...basic,
+      configuration: { billing: { send_email: true } },
+    }).success,
+  ).toBe(false);
+});
 it("rejects invented IDs, mismatched person type and secret fields", () => {
   expect(
     companyInput.safeParse({ ...basic, identification: "123" }).success,

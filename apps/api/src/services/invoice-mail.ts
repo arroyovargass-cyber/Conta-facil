@@ -70,6 +70,7 @@ export class InvoiceMail {
   }
   async send(input: {
     fiscalEnvironment?: HaciendaEnvironment;
+    documentType?: "FE" | "TE";
     invoiceId: string;
     recipient: string;
     companyName: string;
@@ -81,6 +82,10 @@ export class InvoiceMail {
     messageId: string;
   }> {
     const environment = haciendaEnvironmentInput.parse(input.fiscalEnvironment);
+    const documentType = z.enum(["FE", "TE"]).parse(input.documentType ?? "FE"),
+      label =
+        documentType === "TE" ? "Tiquete electrónico" : "Factura electrónica",
+      filename = documentType === "TE" ? "tiquete" : "factura";
     z.email().parse(input.recipient);
     if (
       !input.invoiceId ||
@@ -99,18 +104,18 @@ export class InvoiceMail {
         from: this.config.from,
         to: input.recipient,
         messageId,
-        subject: `${environment === "test" ? "[PRUEBAS] " : ""}Comprobante electrónico - ${input.companyName}`,
-        text: `${input.companyName}\nAmbiente de ${environment === "test" ? "pruebas" : "producción"}.\nSe adjuntan el XML del comprobante electrónico, su representación gráfica y la respuesta de Hacienda.`,
+        subject: `${environment === "test" ? "[PRUEBAS] " : ""}${label} - ${input.companyName}`,
+        text: `${input.companyName}\nAmbiente de ${environment === "test" ? "pruebas" : "producción"}.\nSe adjuntan el XML de ${documentType === "TE" ? "su tiquete electrónico" : "su factura electrónica"}, la representación gráfica del comprobante y la respuesta de Hacienda.`,
         disableFileAccess: true,
         disableUrlAccess: true,
         attachments: [
           {
-            filename: "factura.xml",
+            filename: `${filename}.xml`,
             content: input.xml,
             contentType: "application/xml",
           },
           {
-            filename: "factura.pdf",
+            filename: `${filename}.pdf`,
             content: input.pdf,
             contentType: "application/pdf",
           },

@@ -72,12 +72,32 @@ async function draft(
   );
   return id;
 }
+async function issuerChoices(f: Awaited<ReturnType<typeof workspace>>) {
+  const tenant = f.tenants[0];
+  await f.pool.query(
+    "insert into public.economic_activities(tenant_id,code,name,source_url) values($1,'123456','Actividad sintética','https://example.test')",
+    [tenant],
+  );
+  for (const code of ["001", "002"]) {
+    const branch = (
+      await f.pool.query(
+        "insert into public.branches(tenant_id,code,name) values($1,$2,$3) returning id",
+        [tenant, code, "Sucursal de prueba " + code],
+      )
+    ).rows[0].id;
+    await f.pool.query(
+      "insert into public.terminals(tenant_id,branch_id,code,name) values($1,$2,'00001','Terminal de prueba')",
+      [tenant, branch],
+    );
+  }
+}
 test("prepared invoice edits refresh the snapshot and render only monetary totals", async ({
   page,
 }) => {
   const f = await workspace({ role: "admin", companies: 2 });
   try {
     const draftId = await draft(f);
+    await issuerChoices(f);
     const departmentId = (
       await f.pool.query(
         "select department_id from public.invoice_drafts where id=$1",
@@ -134,10 +154,16 @@ test("prepared invoice edits refresh the snapshot and render only monetary total
         const body = request.postDataJSON();
         expect(body.version).toBe(1);
         expect(body.expected_version).toBeGreaterThan(0);
-        expect(body.options.branch_code).toBe("002");
+        const commercial = (
+          await f.pool.query(
+            "select commercial from public.invoice_drafts where id=$1",
+            [draftId],
+          )
+        ).rows[0].commercial;
+        expect(commercial.branch_code).toBe("002");
         saved = true;
         await route.fulfill({
-          json: { item: { ...invoice, version: 2, options: body.options } },
+          json: { item: { ...invoice, version: 2, options: commercial } },
         });
       } else
         await route.fulfill({
@@ -157,25 +183,27 @@ test("prepared invoice edits refresh the snapshot and render only monetary total
       detail.getByText("CRC 2260.00000", { exact: true }).first(),
     ).toBeVisible();
     await expect(
-      page.getByRole("button", { name: "Revisar emisión en pruebas" }),
+      page.getByRole("button", { name: "Facturar en pruebas" }),
     ).toBeDisabled();
     await page
       .getByRole("button", { name: "Editar preparación", exact: true })
       .click();
     await expect(
-      page.getByText("Se actualizará la copia desde el borrador actual", {
-        exact: true,
-      }),
+      page.getByRole("heading", { name: "Editar preparación", exact: true }),
     ).toBeVisible();
-    await page.getByLabel("Sucursal (3 dígitos)").fill("002");
+    await page
+      .getByRole("combobox", { name: "Sucursal", exact: true })
+      .selectOption("002");
     await page
       .getByRole("button", { name: "Actualizar preparación", exact: true })
       .click();
     await expect.poll(() => saved).toBe(true);
     await page
-      .getByRole("button", { name: "Nueva preparación", exact: true })
+      .getByRole("button", { name: "Nueva factura", exact: true })
       .click();
-    await expect(page.getByLabel("Sucursal (3 dígitos)")).toHaveValue("");
+    await expect(
+      page.getByRole("combobox", { name: "Sucursal", exact: true }),
+    ).toHaveValue("001");
     await expect(
       page.getByRole("button", { name: "Guardar preparación", exact: true }),
     ).toBeVisible();
@@ -191,6 +219,7 @@ test("prepares a fiscal invoice through the real API and retains server totals",
   const f = await workspace({ role: "admin", companies: 2 });
   try {
     const draftId = await draft(f, "Receptor fiscal de prueba");
+    await issuerChoices(f);
     await f.pool.query(
       "update public.tenants set identification_type='02', identification=$2, contact_email='emisor@example.test', address='San José' where id=$1",
       [f.tenants[0], String(randomInt(1000000000, 9999999999))],
@@ -233,16 +262,26 @@ test("prepares a fiscal invoice through the real API and retains server totals",
     );
     await login(page, f);
     await nav(page, "Facturación");
-    await page.getByLabel("Borrador nacional FE").selectOption(draftId);
-    await page.getByLabel("Sucursal (3 dígitos)").fill("001");
-    await page.getByLabel("Terminal (5 dígitos)").fill("00001");
+    await page.getByText("Preparar desde borrador", { exact: true }).click();
     await page
-      .getByLabel("Actividad económica del emisor (6 dígitos)")
-      .fill("123456");
+      .getByRole("combobox", { name: "Borrador nacional FE o TE", exact: true })
+      .selectOption(draftId);
+    await expect(
+      page.getByRole("combobox", { name: "Sucursal", exact: true }),
+    ).toHaveValue("001");
+    await expect(
+      page.getByRole("combobox", { name: "Terminal", exact: true }),
+    ).toHaveValue("00001");
+    await expect(
+      page.getByRole("combobox", {
+        name: "Actividad económica del emisor",
+        exact: true,
+      }),
+    ).toHaveValue("123456");
     await page
       .getByRole("button", { name: "Agregar medio de pago", exact: true })
       .click();
-    await page.getByLabel("Importe", { exact: true }).fill("2260");
+    await page.getByLabel("Importe de pago 1", { exact: true }).fill("2260");
     await page
       .getByRole("button", { name: "Guardar preparación", exact: true })
       .click();
@@ -250,9 +289,16 @@ test("prepares a fiscal invoice through the real API and retains server totals",
     await expect(
       detail.getByText("CRC 2260.00000", { exact: true }).first(),
     ).toBeVisible();
-    await expect(detail.getByText(/Tarifa 08 · 13%/)).toBeVisible();
+    await detail
+      .getByText("Mostrar u ocultar el desglose de totales", { exact: true })
+      .click();
     await expect(
-      detail.getByRole("button", { name: "Revisar emisión en pruebas" }),
+      detail
+        .getByRole("table", { name: "Desglose de impuestos" })
+        .getByText(/01 · 08 \(13 %\)/),
+    ).toBeVisible();
+    await expect(
+      detail.getByRole("button", { name: "Facturar en pruebas" }),
     ).toBeDisabled();
     await detail
       .getByRole("button", { name: "Actualizar estado", exact: true })
@@ -273,7 +319,7 @@ test("prepares a fiscal invoice through the real API and retains server totals",
       detail.getByText("CRC 2260.00000", { exact: true }).first(),
     ).toBeVisible();
     await expect(
-      detail.getByRole("button", { name: "Revisar emisión en pruebas" }),
+      detail.getByRole("button", { name: "Facturar en pruebas" }),
     ).toBeDisabled();
     await expect(
       detail.getByRole("link", { name: "Descargar XML" }),

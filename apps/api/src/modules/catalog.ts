@@ -1,7 +1,10 @@
 import type { FastifyInstance } from "fastify";
 import type pg from "pg";
 import { z } from "zod";
-import { catalogInput } from "../../../../packages/domain/src/billing";
+import {
+  catalogInput,
+  type DraftInput,
+} from "../../../../packages/domain/src/billing";
 import { scoped, HttpError } from "../db";
 import type { identity } from "./identity";
 import {
@@ -26,6 +29,69 @@ function normalizedCatalog(v: z.infer<typeof catalogInput>) {
   const cabys = v.cabys || f.cabys,
     unit = v.unit || f.unit;
   return { ...v, cabys, unit, tax_defaults: { ...f, cabys, unit } };
+}
+// Saving a draft line is an explicit catalog operation, scoped and deduplicated
+// in the same transaction as the draft. Existing catalog data is never changed.
+export async function saveDraftCatalogItem(
+  db: pg.PoolClient,
+  tenant: string,
+  currency: "CRC" | "USD",
+  line: DraftInput["lines"][number],
+) {
+  await catalogPermission(db, tenant, "catalog.manage");
+  await catalogPermission(db, tenant, "catalog.read");
+  const code = line.fiscal?.internal_code?.trim();
+  if (!code || !line.description || line.unit_price === null || !line.fiscal)
+    throw new HttpError(
+      400,
+      "Para guardar el producto completa el código interno, la descripción, el precio y sus datos fiscales.",
+    );
+  await db.query("select pg_advisory_xact_lock(hashtextextended($1,0))", [
+    tenant + ":catalog:" + code,
+  ]);
+  const existing = (
+    await db.query(
+      "select id,active,currency from public.catalog_items where tenant_id=$1 and code=$2",
+      [tenant, code],
+    )
+  ).rows[0];
+  if (existing) {
+    if (!existing.active || existing.currency !== currency)
+      throw new HttpError(
+        409,
+        "El código interno ya existe en esta empresa con otra moneda o está inactivo. Selecciona el producto o usa otro código.",
+      );
+    return existing.id as string;
+  }
+  const v = normalizedCatalog(
+    catalogInput.parse({
+      code,
+      description: line.description,
+      currency,
+      unit_price: line.unit_price,
+      kind: /^[0-4]/.test(line.fiscal.cabys) ? "product" : "service",
+      cabys: line.fiscal.cabys,
+      unit: line.fiscal.unit,
+      tax_defaults: line.fiscal,
+    }),
+  );
+  return (
+    await db.query(
+      "insert into public.catalog_items(tenant_id,code,description,kind,currency,unit_price,cabys,unit,active,tax_defaults) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) returning id",
+      [
+        tenant,
+        v.code,
+        v.description,
+        v.kind,
+        v.currency,
+        v.unit_price,
+        v.cabys,
+        v.unit,
+        v.active,
+        v.tax_defaults,
+      ],
+    )
+  ).rows[0].id as string;
 }
 export function catalogRoutes(
   app: FastifyInstance,

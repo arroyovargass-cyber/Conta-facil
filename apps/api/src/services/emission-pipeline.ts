@@ -27,6 +27,7 @@ import { enabledEmissionEnvironments } from "./emission-settings";
 import type { HaciendaEnvironment } from "../../../../packages/domain/src/hacienda-environment";
 import { renderInvoicePdf } from "./invoice-pdf";
 import { InvoiceMail } from "./invoice-mail";
+import { invoiceEmailDeliveryEnabled } from "../../../../packages/domain/src/company";
 const hash = (b: Buffer) => createHash("sha256").update(b).digest("hex");
 const fail = () => {
   throw Error("EMISSION_BLOCKED");
@@ -517,7 +518,7 @@ export class EmissionPipeline {
           }),
         );
       if (
-        d.snapshot.issuer.configuration?.billing?.send_email === true &&
+        invoiceEmailDeliveryEnabled(d.snapshot.issuer.configuration) &&
         d.snapshot.receiver.email &&
         this.smtp()
       )
@@ -525,7 +526,7 @@ export class EmissionPipeline {
     } else if (j.kind === "email") {
       if (
         d.hacienda_status !== "accepted" ||
-        d.snapshot.issuer.configuration?.billing?.send_email !== true ||
+        !invoiceEmailDeliveryEnabled(d.snapshot.issuer.configuration) ||
         !this.smtp()
       )
         fail();
@@ -555,6 +556,7 @@ export class EmissionPipeline {
         });
       const result = await mail.send({
         fiscalEnvironment: d.environment,
+        documentType: d.snapshot.document_type ?? "FE",
         invoiceId: d.email_dispatch_id
           ? `${d.id}:${d.email_dispatch_id}`
           : d.id,

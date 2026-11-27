@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { economicActivityCode } from "./economic-activity";
 const text = (max = 160) => z.string().trim().max(max);
 const optionalEmail = z.union([z.email(), z.literal("")]).default("");
 const date = z
@@ -42,6 +43,7 @@ const billing = z
       .union([z.string().regex(/^\d{5}$/), z.literal("")])
       .default(""),
     send_email: optionalEmail,
+    email_delivery_enabled: z.boolean().default(false),
     receive_email: optionalEmail,
     documents: z.array(z.enum(documentTypes)).max(7).default(["FE"]),
   })
@@ -102,8 +104,8 @@ export const companyConfiguration = z
   .prefault({});
 export const companyActivity = z
   .object({
-    code: text(30).min(1),
-    name: text().min(1),
+    code: z.string().min(1, "Indica el código de la actividad.").max(30),
+    name: text().min(1, "Indica la descripción de la actividad."),
     primary: z.boolean().default(false),
     active: z.boolean().default(true),
     source_url: z
@@ -198,14 +200,18 @@ function validate(v: z.infer<typeof base>, ctx: z.RefinementCtx) {
 }
 export const companyInput = base.superRefine(validate);
 export const createCompanyInput = base
-  .extend({ operation_id: z.uuid() })
+  .extend({
+    operation_id: z.uuid(),
+    activities: z
+      .array(companyActivity.extend({ code: economicActivityCode }))
+      .max(30)
+      .default([]),
+  })
   .superRefine(validate)
   .refine(
     (v) =>
       ["01", "02", "03", "04"].includes(v.identification_type) &&
       v.person_type !== "unspecified" &&
-      v.activities.length <= 30 &&
-      v.activities.every((a) => /^\d{6}$/.test(a.code)) &&
       (!v.activities.some((a) => a.active) ||
         v.activities.some((a) => a.active && a.primary)),
     {
@@ -218,6 +224,16 @@ export const updateCompanyInput = base
   .extend({ expected_version: z.number().int().positive() })
   .superRefine(validate);
 export type CompanyInput = z.infer<typeof companyInput>;
+/** Delivery is an explicit choice frozen with the invoice, never inferred from an address. */
+export function invoiceEmailDeliveryEnabled(configuration: unknown): boolean {
+  const billing = (
+    configuration as { billing?: Record<string, unknown> } | null
+  )?.billing;
+  if (typeof billing?.email_delivery_enabled === "boolean")
+    return billing.email_delivery_enabled;
+  // Compatibility for immutable invoices created before the company form used an address.
+  return billing?.send_email === true;
+}
 export function companyPreparation(value: CompanyInput) {
   const missing: string[] = [];
   if (value.person_type === "unspecified")
@@ -235,7 +251,7 @@ export function companyPreparation(value: CompanyInput) {
   )
     missing.push("Sucursal o terminal pendiente.");
   missing.push(
-    "La generación XML, firma y emisión electrónica aún no están integradas.",
+    "Revisa los requisitos finales en Facturación para cada empresa y ambiente antes de emitir.",
   );
   return { status: "pending" as const, canEmit: false, issues: missing };
 }

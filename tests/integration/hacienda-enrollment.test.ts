@@ -97,6 +97,8 @@ beforeAll(async () => {
   ).rows[0].auth_session_id;
   claims = { sub: f.userId, aal: "aal2", session_id: session };
   file = (await syntheticPkcs12({ pin: "1234" })).toString("base64");
+  // Match hosted Supabase: the API role cannot enter the managed Auth schema.
+  await f.pool.query("revoke usage on schema auth from conta_facil_api");
 });
 beforeEach(async () => {
   const keys = ["credentials", "probe"]
@@ -111,6 +113,7 @@ beforeEach(async () => {
   );
 });
 afterAll(async () => {
+  await f?.pool.query("grant usage on schema auth to conta_facil_api");
   await app?.close();
   await f?.pool.end();
 });

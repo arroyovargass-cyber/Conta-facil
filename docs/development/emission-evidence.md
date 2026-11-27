@@ -1,5 +1,10 @@
 # Evidencia de Facturación nacional STAG — 25/11/2026 (Costa Rica)
 
+Documento histórico de la revisión del 25/11. La configuración y ampliación
+posterior se describen en la [guía vigente](../runbooks/national-invoice-environments.md)
+y en la [matriz local del 26/11](billing44-closeout.md). Las banderas, commits y
+pendientes indicados abajo corresponden a la fecha de esta evidencia.
+
 ## Resultado implementado
 
 Facturación agrega preparación desde el editor fiscal existente, opciones contado/crédito, pagos, USD explícito, detalle de totales y conservación de receptor ocasional o registrado. Una copia preparada se actualiza expresamente con versiones; un comprobante emitido queda inmutable. Listados ligeros, aislamiento por empresa/departamento y permisos separados para preparar, emitir y descargar.
@@ -8,7 +13,12 @@ Se integraron numeración STAG confirmada por el propietario, reserva atómica, 
 
 La cola PostgreSQL usa leases, fencing, intentos limitados y recuperación de consultas. Antes del POST se persisten bytes firmados y una frontera incierta. Consultar/reintentar no crea otro comprobante. El reenvío confirmado crea una entrega independiente e idempotente; incertidumbre SMTP impide repetirla automáticamente. Se corrigió una carrera de creación del primer trabajo: acciones, pipeline y recuperación comparten un advisory key canónico, incluso con UUID en mayúsculas.
 
-Correo automático exige `send_email=true` congelado en la copia. Se conservan estados separados y auditoría mínima sin copiar XML, receptor ni credenciales en detalles de eventos. Cuentas por cobrar mantiene el vínculo con la tarea departamental del borrador, sin generar deuda al contado.
+El pipeline de esa revisión esperaba `send_email=true` congelado. La revisión del
+26/11 corrigió la incompatibilidad con el formulario: `send_email` conserva una
+dirección y `email_delivery_enabled` solicita explícitamente la entrega. Solo las
+copias históricas conservan compatibilidad con el booleano anterior. Se conservan
+estados separados y auditoría sin XML, receptor ni credenciales en los eventos.
+CxC mantiene el vínculo con el borrador sin generar deuda al contado.
 
 ## Verificación
 

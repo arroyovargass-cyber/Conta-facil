@@ -494,7 +494,7 @@ it("keeps product CABYS and unit consistent with its fiscal defaults", async () 
 });
 it("requires module read permission as well as membership for fiscal lookups", async () => {
   await f.pool.query(
-    "delete from public.role_permissions where tenant_id=$1 and permission in('customers.read','catalog.read','invoices.read') and role_id in(select id from public.roles where tenant_id=$1 and code='billing')",
+    "delete from public.role_permissions where tenant_id=$1 and permission in('customers.read','catalog.read','invoices.read','invoices.create','invoices.edit') and role_id in(select id from public.roles where tenant_id=$1 and code='billing')",
     [f.tenants[0]],
   );
   expect((await request("/locations")).statusCode).toBe(403);

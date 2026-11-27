@@ -5,6 +5,7 @@ import { z } from "zod";
 import { HttpError, requirePermission } from "../db";
 import { found } from "./billing-common";
 import type { identity } from "./identity";
+import { invoiceEmailDeliveryEnabled } from "../../../../packages/domain/src/company";
 const actions = [
   "retry_signature",
   "retry_transmission",
@@ -22,10 +23,17 @@ const kind = {
   query: "query",
   resend_email: "email",
 };
+const actionPermission = (action: Action) =>
+  action === "query"
+    ? "invoices.query"
+    : action === "resend_email"
+      ? "invoices.email"
+      : "invoices.emit";
 const active = (job: any) => job && ["pending", "leased"].includes(job.status);
 function permitted(row: any, action: Action, job: any, actor: string) {
   if (row.document_status !== "issued") return false;
-  if (action !== "query" && row.issued_by !== actor) return false;
+  if (!["query", "resend_email"].includes(action) && row.issued_by !== actor)
+    return false;
   if (action === "retry_signature")
     return (
       row.signature_status === "pending" &&
@@ -45,7 +53,8 @@ function permitted(row: any, action: Action, job: any, actor: string) {
     );
   return (
     row.hacienda_status === "accepted" &&
-    row.snapshot?.issuer?.configuration?.billing?.send_email === true &&
+    Boolean(row.snapshot?.receiver?.email) &&
+    invoiceEmailDeliveryEnabled(row.snapshot?.issuer?.configuration) &&
     ["queued", "provider_accepted", "error", "not_queued"].includes(
       row.email_status,
     ) &&
@@ -94,13 +103,12 @@ export function emissionActionRoutes(
         ).rows[0],
       );
       await requirePermission(db, tenantId, "invoices.read", row.department_id);
-      const allowed =
-        (
-          await db.query(
-            "select private.has_access($1,'invoices.emit',$2) allowed",
-            [tenantId, row.department_id],
-          )
-        ).rows[0].allowed && p.claims.aal === "aal2";
+      const capabilities = (
+        await db.query(
+          "select private.has_access($1,'invoices.emit',$2) can_emit,private.has_access($1,'invoices.query',$2) can_query,private.has_access($1,'invoices.email',$2) can_email",
+          [tenantId, row.department_id],
+        )
+      ).rows[0];
       await db.query("reset role");
       const jobs = (
         await db.query(
@@ -109,9 +117,14 @@ export function emissionActionRoutes(
         )
       ).rows;
       const visible: Action[] = [];
-      if (allowed)
+      if (p.claims.aal === "aal2")
         for (const action of actions)
           if (
+            (action === "query"
+              ? capabilities.can_query
+              : action === "resend_email"
+                ? capabilities.can_email
+                : capabilities.can_emit) &&
             permitted(
               row,
               action,
@@ -151,13 +164,21 @@ export function emissionActionRoutes(
           )
         ).rows[0],
       );
-      await requirePermission(db, tenantId, "invoices.emit", row.department_id);
+      await requirePermission(
+        db,
+        tenantId,
+        actionPermission(input.action),
+        row.department_id,
+      );
       if (p.claims.aal !== "aal2")
         throw new HttpError(
           403,
           "Confirma tu identidad con MFA antes de continuar.",
         );
-      if (input.action !== "query" && row.issued_by !== p.userId)
+      if (
+        !["query", "resend_email"].includes(input.action) &&
+        row.issued_by !== p.userId
+      )
         throw new HttpError(
           403,
           "Solo la persona que emitió la factura puede solicitar esta acción.",
@@ -203,12 +224,19 @@ export function emissionActionRoutes(
       row = found(
         (
           await db.query(
-            "select * from public.electronic_invoices where tenant_id=$1 and id=$2 for update",
+            "select * from public.electronic_invoices where tenant_id=$1 and id=$2" +
+              (input.action === "query" ? "" : " for update"),
             [tenantId, id],
           )
         ).rows[0],
       );
-      await requirePermission(db, tenantId, "invoices.emit", row.department_id);
+      await requirePermission(
+        db,
+        tenantId,
+        actionPermission(input.action),
+        row.department_id,
+      );
+      await requirePermission(db, tenantId, "invoices.read", row.department_id);
       if (
         !permitted(row, input.action, job, p.userId) ||
         (input.action === "resend_email" &&
@@ -231,8 +259,16 @@ export function emissionActionRoutes(
         );
       if (!active(job)) {
         const scheduled = await db.query(
-          "insert into private.emission_jobs(tenant_id,invoice_id,kind) values($1,$2,$3) on conflict(tenant_id,invoice_id,kind) do update set status='pending',attempts=0,available_at=now(),lease_token=null,lease_until=null,last_error_code=null,completed_at=null where private.emission_jobs.status not in ('pending','leased') returning id",
-          [tenantId, id, kind[input.action]],
+          "insert into private.emission_jobs(tenant_id,invoice_id,kind,request_origin,requested_by) values($1,$2,$3,$4,$5) on conflict(tenant_id,invoice_id,kind) do update set status='pending',attempts=0,available_at=now(),lease_token=null,lease_until=null,last_error_code=null,completed_at=null,request_origin=excluded.request_origin,requested_by=excluded.requested_by where private.emission_jobs.status not in ('pending','leased') returning id",
+          [
+            tenantId,
+            id,
+            kind[input.action],
+            ["query", "resend_email"].includes(input.action)
+              ? "manual"
+              : "automatic",
+            ["query", "resend_email"].includes(input.action) ? p.userId : null,
+          ],
         );
         if (input.action === "resend_email" && scheduled.rowCount)
           await db.query(
@@ -244,7 +280,13 @@ export function emissionActionRoutes(
         "insert into private.emission_actions(tenant_id,invoice_id,actor_id,operation_id,action,request_hash) values($1,$2,$3,$4,$5,$6)",
         [tenantId, id, p.userId, input.operation_id, input.action, hash],
       );
-      await requirePermission(db, tenantId, "invoices.emit", row.department_id);
+      await requirePermission(
+        db,
+        tenantId,
+        actionPermission(input.action),
+        row.department_id,
+      );
+      await requirePermission(db, tenantId, "invoices.read", row.department_id);
       await db.query("commit");
       return { queued: true, action: input.action };
     } catch (e) {

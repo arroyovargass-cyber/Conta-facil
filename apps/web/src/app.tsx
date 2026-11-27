@@ -74,7 +74,7 @@ const headings: Record<string, [string, string]> = {
   ],
   invoices: [
     "Facturación",
-    "Prepara y revisa facturas nacionales en pruebas y producción.",
+    "Prepara facturas y tiquetes; consulta su envío y respuesta de Hacienda.",
   ],
   drafts: [
     "Borradores",
@@ -714,12 +714,12 @@ export function App() {
         <span className="nav-caption upcoming">PRÓXIMAMENTE</span>
         <div className="nav-disabled">
           <FileText size={19} />
-          Facturación electrónica
+          Otros comprobantes
           <LockKeyhole size={13} />
         </div>
         <div className="nav-disabled">
           <Inbox size={19} />
-          Recepción de facturas
+          Recepción por correo
           <LockKeyhole size={13} />
         </div>
         <div className="sidebar-bottom">
@@ -729,7 +729,8 @@ export function App() {
             </span>
             <strong>Una base para crecer</strong>
             <p>
-              Estamos preparando tu empresa para la facturación electrónica 4.4.
+              Completa la configuración de cada empresa y revisa sus requisitos
+              antes de emitir.
             </p>
             <button onClick={() => setView("tax")}>
               Ver configuración <ArrowUpRight size={14} />
@@ -835,6 +836,9 @@ export function App() {
               tenantId={tenant}
               view={view as "customers" | "catalog" | "drafts" | "invoices"}
               permissions={overview?.permissions ?? []}
+              onConfigure={(
+                target: "company" | "hacienda" | "organization" | "tax",
+              ) => setView(target)}
             />
           )}
           {view === "hacienda" && (
@@ -1076,10 +1080,10 @@ export function App() {
                       <FileText size={20} />
                     </div>
                     <span className="eyebrow">EL SIGUIENTE PASO</span>
-                    <h3>Facturación electrónica 4.4</h3>
+                    <h3>Recepción automática de facturas</h3>
                     <p>
-                      La emisión y recepción de comprobantes llegarán en las
-                      próximas fases.
+                      La lectura automática de XML desde el correo de cada
+                      empresa corresponde a una fase posterior.
                     </p>
                     <Badge tone="neutral">Próximamente</Badge>
                   </section>
@@ -1607,9 +1611,19 @@ export function App() {
                       "catalog.read",
                       "catalog.manage",
                       "invoices.read",
+                      "invoices.create",
+                      "invoices.prepare",
+                      "invoices.email",
+                      "invoices.numbering",
+                      "reports.read",
+                      "invoices.edit",
+                      "invoices.delete",
                       "invoices.manage",
                       "invoices.emit",
+                      "invoices.query",
                       "invoices.download",
+                      "invoices.credit_note",
+                      "invoices.debit_note",
                       "hacienda.read",
                       "hacienda.credentials.manage",
                       "hacienda.connection.test",
@@ -1634,12 +1648,32 @@ export function App() {
                               "catalog.read": "Ver productos",
                               "catalog.manage": "Gestionar productos",
                               "invoices.read": "Ver facturas y borradores",
+                              "invoices.prepare":
+                                "Preparar y actualizar comprobantes desde borradores",
+                              "invoices.email":
+                                "Enviar y reenviar comprobantes aceptados por correo",
+                              "invoices.numbering":
+                                "Confirmar numeración (solo superadministrador)",
+                              "reports.read":
+                                "Consultar reportes e indicadores",
+                              "invoices.create":
+                                "Crear nuevos borradores (MFA)",
+                              "invoices.edit":
+                                "Modificar borradores (MFA)",
+                              "invoices.delete":
+                                "Archivar y restaurar borradores (MFA)",
                               "invoices.manage":
-                                "Preparar facturas y borradores",
+                                "Permiso heredado: elige también las acciones específicas",
                               "invoices.emit":
                                 "Emitir facturas electrónicas (MFA)",
+                              "invoices.query":
+                                "Consultar respuestas en Hacienda",
                               "invoices.download":
                                 "Descargar XML, PDF y respuestas",
+                              "invoices.credit_note":
+                                "Autorizar notas de crédito",
+                              "invoices.debit_note":
+                                "Autorizar notas de débito",
                               "hacienda.read": "Consultar Hacienda",
                               "hacienda.credentials.manage":
                                 "Gestionar credenciales de Hacienda",

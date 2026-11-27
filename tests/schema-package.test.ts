@@ -79,3 +79,30 @@ it("distinguishes package integrity from XML validation, signature and emission"
   expect(result.xsdValidation).toBe("not_run");
   expect(result.emissionEnabled).toBe(false);
 });
+it("audits every document profile, including TE, against pinned bytes", () => {
+  const ticket = Buffer.from("synthetic ticket schema");
+  const combined = {
+    ...manifest,
+    document_schemas: [
+      {
+        document_type: "TE",
+        root: "TiqueteElectronico",
+        target_namespace:
+          "https://cdn.comprobanteselectronicos.go.cr/xml-schemas/v4.4/tiqueteElectronico",
+        file: "ticket.xsd",
+        bytes: ticket.length,
+        sha256: digest(ticket),
+        status: manifest.status,
+        runtime_use_allowed: true,
+        dependencies: manifest.dependencies,
+      },
+    ],
+  };
+  const content = files();
+  content.set("ticket.xsd", ticket);
+  expect(auditSchemaPackage(combined, content).status).toBe("package_verified");
+  content.set("ticket.xsd", Buffer.alloc(ticket.length, 65));
+  expect(auditSchemaPackage(combined, content).issues).toContain(
+    "SCHEMA_INTEGRITY_FAILED",
+  );
+});

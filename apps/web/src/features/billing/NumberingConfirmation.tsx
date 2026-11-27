@@ -15,25 +15,34 @@ type NumberingOptions = { canConfirm: boolean; items: NumberingItem[] };
 export function NumberingConfirmation(props: {
   base: string;
   environment: HaciendaEnvironment;
+  documentType?: "FE" | "TE";
   onConfirmed?: () => void;
 }) {
   return (
-    <ConfirmationForm key={props.base + ":" + props.environment} {...props} />
+    <ConfirmationForm
+      key={props.base + ":" + props.environment + ":" + props.documentType}
+      {...props}
+    />
   );
 }
 
 function ConfirmationForm({
   base,
   environment,
+  documentType: initialDocumentType = "FE",
   onConfirmed,
 }: {
   base: string;
   environment: HaciendaEnvironment;
+  documentType?: "FE" | "TE";
   onConfirmed?: () => void;
 }) {
   const alive = useAlive();
   const pending = useRef(false);
   const [options, setOptions] = useState<NumberingOptions | null>(null);
+  const [documentType, setDocumentType] = useState<"FE" | "TE">(
+    initialDocumentType,
+  );
   const [selection, setSelection] = useState("");
   const [value, setValue] = useState("");
   const [confirmed, setConfirmed] = useState(false);
@@ -41,7 +50,11 @@ function ConfirmationForm({
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
   const label = environment === "production" ? "producción" : "pruebas";
-  const path = base + "/invoices/numbering-options?environment=" + environment;
+  const path =
+    base +
+    "/invoices/numbering-options?environment=" +
+    environment +
+    (documentType === "TE" ? "&document_type=TE" : "");
   useEffect(() => {
     let cancelled = false;
     const controller = new AbortController();
@@ -51,8 +64,14 @@ function ConfirmationForm({
       .then((data) => {
         if (!cancelled && alive.current) setOptions(data);
       })
-      .catch(() => {
+      .catch((error: { status?: number }) => {
         // Do not expose an owner-only form when permission cannot be verified.
+        if (!cancelled && alive.current)
+          setError(
+            error.status === 403
+              ? "Solo el superadministrador autorizado con MFA puede confirmar la numeración."
+              : "No se pudo comprobar el permiso para configurar la numeración. Vuelve a abrir Facturación.",
+          );
       });
     return () => {
       cancelled = true;
@@ -87,6 +106,7 @@ function ConfirmationForm({
     try {
       await post(base + "/invoices/numbering", {
         environment,
+        document_type: documentType,
         branch_code: item.branch_code,
         terminal_code: item.terminal_code,
         starting_value: value,
@@ -104,7 +124,19 @@ function ConfirmationForm({
       if (alive.current) setBusy(false);
     }
   }
-  if (!options?.canConfirm) return null;
+  if (!options)
+    return (
+      <p role={error ? "alert" : undefined}>
+        {error || "Consultando configuración de numeración…"}
+      </p>
+    );
+  if (!options.canConfirm)
+    return (
+      <p>
+        Solo el superadministrador autorizado con MFA puede confirmar la
+        numeración.
+      </p>
+    );
   return (
     <details>
       <summary>Numeración de {label}</summary>
@@ -113,6 +145,23 @@ function ConfirmationForm({
           Confirma el último consecutivo utilizado en el ambiente de {label}.
         </p>
         <fieldset disabled={busy}>
+          <label className="field">
+            Tipo de documento de la numeración
+            <select
+              value={documentType}
+              onChange={(event) => {
+                setDocumentType(event.target.value as "FE" | "TE");
+                setSelection("");
+                setValue("");
+                setConfirmed(false);
+                setSuccess(false);
+                setError("");
+              }}
+            >
+              <option value="FE">Factura electrónica</option>
+              <option value="TE">Tiquete electrónico</option>
+            </select>
+          </label>
           <label className="field">
             Sucursal / terminal
             <select

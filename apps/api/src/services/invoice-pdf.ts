@@ -1,15 +1,19 @@
-import { isDeepStrictEqual } from "node:util";
 import { readFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { resolve } from "node:path";
 import fontkit from "@pdf-lib/fontkit";
 import { PDFDocument, rgb } from "pdf-lib";
-import {
-  calculateInvoice,
-  IVA_TARIFFS,
-} from "../../../../packages/domain/src/invoice-fiscal";
-import type { InvoiceXmlInput } from "./invoice-xml";
+import { frozenInvoiceCalculation, type InvoiceXmlInput } from "./invoice-xml";
+import type { EmissionOptions } from "../../../../packages/domain/src/emission";
 import { haciendaEnvironmentInput } from "../../../../packages/domain/src/hacienda-environment";
+const netTax = (tax: string, exoneration: string) => {
+  const units = (value: string) => {
+    const [whole, fraction = ""] = value.split(".");
+    return BigInt(whole) * 100000n + BigInt(fraction.padEnd(5, "0"));
+  };
+  const value = units(tax) - units(exoneration);
+  return `${value / 100000n}.${(value % 100000n).toString().padStart(5, "0")}`;
+};
 export async function renderInvoicePdf(input: {
   snapshot: InvoiceXmlInput["snapshot"];
   clave: string;
@@ -17,6 +21,7 @@ export async function renderInvoicePdf(input: {
   issued_at: string;
   hacienda_status: "pending" | "accepted" | "rejected";
   environment?: "test" | "production";
+  options?: EmissionOptions;
 }): Promise<Buffer> {
   const environment = haciendaEnvironmentInput.parse(input.environment);
   const environmentLabel =
@@ -24,12 +29,16 @@ export async function renderInvoicePdf(input: {
       ? "Ambiente de producción"
       : "Ambiente de pruebas";
   const { snapshot: s } = input;
-  const t = calculateInvoice(s.lines);
-  if (t.status !== "complete" || !isDeepStrictEqual(t, s.totals))
-    throw Error("INVOICE_PDF_TOTALS_MISMATCH");
+  const t = frozenInvoiceCalculation(s);
+  if (!t) throw Error("INVOICE_PDF_TOTALS_MISMATCH");
   if (
     !/^\d{50}$/.test(input.clave) ||
     !/^\d{20}$/.test(input.consecutivo) ||
+    input.clave.slice(21, 41) !== input.consecutivo ||
+    input.consecutivo.slice(8, 10) !==
+      (s.document_type === "TE" ? "04" : "01") ||
+    (s.document_type !== undefined &&
+      !["FE", "TE"].includes(s.document_type)) ||
     !Number.isFinite(Date.parse(input.issued_at)) ||
     !["pending", "accepted", "rejected"].includes(input.hacienda_status)
   )
@@ -77,7 +86,12 @@ export async function renderInvoicePdf(input: {
       y -= size + 5;
     }
   }
-  line("Factura electrónica nacional", 16);
+  line(
+    s.document_type === "TE"
+      ? "Tiquete electrónico"
+      : "Factura electrónica nacional",
+    16,
+  );
   line(environmentLabel, 12);
   line("Representación gráfica del comprobante electrónico");
   line(
@@ -90,13 +104,44 @@ export async function renderInvoicePdf(input: {
   if (s.issuer.trade_name) line(`Nombre comercial: ${s.issuer.trade_name}`);
   line(`Dirección: ${s.issuer.address}`);
   line(`Correo: ${s.issuer.contact_email}`);
-  line(`Receptor: ${s.receiver.name}`);
+  if (s.issuer.phone) line(`Teléfono: ${s.issuer.phone}`);
   line(
-    `Identificación: ${s.receiver.identification_type} / ${s.receiver.identification}`,
+    `Receptor: ${s.receiver.name || (s.document_type === "TE" ? "Consumidor final" : "")}`,
   );
+  if (s.receiver.identification)
+    line(
+      `Identificación: ${s.receiver.identification_type} / ${s.receiver.identification}`,
+    );
+  if (s.receiver.trade_name) line(`Nombre comercial: ${s.receiver.trade_name}`);
+  if (s.receiver.foreign_address || s.receiver.address)
+    line(`Dirección: ${s.receiver.foreign_address || s.receiver.address}`);
+  if (s.receiver.email) line(`Correo: ${s.receiver.email}`);
+  if (s.receiver.phone) line(`Teléfono: ${s.receiver.phone}`);
+  if (s.receiver.economic_activity && s.document_type !== "TE")
+    line(`Actividad del receptor: ${s.receiver.economic_activity}`);
   line(`Clave / referencia de consulta: ${input.clave}`);
   line(`Consecutivo: ${input.consecutivo}`);
   line(`Fecha de emisión: ${input.issued_at}`);
+  if (input.options) {
+    line(
+      `Condición de venta: ${input.options.sale_condition === "02" ? "Crédito" : "Contado"}`,
+    );
+    if (input.options.issuer_activity)
+      line(`Actividad del emisor: ${input.options.issuer_activity}`);
+    if (input.options.sale_condition === "02") {
+      const days = input.options.credit_days;
+      if (!Number.isInteger(days) || days! < 1 || days! > 99999)
+        throw Error("INVOICE_PDF_INVALID_METADATA");
+      // Immutable issuance instant, then calendar days in Costa Rica (UTC−06:00, no DST).
+      const due = new Date(
+        Date.parse(input.issued_at) - 6 * 3600000 + days! * 86400000,
+      )
+        .toISOString()
+        .slice(0, 10);
+      line(`Plazo de crédito: ${days} días`);
+      line(`Vencimiento comercial: ${due} (Costa Rica)`);
+    }
+  }
   line(`Moneda: ${s.currency}`);
   s.lines.forEach((l, i) => {
     const a = t.lines[i],
@@ -106,21 +151,70 @@ export async function renderInvoicePdf(input: {
       `CABYS: ${f.cabys} | Cantidad: ${l.quantity} ${f.unit} | Precio: ${l.unit_price}`,
     );
     line(
-      `Importe: ${a.beforeDiscount} | Descuento: ${a.discount} | Base: ${a.base}`,
+      `Importe: ${a.beforeDiscount} | Descuento: ${a.discount} | Base comercial: ${a.base} | Base IVA: ${a.tax_base}`,
     );
-    line(
-      `IVA ${IVA_TARIFFS[f.tariff_code].rate}%: ${a.tax} | Exoneración: ${a.exoneration} | Total: ${a.total}`,
-    );
+    for (const tax of a.taxes)
+      line(
+        `${tax.code === "01" ? "IVA" : "Impuesto " + tax.code} ${tax.rate}%: ${tax.amount} | Exoneración: ${tax.exoneration}`,
+      );
+    line(`Total de línea: ${a.total}`);
+    if (f.internal_code) line(`Código interno: ${f.internal_code}`);
+    for (const code of f.commercial_codes ?? [])
+      line(`Código comercial ${code.type}: ${code.code}`);
+    if (f.transaction_type && s.document_type !== "TE")
+      line(`Tipo de transacción: ${f.transaction_type}`);
+    if (f.vin_numbers?.length) line(`VIN / serie: ${f.vin_numbers.join(", ")}`);
+    if (f.medicine_registration)
+      line(`Registro sanitario: ${f.medicine_registration}`);
+    if (f.pharmaceutical_form)
+      line(`Forma farmacéutica: ${f.pharmaceutical_form}`);
   });
   line("Desglose de impuestos", 12);
   for (const g of t.groups)
     line(
-      `IVA código ${g.tax_code}, tarifa ${g.tariff_code} (${g.rate}%): base ${g.base}; impuesto ${g.tax}; exoneración ${g.exoneration}`,
+      `${g.tax_code === "01" ? "IVA" : "Impuesto"} código ${g.tax_code}${g.tariff_code ? ", tarifa " + g.tariff_code : ""} (${g.rate}%): base ${g.base}; impuesto ${g.tax}; exoneración ${g.exoneration}`,
     );
   line(
     `Venta: ${t.beforeDiscount} | Descuentos: ${t.discounts} | Subtotal: ${t.subtotal}`,
   );
-  line(`IVA: ${t.tax} | Exoneraciones: ${t.exonerations}`);
+  line(
+    `Impuestos antes de exoneraciones: ${t.tax} | Exoneraciones: ${t.exonerations}`,
+  );
+  line(`Total de impuestos: ${netTax(t.tax, t.exonerations)}`);
+  if (t.charges.length) {
+    line("Otros cargos", 12);
+    for (const charge of t.charges) {
+      line(
+        `${charge.code}: ${charge.description} | Monto: ${charge.calculated_amount}`,
+      );
+      if (charge.other_description)
+        line(`Tipo de cargo: ${charge.other_description}`);
+      if (charge.mode === "percentage")
+        line(
+          `Porcentaje: ${charge.percentage}% sobre base comercial explícita: ${charge.percentage_base}`,
+        );
+      if (charge.third_party_name)
+        line(
+          `Tercero: ${charge.third_party_name} | ${charge.third_party_type} / ${charge.third_party_identification}`,
+        );
+    }
+    line(`Otros cargos: ${t.otherCharges}`);
+  }
+  if (t.ivaReturned !== "0.00000") line(`IVA devuelto: ${t.ivaReturned}`);
+  if (input.options)
+    for (const payment of input.options.payment_methods)
+      line(
+        `Medio de pago ${payment.code}${payment.other_description ? " / " + payment.other_description : ""}: ${payment.amount}`,
+      );
+  for (const ref of input.options?.references ?? []) {
+    line(
+      `Referencia ${ref.document_type}${ref.document_other ? " / " + ref.document_other : ""}: ${ref.number} | Fecha: ${ref.issue_date}`,
+    );
+    if (ref.code || ref.reason)
+      line(
+        `Código ${ref.code}${ref.code_other ? " / " + ref.code_other : ""}: ${ref.reason}`,
+      );
+  }
   line(`Total ${s.currency}: ${t.total}`, 14);
   if (s.notes) line(`Notas: ${s.notes}`);
   for (const [i, p] of doc.getPages().entries())

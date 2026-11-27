@@ -1,0 +1,19 @@
+{
+  "source_url": "https://www.hacienda.go.cr/docs/Nota_9_Codigo_Forma_Farmaceutica.xlsx",
+  "file": "Nota_9_Codigo_Forma_Farmaceutica.downloaded-20261126.xlsx",
+  "retrieved_on": "2026-11-26",
+  "source_origin": "anonymous_official_download_tls_verified",
+  "bytes": 24090,
+  "sha256": "2823dbff2041a8ae0efbd5abb75ae9dd067e6b6973f8b88acbcb1425b8a1a022",
+  "worksheet": "Forma Farmaceutica",
+  "data_range": "A2:B230",
+  "entry_count": 229,
+  "code_cell_type": "shared string (t=s)",
+  "code_cell_style_index": 2,
+  "code_number_format_id": 49,
+  "code_number_format": "Text (@)",
+  "code_transform": "none: preserve exact shared-string text, including leading zeroes; never pad to three characters",
+  "label_transform": "trim surrounding whitespace only; preserve source spelling",
+  "extraction": "Python standard library zipfile and xml.etree.ElementTree; no formula evaluation or workbook macros",
+  "scope": "Pharmaceutical form codes only; no medicine registration or CABYS eligibility evidence"
+}

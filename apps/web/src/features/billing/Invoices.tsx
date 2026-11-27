@@ -1,9 +1,15 @@
 import { InvoiceActions } from "./InvoiceActions";
 import { NumberingConfirmation } from "./NumberingConfirmation";
+import { EmissionRequirements } from "./EmissionRequirements";
 import React, { useRef, useState } from "react";
 import { apiRequest, post } from "../../api/client";
 import { Drafts } from "./Drafts";
-import { Field, useAlive, useListing, type Row } from "./common";
+import { useAlive, useListing, type Row } from "./common";
+import {
+  InvoiceSummary,
+  provisionalDueDate,
+  PAYMENT_METHODS,
+} from "./BillingFields";
 import { usePaged } from "../workflow/usePaged";
 import {
   EnvironmentSelector,
@@ -28,52 +34,18 @@ const labels: Record<string, string> = {
   provider_accepted: "Aceptado por proveedor de correo",
   error: "Error",
 };
-const monetaryLabels: Record<string, string> = {
-  beforeDiscount: "Importe antes de descuentos",
-  discounts: "Descuentos",
-  subtotal: "Subtotal",
-  tax: "Impuestos",
-  exonerations: "Exoneraciones",
-  total: "Total",
-};
 function money(snapshot?: Row) {
   return typeof snapshot?.totals?.total === "string"
     ? `${snapshot.currency} ${snapshot.totals.total}`
     : "Total pendiente de cálculo";
 }
-function netTax(tax: string, exoneration: string) {
-  const scaled = (value: string) => {
-    const [whole, fraction = ""] = value.split(".");
-    return BigInt(whole) * 100000n + BigInt(fraction.padEnd(5, "0"));
-  };
-  if (
-    !/^\d+(?:\.\d{1,5})?$/.test(tax) ||
-    !/^\d+(?:\.\d{1,5})?$/.test(exoneration)
-  )
-    return "Pendiente";
-  const result = scaled(tax) - scaled(exoneration);
-  const digits = result.toString().padStart(6, "0");
-  return digits.slice(0, -5) + "." + digits.slice(-5);
-}
-const paymentLabels: Record<string, string> = {
-  "01": "Efectivo",
-  "02": "Tarjeta",
-  "03": "Cheque",
-  "04": "Transferencia - depósito bancario",
-  "05": "Recaudado por terceros",
-  "06": "SINPE MOVIL",
-  "07": "Plataforma Digital",
+type Props = {
+  base: string;
+  options: Row;
+  onConfigure?: (
+    target: "company" | "hacienda" | "organization" | "tax",
+  ) => void;
 };
-const emptyOptions = () => ({
-  sale_condition: "01",
-  credit_days: "",
-  exchange_rate: "",
-  branch_code: "",
-  terminal_code: "",
-  issuer_activity: "",
-  payment_methods: [] as { code: string; amount: string }[],
-});
-type Props = { base: string; options: Row };
 
 export function Invoices(props: Props) {
   return <InvoiceEnvironments key={props.base} {...props} />;
@@ -105,47 +77,54 @@ function InvoiceWorkspace({
   base,
   options,
   environment,
+  onConfigure,
 }: Props & { environment: HaciendaEnvironment }) {
   const alive = useAlive(),
     pending = useRef(false),
     generation = useRef(0);
+  const numberingRef = useRef<HTMLDivElement>(null);
   const operation = useRef<{ fingerprint: string; id: string } | null>(null);
-  const list = usePaged(base + "/invoices", { environment });
+  const [filters, setFilters] = useState<Record<string, string>>({});
+  const list = usePaged(base + "/invoices", {
+    environment,
+    include_summary: "true",
+    ...filters,
+  });
   const drafts = useListing(base + "/invoice-drafts", "archived", "false");
   const [embeddedDrafts, setEmbeddedDrafts] = useState(false),
     [draftId, setDraftId] = useState("");
-  const [editing, setEditing] = useState<Row | null>(null);
-  const [form, setForm] = useState(emptyOptions),
+  const [editing, setEditing] = useState<Row | null>(null),
+    [duplicateFromInvoice, setDuplicateFromInvoice] = useState<Row | null>(
+      null,
+    ),
+    [creating, setCreating] = useState(false),
+    [editorKey, setEditorKey] = useState(0),
     [item, setItem] = useState<Row | null>(null);
   const [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
     [confirm, setConfirm] = useState(false),
     [productionConfirmed, setProductionConfirmed] = useState(false);
-  function change(key: string, value: any) {
-    setForm((old) => ({ ...old, [key]: value }));
-  }
   function fresh() {
     setEditing(null);
+    setDuplicateFromInvoice(null);
+    setCreating(false);
     setDraftId("");
-    setForm(emptyOptions());
     setConfirm(false);
     setProductionConfirmed(false);
     setError("");
     operation.current = null;
   }
   function edit() {
-    if (!item || item.document_status !== "prepared") return;
+    if (
+      !item ||
+      item.document_status !== "prepared" ||
+      item.transmission_status !== "not_sent"
+    )
+      return;
     setEditing(item);
     setDraftId(item.draft_id);
-    setForm({
-      ...emptyOptions(),
-      ...item.options,
-      credit_days:
-        item.options.credit_days == null
-          ? ""
-          : String(item.options.credit_days),
-      payment_methods: item.options.payment_methods ?? [],
-    });
+    setCreating(true);
+    setEditorKey((value) => value + 1);
     setConfirm(false);
     setProductionConfirmed(false);
     setError("");
@@ -175,62 +154,6 @@ function InvoiceWorkspace({
         setItem(data.item);
         setConfirm(false);
         setProductionConfirmed(false);
-        list.refresh();
-      }
-    } catch (e: any) {
-      if (alive.current && token === generation.current) setError(e.message);
-    } finally {
-      pending.current = false;
-      if (alive.current) setBusy(false);
-    }
-  }
-  async function prepare(e: React.FormEvent) {
-    e.preventDefault();
-    if (pending.current || !draftId) return;
-    pending.current = true;
-    setBusy(true);
-    setError("");
-    setConfirm(false);
-    setProductionConfirmed(false);
-    const token = ++generation.current;
-    try {
-      const draft = (await apiRequest(base + "/invoice-drafts/" + draftId))
-        .item;
-      if (!alive.current || token !== generation.current) return;
-      if (draft.archived_at || draft.document_type !== "FE")
-        throw new Error("Selecciona un borrador nacional FE sin archivar.");
-      const payload = {
-        environment,
-        draft_id: draftId,
-        expected_version: draft.version,
-        options: {
-          ...form,
-          credit_days:
-            form.sale_condition === "02" && form.credit_days !== ""
-              ? Number(form.credit_days)
-              : null,
-        },
-      };
-      const fingerprint = JSON.stringify(payload);
-      if (operation.current?.fingerprint !== fingerprint)
-        operation.current = { fingerprint, id: crypto.randomUUID() };
-      const data = editing
-        ? await post(
-            base + "/invoices/" + editing.id,
-            {
-              version: editing.version,
-              expected_version: draft.version,
-              options: payload.options,
-            },
-            "PATCH",
-          )
-        : await post(base + "/invoices", {
-            ...payload,
-            operation_id: operation.current!.id,
-          });
-      if (alive.current && token === generation.current) {
-        setItem(data.item);
-        if (editing) setEditing(data.item);
         list.refresh();
       }
     } catch (e: any) {
@@ -287,30 +210,59 @@ function InvoiceWorkspace({
   const department = options.departments?.find(
     (d: Row) => d.id === item?.department_id,
   );
-  const canManage =
-    options.canManage || options.permissions?.includes("invoices.manage");
-  const canEdit = department?.can_manage === true;
+  const canCreate = options.departments?.some(
+    (d: Row) => d.active && (d.can_create ?? d.can_manage),
+  );
+  const canPrepare = options.departments?.some(
+    (d: Row) => d.active && (d.can_prepare ?? d.can_create ?? d.can_manage),
+  );
+  const canEdit =
+    (department?.can_prepare ??
+      department?.can_edit ??
+      department?.can_manage) === true &&
+    item?.transmission_status === "not_sent";
   const canEmit =
     department?.can_emit === true && item?.readiness?.canEmit === true;
   return (
     <div>
-      <NumberingConfirmation
-        base={base}
-        environment={environment}
-        onConfirmed={() => {
-          list.refresh();
-          if (item) void open(item.id);
-        }}
-      />
+      <div ref={numberingRef}>
+        <NumberingConfirmation
+          base={base}
+          environment={environment}
+          documentType={item?.document_type === "TE" ? "TE" : "FE"}
+          onConfirmed={() => {
+            list.refresh();
+            if (item) void open(item.id);
+          }}
+        />
+      </div>
       <div className="table-toolbar">
         <div>
           <h3>Facturación nacional · {environmentLabel(environment)}</h3>
           <p>Guardar una preparación no firma, transmite ni envía correo.</p>
         </div>
+        {canCreate && (
+          <button
+            className="button primary"
+            disabled={busy}
+            onClick={() => {
+              fresh();
+              setEmbeddedDrafts(false);
+              setItem(null);
+              setCreating(true);
+              setEditorKey((v) => v + 1);
+            }}
+          >
+            Nueva factura
+          </button>
+        )}
         <button
           className="button secondary"
           disabled={busy}
-          onClick={() => setEmbeddedDrafts((v) => !v)}
+          onClick={() => {
+            fresh();
+            setEmbeddedDrafts((v) => !v);
+          }}
         >
           {embeddedDrafts ? "Volver a Facturación" : "Mis borradores"}
         </button>
@@ -319,183 +271,222 @@ function InvoiceWorkspace({
         <Drafts key={base} base={base} options={options} />
       ) : (
         <>
-          {canManage && (
-            <form onSubmit={prepare}>
-              <h3>
-                {editing ? "Editar preparación" : "Preparar desde borrador"}
-              </h3>
-              <button
-                type="button"
-                className="button secondary"
-                disabled={busy}
-                onClick={fresh}
-              >
-                Nueva preparación
-              </button>
-              {editing && (
-                <p>Se actualizará la copia desde el borrador actual</p>
-              )}
-              <label className="field">
-                Borrador nacional FE
-                <select
-                  value={draftId}
-                  disabled={busy || Boolean(editing)}
-                  onChange={(e) => {
-                    setDraftId(e.target.value);
-                    setForm(emptyOptions());
-                  }}
-                >
-                  <option value="">Selecciona…</option>
-                  {editing && !drafts.rows.some((d) => d.id === draftId) && (
-                    <option value={draftId}>
-                      Borrador de esta preparación
-                    </option>
-                  )}
-                  {drafts.rows
-                    .filter((d) => d.document_type === "FE" && !d.archived_at)
-                    .map((d) => (
-                      <option value={d.id} key={d.id}>
-                        {d.customer_snapshot?.name || "Receptor sin nombre"} ·{" "}
-                        {d.currency} · {d.id.slice(0, 8)}
-                      </option>
-                    ))}
-                </select>
-              </label>
-              {drafts.error && <p role="alert">{drafts.error}</p>}
-              {drafts.next !== null && (
-                <button
-                  type="button"
-                  className="button secondary"
-                  onClick={drafts.loadMore}
-                  disabled={drafts.loading}
-                >
-                  Más borradores
-                </button>
-              )}
-              <fieldset disabled={busy}>
-                <legend>Condiciones de la factura</legend>
-                <div className="form-grid">
-                  <label className="field">
-                    Condición de venta
-                    <select
-                      value={form.sale_condition}
-                      onChange={(e) => change("sale_condition", e.target.value)}
-                    >
-                      <option value="01">Contado</option>
-                      <option value="02">Crédito</option>
-                    </select>
-                  </label>
-                  {form.sale_condition === "02" && (
-                    <Field
-                      label="Plazo de crédito (días)"
-                      value={form.credit_days}
-                      onChange={(v) => change("credit_days", v)}
-                      type="number"
-                    />
-                  )}
-                  <Field
-                    label="Tipo de cambio (explícito para USD)"
-                    value={form.exchange_rate}
-                    onChange={(v) => change("exchange_rate", v)}
-                  />
-                  <Field
-                    label="Sucursal (3 dígitos)"
-                    value={form.branch_code}
-                    maxLength={3}
-                    onChange={(v) => change("branch_code", v)}
-                  />
-                  <Field
-                    label="Terminal (5 dígitos)"
-                    value={form.terminal_code}
-                    maxLength={5}
-                    onChange={(v) => change("terminal_code", v)}
-                  />
-                  <Field
-                    label="Actividad económica del emisor (6 dígitos)"
-                    value={form.issuer_activity}
-                    maxLength={6}
-                    onChange={(v) => change("issuer_activity", v)}
-                  />
-                </div>
-                <h4>Medios de pago</h4>
-                <p>
-                  Registra el desglose de importes. Para crédito puede quedar
-                  vacío.
-                </p>
-                {form.payment_methods.map((payment, index) => (
-                  <div className="form-grid" key={index}>
-                    <label className="field">
-                      Medio de pago
-                      <select
-                        value={payment.code}
-                        onChange={(e) =>
-                          change(
-                            "payment_methods",
-                            form.payment_methods.map((p, i) =>
-                              i === index ? { ...p, code: e.target.value } : p,
-                            ),
-                          )
-                        }
-                      >
-                        {["01", "02", "03", "04", "05", "06", "07"].map(
-                          (code) => (
-                            <option key={code} value={code}>
-                              {code} — {paymentLabels[code]}
-                            </option>
-                          ),
-                        )}
-                      </select>
-                    </label>
-                    <Field
-                      label="Importe"
-                      value={payment.amount}
-                      onChange={(v) =>
-                        change(
-                          "payment_methods",
-                          form.payment_methods.map((p, i) =>
-                            i === index ? { ...p, amount: v } : p,
-                          ),
-                        )
-                      }
-                    />
-                    <button
-                      type="button"
-                      className="button secondary"
-                      onClick={() =>
-                        change(
-                          "payment_methods",
-                          form.payment_methods.filter((_, i) => i !== index),
-                        )
-                      }
-                    >
-                      Quitar medio
-                    </button>
-                  </div>
-                ))}
-                <button
-                  type="button"
-                  className="button secondary"
-                  disabled={form.payment_methods.length >= 4}
-                  onClick={() =>
-                    change("payment_methods", [
-                      ...form.payment_methods,
-                      { code: "01", amount: "" },
-                    ])
-                  }
-                >
-                  Agregar medio de pago
-                </button>
-              </fieldset>
-              <button className="button primary" disabled={busy || !draftId}>
-                {busy
-                  ? "Procesando…"
-                  : editing
-                    ? "Actualizar preparación"
-                    : "Guardar preparación"}
-              </button>
-            </form>
+          {creating ? (
+            <Drafts
+              key={editorKey}
+              base={base}
+              options={options}
+              mode="new"
+              environment={environment}
+              initialDraftId={draftId || undefined}
+              duplicateFromInvoice={duplicateFromInvoice}
+              preparedInvoice={editing}
+              onPrepared={(prepared) => {
+                fresh();
+                setItem(prepared);
+                list.refresh();
+                drafts.refresh();
+              }}
+              onSaved={() => drafts.refresh()}
+              onClose={fresh}
+              onBusyChange={setBusy}
+            />
+          ) : (
+            canPrepare && (
+              <details className="billing-disclosure">
+                <summary>Preparar desde borrador</summary>
+                <label className="field">
+                  Borrador nacional FE o TE
+                  <select
+                    value=""
+                    disabled={busy}
+                    onChange={(event) => {
+                      if (!event.target.value) return;
+                      fresh();
+                      setDraftId(event.target.value);
+                      setCreating(true);
+                      setEditorKey((v) => v + 1);
+                      setItem(null);
+                    }}
+                  >
+                    <option value="">Selecciona un borrador guardado…</option>
+                    {drafts.rows
+                      .filter(
+                        (d) =>
+                          ["FE", "TE"].includes(d.document_type) &&
+                          !d.archived_at,
+                      )
+                      .map((d) => (
+                        <option key={d.id} value={d.id}>
+                          {d.customer_snapshot?.name ||
+                            (d.receiver_mode === "consumer_final"
+                              ? "Consumidor final"
+                              : "Receptor sin nombre")}{" "}
+                          · {d.currency} · {d.id.slice(0, 8)}
+                        </option>
+                      ))}
+                  </select>
+                </label>
+                {drafts.error && <p role="alert">{drafts.error}</p>}
+                {drafts.next !== null && (
+                  <button
+                    type="button"
+                    className="button secondary"
+                    disabled={drafts.loading}
+                    onClick={drafts.loadMore}
+                  >
+                    Más borradores
+                  </button>
+                )}
+              </details>
+            )
           )}
           <h3>Facturas preparadas y emitidas</h3>
+          <label className="field">
+            Buscar cliente, identificación, consecutivo o clave
+            <input
+              value={list.search}
+              onChange={(event) => list.setSearch(event.target.value)}
+              maxLength={100}
+            />
+          </label>
+          <details className="billing-disclosure">
+            <summary>Filtros del historial de facturación</summary>
+            <p>
+              Las fechas corresponden a la emisión o preparación en la hora de
+              Costa Rica.
+            </p>
+            <div className="billing-grid">
+              {[
+                ["from", "Fecha inicial", "date"],
+                ["to", "Fecha final", "date"],
+                ["identification", "Identificación del receptor", "text"],
+                ["consecutivo", "Consecutivo del historial", "text"],
+                ["clave", "Clave electrónica del historial", "text"],
+                ["issued_by", "Identificador del usuario emisor", "text"],
+              ].map(([key, label, type]) => (
+                <label className="field" key={key}>
+                  {label}
+                  <input
+                    type={type}
+                    value={filters[key] ?? ""}
+                    onChange={(event) =>
+                      setFilters((old) => ({
+                        ...old,
+                        [key]: event.target.value,
+                      }))
+                    }
+                  />
+                </label>
+              ))}
+              {[
+                [
+                  "document_type",
+                  "Tipo de comprobante del historial",
+                  [
+                    ["FE", "Factura electrónica"],
+                    ["TE", "Tiquete electrónico"],
+                  ],
+                ],
+                [
+                  "currency",
+                  "Moneda del historial",
+                  [
+                    ["CRC", "Colones"],
+                    ["USD", "Dólares"],
+                  ],
+                ],
+                [
+                  "document_status",
+                  "Estado del documento",
+                  [
+                    ["prepared", "Preparada"],
+                    ["issued", "Emitida"],
+                  ],
+                ],
+                [
+                  "hacienda_status",
+                  "Estado de Hacienda del historial",
+                  [
+                    ["pending", "Pendiente"],
+                    ["accepted", "Aceptada"],
+                    ["rejected", "Rechazada"],
+                  ],
+                ],
+                [
+                  "sale_condition",
+                  "Condición de venta del historial",
+                  [
+                    ["01", "Contado"],
+                    ["02", "Crédito"],
+                  ],
+                ],
+              ].map(([key, label, choices]) => (
+                <label className="field" key={String(key)}>
+                  {String(label)}
+                  <select
+                    value={filters[String(key)] ?? ""}
+                    onChange={(event) =>
+                      setFilters((old) => ({
+                        ...old,
+                        [String(key)]: event.target.value,
+                      }))
+                    }
+                  >
+                    <option value="">Todos</option>
+                    {(choices as string[][]).map(([value, text]) => (
+                      <option key={value} value={value}>
+                        {text}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ))}
+            </div>
+            <button
+              className="button secondary"
+              onClick={() => {
+                setFilters({});
+                list.setSearch("");
+              }}
+            >
+              Limpiar filtros del historial
+            </button>
+          </details>
+          {list.summary && !list.loading && (
+            <section
+              className="billing-history-summary"
+              aria-label="Indicadores del historial filtrado"
+            >
+              <dl className="fiscal-preview-totals">
+                {[
+                  ["Preparadas sin emitir", "prepared"],
+                  ["Aceptadas por Hacienda", "accepted"],
+                  ["Rechazadas", "rejected"],
+                  ["Emitidas pendientes", "pending"],
+                  ["Aceptadas de contado", "cash"],
+                  ["Aceptadas de crédito", "credit"],
+                ].map(([label, key]) => (
+                  <div key={key}>
+                    <dt>{label}</dt>
+                    <dd>{list.summary!.counts?.[key] ?? 0}</dd>
+                  </div>
+                ))}
+              </dl>
+              {list.summary.amounts?.map((amount: Row) => (
+                <p key={amount.currency}>
+                  Ventas aceptadas {amount.currency}: {amount.total} ·
+                  Impuestos: {amount.tax} · Contado: {amount.cash} · Crédito:{" "}
+                  {amount.credit}
+                </p>
+              ))}
+              <p>
+                Los importes incluyen únicamente documentos emitidos y aceptados
+                por Hacienda. No se suman monedas distintas, preparaciones,
+                pendientes ni rechazos.
+              </p>
+            </section>
+          )}
           {list.loading && <p>Cargando facturas…</p>}
           {list.error && <p role="alert">{list.error}</p>}
           {!list.loading && !list.rows.length && (
@@ -512,6 +503,9 @@ function InvoiceWorkspace({
                 {row.snapshot?.receiver?.name || "Sin receptor"} ·{" "}
                 {money(row.snapshot)} ·{" "}
                 {labels[row.document_status] || row.document_status}
+                {" · Hacienda: "}
+                {labels[row.hacienda_status] || row.hacienda_status}
+                {row.consecutivo ? ` · ${row.consecutivo}` : ""}
               </button>
             ))}
           </div>
@@ -524,21 +518,130 @@ function InvoiceWorkspace({
               Cargar más facturas
             </button>
           )}
-          {item && snapshot && (
+          {item && snapshot && !creating && (
             <section aria-label="Detalle de factura">
               <h3>Detalle de factura</h3>
               <p>Ambiente: {environmentLabel(documentEnvironment)}</p>
+              {canCreate && (
+                <button
+                  type="button"
+                  className="button secondary"
+                  disabled={busy}
+                  onClick={() => {
+                    fresh();
+                    setDuplicateFromInvoice(item);
+                    setCreating(true);
+                    setEditorKey((v) => v + 1);
+                  }}
+                >
+                  Duplicar factura
+                </button>
+              )}
+              {item.document_status === "issued" && (
+                <div className="billing-section">
+                  <p>
+                    La factura emitida conserva sus datos fiscales. Las notas de
+                    crédito y débito todavía requieren completar sus esquemas,
+                    reglas y pruebas de envío.
+                  </p>
+                  <button type="button" className="button secondary" disabled>
+                    Nota de crédito · pendiente de implementación
+                  </button>
+                  <button type="button" className="button secondary" disabled>
+                    Nota de débito · pendiente de implementación
+                  </button>
+                </div>
+              )}
+              <details className="billing-disclosure">
+                <summary>Datos del comprobante guardado</summary>
+                <dl className="billing-issuer-data">
+                  {[
+                    [
+                      "Tipo de comprobante",
+                      (item.document_type ?? snapshot.document_type) === "TE"
+                        ? "Tiquete electrónico"
+                        : "Factura electrónica",
+                    ],
+                    [
+                      "Fecha y hora de emisión",
+                      item.issued_at
+                        ? new Date(item.issued_at).toLocaleString("es-CR", {
+                            timeZone: "America/Costa_Rica",
+                          })
+                        : "Se asignan al emitir",
+                    ],
+                    ["Consecutivo", item.consecutivo || "Se asigna al emitir"],
+                    ["Clave numérica", item.clave || "Se asigna al emitir"],
+                    [
+                      "Actividad económica del emisor",
+                      item.options?.issuer_activity || "Pendiente",
+                    ],
+                    [
+                      "Sucursal y terminal",
+                      [item.options?.branch_code, item.options?.terminal_code]
+                        .filter(Boolean)
+                        .join(" / ") || "Pendientes",
+                    ],
+                    [
+                      "Moneda y tipo de cambio",
+                      `${snapshot.currency} · ${item.options?.exchange_rate || "Pendiente"}`,
+                    ],
+                    [
+                      "Condición de venta",
+                      item.options?.sale_condition === "02"
+                        ? `02 · Crédito · ${item.options?.credit_days ?? "—"} días`
+                        : "01 · Contado",
+                    ],
+                    ...(item.issued_at && item.options?.sale_condition === "02"
+                      ? [
+                          [
+                            "Vencimiento comercial (Costa Rica)",
+                            provisionalDueDate(
+                              item.issued_at,
+                              item.options.credit_days,
+                            ),
+                          ],
+                        ]
+                      : []),
+                  ].map(([label, value]) => (
+                    <div key={label}>
+                      <dt>{label}</dt>
+                      <dd>{value}</dd>
+                    </div>
+                  ))}
+                </dl>
+                {item.options?.payment_methods?.map(
+                  (payment: Row, i: number) => (
+                    <p key={i}>
+                      Pago {i + 1}:{" "}
+                      {PAYMENT_METHODS.find(
+                        ([code]) => code === payment.code,
+                      )?.[1] ?? payment.code}{" "}
+                      · {snapshot.currency} {payment.amount}
+                      {payment.code === "99"
+                        ? ` · ${payment.other_description}`
+                        : ""}
+                    </p>
+                  ),
+                )}
+                {snapshot.notes && <p>Observaciones: {snapshot.notes}</p>}
+              </details>
               <dl className="fiscal-preview-totals">
-                <dt>Emisor</dt>
-                <dd>{snapshot.issuer?.legal_name || "Sin nombre"}</dd>
-                <dt>Receptor</dt>
-                <dd>{snapshot.receiver?.name || "Sin nombre"}</dd>
-                <dt>Departamento</dt>
-                <dd>{department?.name || item.department_id}</dd>
-                <dt>Correo destinatario</dt>
-                <dd>{snapshot.receiver?.email || "Sin correo"}</dd>
-                <dt>Total</dt>
-                <dd>{money(snapshot)}</dd>
+                {[
+                  ["Emisor", snapshot.issuer?.legal_name || "Sin nombre"],
+                  ["Receptor", snapshot.receiver?.name || "Sin nombre"],
+                  ["Departamento", department?.name || item.department_id],
+                  [
+                    "Correo destinatario",
+                    snapshot.receiver?.email || "Sin correo",
+                  ],
+                  ["Total", money(snapshot)],
+                ].map(([label, value]) => (
+                  <div key={label}>
+                    <dt>{label}</dt>
+                    <dd>{value}</dd>
+                  </div>
+                ))}
               </dl>
               <button
                 className="button secondary"
@@ -554,62 +657,21 @@ function InvoiceWorkspace({
                   {line.quantity} × {line.description} · {line.unit_price}
                 </p>
               ))}
-              <dl className="fiscal-preview-totals">
-                {snapshot.totals?.status === "blocked" ? (
-                  <>
-                    <dt>Total pendiente</dt>
-                    <dd>
-                      Completa los requisitos fiscales para calcular los
-                      totales.
-                    </dd>
-                  </>
-                ) : (
-                  Object.entries(monetaryLabels)
-                    .filter(
-                      ([key]) => typeof snapshot.totals?.[key] === "string",
-                    )
-                    .map(([key, label]) => (
-                      <React.Fragment key={key}>
-                        <dt>{label}</dt>
-                        <dd>
-                          {snapshot.currency} {snapshot.totals[key]}
-                        </dd>
-                      </React.Fragment>
-                    ))
-                )}
-              </dl>
-              {snapshot.totals?.groups?.length > 0 && (
-                <section aria-label="Desglose de impuestos">
-                  <h4>Desglose de impuestos</h4>
-                  {snapshot.totals.groups.map((group: Row, index: number) => (
-                    <div key={index}>
-                      <p>
-                        Tipo de impuesto{" "}
-                        {group.tax_code === "01" ? "01 · IVA" : group.tax_code}{" "}
-                        · Tarifa {group.tariff_code} · {group.rate}%
-                      </p>
-                      <dl className="fiscal-preview-totals">
-                        <dt>Base imponible</dt>
-                        <dd>
-                          {snapshot.currency} {group.base}
-                        </dd>
-                        <dt>Impuesto</dt>
-                        <dd>
-                          {snapshot.currency} {group.tax}
-                        </dd>
-                        <dt>Exoneración</dt>
-                        <dd>
-                          {snapshot.currency} {group.exoneration}
-                        </dd>
-                        <dt>Impuesto neto</dt>
-                        <dd>
-                          {snapshot.currency}{" "}
-                          {netTax(group.tax, group.exoneration)}
-                        </dd>
-                      </dl>
-                    </div>
+              <InvoiceSummary
+                calculation={snapshot.totals ?? null}
+                currency={snapshot.currency}
+              />
+              {snapshot.other_charges?.length > 0 && (
+                <details className="billing-disclosure">
+                  <summary>Otros cargos del comprobante</summary>
+                  {snapshot.other_charges.map((charge: Row, i: number) => (
+                    <p key={i}>
+                      {charge.code} · {charge.description} · {snapshot.currency}{" "}
+                      {snapshot.totals?.charges?.[i]?.calculated_amount ??
+                        charge.amount}
+                    </p>
                   ))}
-                </section>
+                </details>
               )}
               {department?.can_download === true && (
                 <div>
@@ -667,10 +729,10 @@ function InvoiceWorkspace({
                   ["Hacienda", item.hacienda_status],
                   ["Correo", item.email_status],
                 ].map(([key, value]) => (
-                  <React.Fragment key={key}>
+                  <div key={key}>
                     <dt>{key}</dt>
                     <dd>{labels[value] || value}</dd>
-                  </React.Fragment>
+                  </div>
                 ))}
               </dl>
               {item.collections_review && (
@@ -694,17 +756,104 @@ function InvoiceWorkspace({
                 onUpdated={() => void refreshStatus()}
               />
               <h4>Requisitos para emitir</h4>
+              {item.document_status === "prepared" &&
+                item.readiness?.requirements?.length > 0 && (
+                  <EmissionRequirements
+                    requirements={item.readiness.requirements}
+                    onConfigure={onConfigure}
+                    onEdit={canEdit ? edit : undefined}
+                    onNumbering={() => {
+                      const panel =
+                        numberingRef.current?.querySelector("details");
+                      if (panel) {
+                        panel.open = true;
+                        panel.scrollIntoView({
+                          behavior: "smooth",
+                          block: "start",
+                        });
+                      }
+                    }}
+                  />
+                )}
+              {item.document_status === "prepared" && !canEmit && (
+                <p className="fiscal-preview-warning">
+                  {department?.can_emit
+                    ? "Completa los requisitos indicados y actualiza la preparación para habilitar Facturar."
+                    : "Tu usuario no tiene permiso para emitir facturas de este departamento."}
+                </p>
+              )}
               {item.readiness?.issues?.length ? (
                 <ul>
-                  {item.readiness.issues.map((issue: Row, i: number) => (
-                    <li key={i}>{issue.message}</li>
-                  ))}
+                  {item.readiness.issues
+                    .filter(
+                      (issue: Row) =>
+                        !item.readiness.requirements?.some((r: Row) =>
+                          r.message?.includes(issue.message),
+                        ),
+                    )
+                    .map((issue: Row, i: number) => (
+                      <li key={i}>{issue.message}</li>
+                    ))}
                 </ul>
               ) : (
                 <p>Sin observaciones de preparación.</p>
               )}
               {item.document_status === "prepared" && (
                 <>
+                  {onConfigure && item.readiness?.issues?.length > 0 && (
+                    <div className="billing-actions">
+                      <button
+                        type="button"
+                        className="button secondary"
+                        disabled={busy}
+                        onClick={() => onConfigure("company")}
+                      >
+                        Configurar empresa
+                      </button>
+                      <button
+                        type="button"
+                        className="button secondary"
+                        disabled={busy}
+                        onClick={() => onConfigure("hacienda")}
+                      >
+                        Configurar Hacienda
+                      </button>
+                      {item.readiness.issues.some((issue: Row) =>
+                        /ACTIVITY|TERMINAL/.test(issue.code),
+                      ) && (
+                        <button
+                          type="button"
+                          className="button secondary"
+                          disabled={busy}
+                          onClick={() => onConfigure("organization")}
+                        >
+                          Revisar actividad, sucursal y terminal
+                        </button>
+                      )}
+                    </div>
+                  )}
+                  {item.readiness?.issues?.some((issue: Row) =>
+                    /NUMBERING/.test(issue.code),
+                  ) && (
+                    <button
+                      type="button"
+                      className="button secondary"
+                      disabled={busy}
+                      onClick={() => {
+                        const panel =
+                          numberingRef.current?.querySelector("details");
+                        if (panel) {
+                          panel.open = true;
+                          panel.scrollIntoView({
+                            behavior: "smooth",
+                            block: "start",
+                          });
+                        }
+                      }}
+                    >
+                      Confirmar numeración
+                    </button>
+                  )}
                   {canEdit && (
                     <button
                       className="button secondary"
@@ -715,14 +864,14 @@ function InvoiceWorkspace({
                     </button>
                   )}
                   <button
-                    className="button secondary"
+                    className="button primary"
                     disabled={busy || !canEmit}
                     onClick={() => {
                       setProductionConfirmed(false);
                       setConfirm(true);
                     }}
                   >
-                    Revisar emisión en {issueLabel}
+                    Facturar en {issueLabel}
                   </button>
                   {confirm && (
                     <div
@@ -733,9 +882,13 @@ function InvoiceWorkspace({
                       <h4>Confirmar emisión en {issueLabel}</h4>
                       <p>
                         Emisor: {snapshot.issuer?.legal_name}. Receptor:{" "}
-                        {snapshot.receiver?.name}. Total: {money(snapshot)}.
-                        Departamento: {department?.name || item.department_id}.
-                        Correo: {snapshot.receiver?.email || "Sin correo"}.
+                        {snapshot.receiver?.name ||
+                          (snapshot.document_type === "TE"
+                            ? "Consumidor final"
+                            : "Sin nombre")}
+                        . Total: {money(snapshot)}. Departamento:{" "}
+                        {department?.name || item.department_id}. Correo:{" "}
+                        {snapshot.receiver?.email || "Sin correo"}.
                       </p>
                       {documentEnvironment === "production" && (
                         <>

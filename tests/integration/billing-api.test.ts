@@ -294,7 +294,13 @@ it("supports custom billing permissions without unrelated organization permissio
   );
   const roleInput = {
     name: "Facturación personalizada",
-    permissions: ["customers.manage", "catalog.read", "invoices.manage"],
+    permissions: [
+      "customers.manage",
+      "catalog.read",
+      "invoices.manage",
+      "invoices.create",
+      "invoices.edit",
+    ],
   };
   const denied = await request("/roles", "POST", roleInput);
   expect(denied.statusCode, denied.body).toBe(403);

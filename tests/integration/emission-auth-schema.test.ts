@@ -1,6 +1,6 @@
-import { afterAll, beforeAll, expect, it } from "vitest";
+import { afterAll, beforeAll, expect, it, vi } from "vitest";
+import { FiscalLookups } from "../../apps/api/src/services/fiscal-lookups";
 import { randomUUID } from "node:crypto";
-import { readFileSync } from "node:fs";
 import { workspace } from "../support/workspace";
 import { totp } from "../support/totp";
 import { runtimeConfig } from "../support/runtime-config";
@@ -28,6 +28,24 @@ const request = (
     payload,
   });
 beforeAll(async () => {
+  vi.spyOn(FiscalLookups.prototype, "cabys").mockImplementation(
+    async (code) => ({
+      available: true,
+      source: "Hacienda",
+      items: [{ code, description: "Catálogo sintético de pruebas" }],
+    }),
+  );
+  vi.spyOn(FiscalLookups.prototype, "recipient").mockImplementation(
+    async (identification) => ({
+      available: true,
+      source: "Hacienda",
+      source_url: "https://api.hacienda.go.cr/fe/ae",
+      recipient: { name: "Contribuyente sintético", identification },
+      activities: [
+        { code: "123456", description: "Actividad sintética", active: true },
+      ],
+    }),
+  );
   f = await workspace({ role: "billing", companies: 2 });
   dep = (
     await f.pool.query(
@@ -83,6 +101,7 @@ beforeAll(async () => {
   expect(draft?.id).toBeTruthy();
 });
 afterAll(async () => {
+  vi.restoreAllMocks();
   await app?.close();
   await f?.pool.end();
 });
@@ -98,7 +117,7 @@ const input = () => ({
     issuer_activity: "123456",
   },
 });
-it("repairs hosted auth-schema drift so an authorized server can prepare without reading Auth tables", async () => {
+it("prepares under hosted Auth schema restrictions without broadening role access", async () => {
   // Reproduce the hosted ACL exactly: EXECUTE is granted, but schema USAGE is absent.
   await f.pool.query("revoke usage on schema auth from conta_facil_api");
   try {
@@ -113,12 +132,6 @@ it("repairs hosted auth-schema drift so an authorized server can prepare without
       await diagnostic.query("rollback");
       diagnostic.release();
     }
-    await f.pool.query(
-      readFileSync(
-        "supabase/migrations/20261126144207_runtime_request_context.sql",
-        "utf8",
-      ),
-    );
     const payload = input();
     const fixed = await request("/invoices", "POST", payload);
     expect(fixed.statusCode, fixed.body).toBe(200);

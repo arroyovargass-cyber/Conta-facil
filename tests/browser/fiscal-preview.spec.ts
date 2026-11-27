@@ -123,8 +123,8 @@ test("shows confirmed exact tax preview and invalidates it after unsaved changes
         exact: true,
       }),
     ).toBeVisible();
-    await page.getByLabel("Observaciones").focus();
-    await page.keyboard.press("Tab");
+    await page.getByRole("checkbox", { name: /Confirmo el escenario/ }).focus();
+    await page.keyboard.press("Shift+Tab");
     await expect(
       page.getByRole("button", {
         name: "Vista previa de impuestos",

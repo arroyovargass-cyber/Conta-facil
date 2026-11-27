@@ -14,8 +14,12 @@ const XA = "http://uri.etsi.org/01903/v1.3.2#";
 const C14N = "http://www.w3.org/2001/10/xml-exc-c14n#";
 const SHA = "http://www.w3.org/2001/04/xmlenc#sha256";
 const RSA = "http://www.w3.org/2001/04/xmldsig-more#rsa-sha256";
-const NS =
-  "https://cdn.comprobanteselectronicos.go.cr/xml-schemas/v4.4/facturaElectronica";
+const ROOTS: Readonly<Record<string, string>> = {
+  FacturaElectronica:
+    "https://cdn.comprobanteselectronicos.go.cr/xml-schemas/v4.4/facturaElectronica",
+  TiqueteElectronico:
+    "https://cdn.comprobanteselectronicos.go.cr/xml-schemas/v4.4/tiqueteElectronico",
+};
 export interface InvoiceSigningMaterial {
   privateKeyPem: string;
   certificatePem: string;
@@ -42,10 +46,12 @@ function parse(xml: string) {
       throw new Error(`Invalid XML: ${level}: ${message}`);
     },
   }).parseFromString(xml, "application/xml");
+  const root = doc.documentElement,
+    localName = root?.localName ?? "";
   if (
-    !doc.documentElement ||
-    doc.documentElement.localName !== "FacturaElectronica" ||
-    doc.documentElement.namespaceURI !== NS
+    !root ||
+    !Object.hasOwn(ROOTS, localName) ||
+    root.namespaceURI !== ROOTS[localName]
   )
     throw new Error("Unsupported invoice root");
   return doc;
@@ -102,7 +108,7 @@ function profile(
   );
   return imported;
 }
-/** Bounded FE 4.4 EPES profile. Does not validate fiscal schema, trust chain or issuer identity. */
+/** Bounded FE/TE 4.4 EPES profile. Does not validate fiscal schema, trust chain or issuer identity. */
 export function signInvoiceXml(
   xml: string,
   material: InvoiceSigningMaterial,

@@ -12,6 +12,7 @@ import {
 } from "../services/fiscal-lookups";
 import { receiverLocationIssues } from "../services/receiver-location";
 import { receiverInput } from "../../../../packages/domain/src/invoice-fiscal";
+import { isEconomicActivityCode } from "../../../../packages/domain/src/economic-activity";
 import {
   companyInput,
   createCompanyInput,
@@ -120,12 +121,13 @@ export function companyRegistrationRoutes(
       if (!loc.province || !loc.canton || !loc.district)
         throw new HttpError(
           400,
-          "Completa provincia, cantón y distrito, o deja el domicilio pendiente.",
+          "Domicilio fiscal: completa provincia, cantón y distrito, o deja el domicilio pendiente.",
         );
       const issues = await receiverLocationIssues(
         receiverInput.parse({ ...loc, domicile: "domestic" }),
       );
-      if (issues.length) throw new HttpError(400, issues[0].message);
+      if (issues.length)
+        throw new HttpError(400, "Domicilio fiscal: " + issues[0].message);
     }
     const logo = value.configuration.logo;
     if (logo) {
@@ -234,7 +236,8 @@ export function companyRegistrationRoutes(
       ),
     );
   });
-  app.get(base + "/identity-lookup", async (req) => {
+  app.get(base + "/identity-lookup", async (req, reply) => {
+    reply.header("Cache-Control", "no-store");
     const p = await auth.authenticate(req);
     const input = z
       .object({ identification: recipientIdentificationInput })
@@ -382,12 +385,14 @@ export function companyRegistrationRoutes(
       ).rows.map((r) => r.code);
       if (
         value.activities.some(
-          (a) => !/^\d{6}$/.test(a.code) && !legacyActivities.includes(a.code),
+          (a) =>
+            !isEconomicActivityCode(a.code) &&
+            !legacyActivities.includes(a.code),
         )
       )
         throw new HttpError(
           400,
-          "Los códigos nuevos de actividad deben tener seis dígitos.",
+          "Los códigos nuevos de actividad deben tener seis caracteres; conserva el punto cuando corresponda.",
         );
       await validateConfiguration(value);
       await duplicate(db, value, id);

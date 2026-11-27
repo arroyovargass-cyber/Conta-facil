@@ -9,10 +9,14 @@ import "./billing.css";
 export function BillingWorkspace({
   tenantId,
   view,
+  onConfigure,
 }: {
   tenantId: string;
   view: "customers" | "catalog" | "drafts" | "invoices";
   permissions: string[];
+  onConfigure?: (
+    target: "company" | "hacienda" | "organization" | "tax",
+  ) => void;
 }) {
   const base = "/companies/" + tenantId,
     [options, setOptions] = useState<Row | null>(null),
@@ -52,6 +56,13 @@ export function BillingWorkspace({
       />
     );
   if (view === "invoices")
-    return <Invoices key={base} base={base} options={options} />;
+    return (
+      <Invoices
+        key={base}
+        base={base}
+        options={options}
+        onConfigure={onConfigure}
+      />
+    );
   return <Drafts base={base} options={options} />;
 }

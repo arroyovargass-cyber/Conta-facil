@@ -2,6 +2,10 @@
 
 Este circuito sustituye las limitaciones STAG del runbook anterior. No prueba por sí solo una aceptación real ni convierte la revisión del administrador en una validación de identidad por Hacienda.
 
+La ampliación local del 26/11 y sus seis migraciones pendientes de aprobación se
+detallan en la [matriz de cierre](../development/billing44-closeout.md). No confundir
+su verificación local con el código ya publicado o con una aceptación auténtica.
+
 ## Preparación del servicio
 
 Aplicar las migraciones `20261125173658_hacienda_environment_enrollment.sql`, `20261125173701_invoice_environment_evidence.sql` y `20261125230940_invoice_job_trust_policy_selection.sql` mediante el flujo revisado de Supabase. Son compatibles con el servicio anterior: conservan `test` y la aridad anterior de las funciones mediante argumentos predeterminados. No modifican numeraciones ni importes históricos.
@@ -28,10 +32,23 @@ Todas las banderas nuevas están desactivadas por defecto. Cambiar una variable 
 4. Ejecutar **Probar conexión** y revisar el resultado y cierre de sesión. Solo se comprueba el acceso al IdP; no es aceptación de una factura.
 5. En **Revisión del administrador**, comprobar la identificación del emisor, ambiente, versión y huella. Registrar una referencia no secreta de autorización y confirmar la pertenencia/autorización de esa llave. Esta afirmación administrativa no verifica la identidad PKI ante Hacienda.
 6. En **Facturación**, seleccionar el mismo ambiente y confirmar el último consecutivo usado por sucursal/terminal. Ingresar el valor revisado: no copiar un cero si ya existe numeración. El sistema impide disminuir el piso conservado.
-7. Preparar una factura nacional desde un borrador: receptor identificado, ubicación aplicable, CABYS verificable, impuesto por línea, moneda/tipo de cambio y condición/medios de pago. Los importes son antes de impuestos. El servidor vuelve a calcular; la preparación muestra los faltantes que bloquean emisión.
-8. Confirmar la emisión y observar separadamente firma, transmisión, respuesta final y correo. Descargar XML firmado, respuesta y PDF cuando estén disponibles. Un HTTP 201 solo indica recepción técnica.
+7. En **Nueva factura**, elegir cliente registrado u ocasional, completar receptor, ubicación aplicable, CABYS, impuesto por línea, moneda/tipo de cambio y condición/medios de pago. Se puede guardar un borrador incompleto o preparar uno ya guardado. Los precios son antes de impuestos; el servidor recalcula. El tiquete es una elección explícita, no sustituye automáticamente una FE.
+8. Revisar **Requisitos para emitir** y sus accesos a configuración. La inscripción activa y el CABYS se comprueban en fuentes oficiales al completar los demás requisitos. Pulsar **Facturar en pruebas**, confirmar y observar por separado firma, transmisión, respuesta y correo. Descargar XML, respuesta y PDF cuando estén disponibles. Un HTTP 201 solo indica recepción técnica.
 9. Tras comprobar la primera aceptación de pruebas, repetir la configuración con la llave y credenciales propias de **Producción**, su revisión y su numeración. No se traslada ninguna de esas verificaciones automáticamente.
 10. La primera emisión de producción debe ser una venta real autorizada. Marcar la confirmación de operación real y revisar receptor/importes antes de emitir; no enviar una factura ficticia como comprobación técnica.
+
+La dirección de **Correo de envío de comprobantes** es una dirección, no un
+interruptor. Para solicitar entrega automática, activar **Enviar comprobantes
+aceptados al correo del cliente** y configurar SMTP antes de preparar. La copia
+conserva esa elección y el correo del receptor. Cambiar luego el cliente o la
+empresa no reescribe un comprobante emitido. La aceptación por el proveedor SMTP
+no demuestra recepción final en la bandeja del destinatario.
+
+Los permisos de crear, editar, archivar, preparar, emitir, consultar respuestas,
+descargar y reenviar se asignan por separado. El reenvío exige permiso de correo,
+lectura, MFA, estado aceptado, destinatario conservado y adjuntos íntegros; no
+concede permiso para emitir. Reportes tiene su propio permiso. La numeración
+conserva además el control de superadministrador y configuración tributaria.
 
 ## Respuestas y recuperación
 

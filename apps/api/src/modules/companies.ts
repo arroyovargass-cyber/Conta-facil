@@ -5,6 +5,7 @@ import { scoped, requirePermission, HttpError } from "../db";
 import type { identity } from "./identity";
 import { hash, randomToken } from "../security/crypto";
 import { normalizeIdentification } from "../../../../packages/domain/src/identity";
+import { economicActivityCode } from "../../../../packages/domain/src/economic-activity";
 const text = z.string().trim().min(1).max(160);
 export function companyRoutes(
   app: FastifyInstance,
@@ -120,7 +121,7 @@ export function companyRoutes(
       schema: z
         .object({
           name: text,
-          code: z.string().min(1).max(30),
+          code: economicActivityCode,
           source_url: z.url().refine((v) => new URL(v).protocol === "https:"),
           active: z.boolean().default(true),
         })
@@ -396,6 +397,18 @@ export function companyRoutes(
                 "catalog.manage",
                 "invoices.read",
                 "invoices.manage",
+                "invoices.create",
+                "invoices.prepare",
+                "invoices.email",
+                "invoices.numbering",
+                "reports.read",
+                "invoices.edit",
+                "invoices.delete",
+                "invoices.emit",
+                "invoices.query",
+                "invoices.download",
+                "invoices.credit_note",
+                "invoices.debit_note",
                 "hacienda.read",
                 "hacienda.credentials.manage",
                 "hacienda.connection.test",

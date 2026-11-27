@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState, useId } from "react";
 import { HACIENDA_UNITS } from "../../../../../packages/domain/src/hacienda-units";
+import { PHARMACEUTICAL_FORMS } from "../../../../../packages/domain/src/pharmaceutical-forms";
 import { apiRequest } from "../../api/client";
 export type Row = Record<string, any>;
 export function useAlive() {
@@ -47,6 +48,7 @@ export function useListing(
   base: string,
   filterName: string,
   initialFilter = "all",
+  enabled = true,
 ) {
   const [search, setSearch] = useState(""),
     [filter, setFilter] = useState(initialFilter),
@@ -95,6 +97,7 @@ export function useListing(
     }
   }
   useEffect(() => {
+    if (!enabled) return;
     setRows([]);
     setNext(null);
     setLoading(true);
@@ -103,7 +106,7 @@ export function useListing(
       clearTimeout(timer);
       sequence.current++;
     };
-  }, [key, revision]);
+  }, [key, revision, enabled]);
   return {
     search,
     setSearch,
@@ -190,6 +193,7 @@ export const receiverDefaults = () => ({
   identification_type: "",
   identification: "",
   email: "",
+  phone_country_code: "",
   phone: "",
   address: "",
   trade_name: "",
@@ -201,6 +205,8 @@ export const receiverDefaults = () => ({
   exoneration: null,
 });
 export const fiscalDefaults = () => ({
+  internal_code: "",
+  commercial_codes: [],
   cabys: "",
   unit: "",
   commercial_unit: "",
@@ -208,9 +214,16 @@ export const fiscalDefaults = () => ({
   tax_code: "01",
   tariff_code: "",
   discount_amount: "0",
+  discount_mode: "amount",
+  discount_percentage: "0",
   discount_code: "",
   discount_reason: "",
   discount_other: "",
+  transaction_type: "",
+  vin_numbers: [],
+  medicine_registration: "",
+  pharmaceutical_form: "",
+  other_taxes: [],
   exoneration: null,
 });
 export function ExonerationFields({
@@ -359,6 +372,8 @@ export function ReceiverFields({
   customerLabels?: boolean;
 }) {
   const [lookupNotice, setLookupNotice] = useState("");
+  const [lookupActivities, setLookupActivities] = useState<Row[]>([]),
+    [lookedUpIdentification, setLookedUpIdentification] = useState("");
   const lookupAlive = useAlive(),
     lookupSequence = useRef(0);
   const lookupContext = JSON.stringify([base, value]);
@@ -397,6 +412,7 @@ export function ReceiverFields({
       customerLabels ? "Correo del cliente" : "Correo del receptor",
       customerLabels ? 254 : 160,
     ],
+    ["phone_country_code", "Código de país del teléfono", 3],
     [
       "phone",
       customerLabels ? "Teléfono del cliente" : "Teléfono del receptor",
@@ -559,6 +575,8 @@ export function ReceiverFields({
                 if (!current()) return;
                 if (r.available && r.recipient) {
                   onChange({ ...value, ...r.recipient });
+                  setLookupActivities(r.activities ?? []);
+                  setLookedUpIdentification(value.identification);
                   setLookupNotice(
                     "Datos consultados en Hacienda. Revisa el receptor antes de guardar.",
                   );
@@ -577,6 +595,44 @@ export function ReceiverFields({
             Consultar identificación en Hacienda
           </button>
           {lookupNotice && <p role="status">{lookupNotice}</p>}
+          {lookedUpIdentification === value.identification &&
+            lookupActivities.length > 0 && (
+              <label className="field">
+                Actividad consultada en Hacienda
+                <select
+                  value={value.economic_activity ?? ""}
+                  onChange={(event) =>
+                    onChange({
+                      ...value,
+                      economic_activity: event.target.value,
+                    })
+                  }
+                >
+                  <option value="">
+                    Selecciona una actividad vigente consultada…
+                  </option>
+                  {lookupActivities.map((activity) => (
+                    <option
+                      key={activity.code}
+                      value={activity.code}
+                      disabled={activity.active !== true}
+                    >
+                      {activity.code} · {activity.description}
+                      {activity.active === true
+                        ? ""
+                        : activity.active === false
+                          ? " (inactiva)"
+                          : " (vigencia por confirmar)"}
+                    </option>
+                  ))}
+                </select>
+                <small>
+                  Solo se habilitan las actividades cuya vigencia confirma la
+                  consulta. La consulta no proporciona domicilio, correo ni
+                  teléfono.
+                </small>
+              </label>
+            )}
         </>
       )}
       <ExonerationFields
@@ -591,15 +647,20 @@ export function FiscalFields({
   onChange,
   base,
   receiverExoneration,
+  documentType = "FE",
+  onCabysSelected,
 }: {
   value: Row;
   onChange: (v: Row) => void;
   base?: string;
   receiverExoneration?: Row | null;
+  documentType?: string;
+  onCabysSelected?: (row: Row) => void;
 }) {
   const unitListId = useId();
   const [search, setSearch] = useState(""),
     [results, setResults] = useState<Row[]>([]),
+    [cabysReference, setCabysReference] = useState<Row | null>(null),
     [notice, setNotice] = useState("");
   const searchAlive = useAlive(),
     searchSequence = useRef(0),
@@ -628,6 +689,12 @@ export function FiscalFields({
           value={value.cabys}
           maxLength={13}
           onChange={(v) => onChange({ ...value, cabys: v })}
+        />
+        <Field
+          label="Código interno del producto o servicio"
+          value={value.internal_code ?? ""}
+          onChange={(v) => onChange({ ...value, internal_code: v })}
+          maxLength={40}
         />
         <Field
           label="Unidad de medida"
@@ -699,11 +766,31 @@ export function FiscalFields({
             ))}
           </select>
         </label>
-        <Field
-          label="Descuento (importe)"
-          value={value.discount_amount}
-          onChange={(v) => onChange({ ...value, discount_amount: v })}
-        />
+        <label className="field">
+          Modalidad de descuento
+          <select
+            value={value.discount_mode ?? "amount"}
+            onChange={(e) =>
+              onChange({ ...value, discount_mode: e.target.value })
+            }
+          >
+            <option value="amount">Monto fijo</option>
+            <option value="percentage">Porcentaje</option>
+          </select>
+        </label>
+        {value.discount_mode === "percentage" ? (
+          <Field
+            label="Descuento (porcentaje)"
+            value={value.discount_percentage ?? "0"}
+            onChange={(v) => onChange({ ...value, discount_percentage: v })}
+          />
+        ) : (
+          <Field
+            label="Descuento (importe)"
+            value={value.discount_amount}
+            onChange={(v) => onChange({ ...value, discount_amount: v })}
+          />
+        )}
         <label className="field">
           Código de descuento
           <select
@@ -754,6 +841,11 @@ export function FiscalFields({
             value={search}
             onChange={setSearch}
           />
+          <small>
+            Busca por código de 13 dígitos, descripción, palabras clave o nombre
+            de categoría. La tarifa del catálogo es una referencia y debe
+            revisarse para esta venta.
+          </small>
           <button
             type="button"
             className="button secondary"
@@ -793,13 +885,33 @@ export function FiscalFields({
               className="button secondary"
               key={r.code}
               onClick={() => {
-                if (resultsContext.current === currentSearchContext.current)
+                if (resultsContext.current === currentSearchContext.current) {
                   onChange({ ...value, cabys: r.code });
+                  onCabysSelected?.(r);
+                  setCabysReference(r);
+                  setNotice(
+                    `CABYS ${r.code} seleccionado.${r.tax_rate !== undefined ? ` Tarifa de referencia: ${r.tax_rate} %. Confirma el tratamiento aplicable.` : " Confirma el tratamiento aplicable."}`,
+                  );
+                }
               }}
             >
               {r.code} — {r.description}
+              {r.tax_rate !== undefined ? ` · Referencia: ${r.tax_rate} %` : ""}
+              {r.categories?.length ? ` · ${r.categories.join(" › ")}` : ""}
             </button>
           ))}
+          {cabysReference?.code === value.cabys && (
+            <p>
+              Descripción sugerida: {cabysReference?.description}.
+              {cabysReference?.tax_rate !== undefined
+                ? ` Tarifa de referencia: ${cabysReference.tax_rate} %.`
+                : ""}{" "}
+              Confirma el tratamiento tributario de esta venta.
+              {cabysReference?.categories?.length
+                ? ` Categorías: ${cabysReference.categories.join(" › ")}.`
+                : ""}
+            </p>
+          )}
         </>
       )}
       {value.treatment === "exonerated" && (
@@ -808,6 +920,299 @@ export function FiscalFields({
           onChange={(v) => onChange({ ...value, exoneration: v })}
         />
       )}
+      <details className="billing-disclosure">
+        <summary>
+          Códigos comerciales y campos especializados (si corresponden)
+        </summary>
+        <div className="form-grid">
+          <Field
+            label="Unidad de medida comercial"
+            value={value.commercial_unit ?? ""}
+            onChange={(v) => onChange({ ...value, commercial_unit: v })}
+            maxLength={20}
+          />
+          {documentType !== "TE" && (
+            <label className="field">
+              Tipo de transacción
+              <select
+                value={value.transaction_type ?? ""}
+                onChange={(e) =>
+                  onChange({ ...value, transaction_type: e.target.value })
+                }
+              >
+                <option value="">No corresponde</option>
+                {[
+                  ["01", "Venta normal"],
+                  ["02", "Mercancía autoconsumo exento"],
+                  ["03", "Mercancía autoconsumo gravado"],
+                  ["04", "Servicio autoconsumo exento"],
+                  ["05", "Servicio autoconsumo gravado"],
+                  ["06", "Cuota de afiliación"],
+                  ["07", "Cuota de afiliación exenta"],
+                  ["08", "Bienes de capital del emisor"],
+                  ["09", "Bienes de capital del receptor"],
+                  ["10", "Bienes de capital del emisor y receptor"],
+                  ["11", "Bienes de capital autoconsumo exento del emisor"],
+                  [
+                    "12",
+                    "Bienes de capital sin contraprestación a terceros exento del emisor",
+                  ],
+                  ["13", "Sin contraprestación a terceros"],
+                ].map(([code, label]) => (
+                  <option key={code} value={code}>
+                    {code} · {label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+        </div>
+        {(value.commercial_codes ?? []).map((code: Row, i: number) => (
+          <div className="form-grid" key={i}>
+            <label className="field">
+              Tipo de código comercial {i + 1}
+              <select
+                value={code.type}
+                onChange={(e) =>
+                  onChange({
+                    ...value,
+                    commercial_codes: value.commercial_codes.map(
+                      (c: Row, n: number) =>
+                        n === i ? { ...c, type: e.target.value } : c,
+                    ),
+                  })
+                }
+              >
+                <option value="">Selecciona…</option>
+                {[
+                  ["01", "Vendedor"],
+                  ["02", "Comprador"],
+                  ["03", "Fabricante o importador"],
+                  ["04", "Uso interno"],
+                  ["99", "Otros"],
+                ].map(([k, label]) => (
+                  <option key={k} value={k}>
+                    {k} · {label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <Field
+              label={`Código comercial ${i + 1}`}
+              value={code.code}
+              maxLength={20}
+              onChange={(v) =>
+                onChange({
+                  ...value,
+                  commercial_codes: value.commercial_codes.map(
+                    (c: Row, n: number) => (n === i ? { ...c, code: v } : c),
+                  ),
+                })
+              }
+            />
+            <button
+              type="button"
+              className="button secondary"
+              onClick={() =>
+                onChange({
+                  ...value,
+                  commercial_codes: value.commercial_codes.filter(
+                    (_: Row, n: number) => n !== i,
+                  ),
+                })
+              }
+            >
+              Quitar código comercial {i + 1}
+            </button>
+          </div>
+        ))}
+        <button
+          type="button"
+          className="button secondary"
+          disabled={(value.commercial_codes?.length ?? 0) >= 5}
+          onClick={() =>
+            onChange({
+              ...value,
+              commercial_codes: [
+                ...(value.commercial_codes ?? []),
+                { type: "", code: "" },
+              ],
+            })
+          }
+        >
+          Agregar código comercial
+        </button>
+        <details>
+          <summary>
+            Vehículos, aeronaves o embarcaciones con VIN o serie
+          </summary>
+          <p>Completa esta numeración solo para los bienes que la requieren.</p>
+          {(value.vin_numbers ?? []).map((vin: string, i: number) => (
+            <div className="billing-actions" key={i}>
+              <Field
+                label={`VIN o serie ${i + 1}`}
+                value={vin}
+                maxLength={17}
+                onChange={(v) =>
+                  onChange({
+                    ...value,
+                    vin_numbers: value.vin_numbers.map(
+                      (s: string, n: number) => (n === i ? v : s),
+                    ),
+                  })
+                }
+              />
+              <button
+                type="button"
+                className="button secondary"
+                onClick={() =>
+                  onChange({
+                    ...value,
+                    vin_numbers: value.vin_numbers.filter(
+                      (_: string, n: number) => n !== i,
+                    ),
+                  })
+                }
+              >
+                Quitar VIN o serie {i + 1}
+              </button>
+            </div>
+          ))}
+          <button
+            type="button"
+            className="button secondary"
+            disabled={(value.vin_numbers?.length ?? 0) >= 1000}
+            onClick={() =>
+              onChange({
+                ...value,
+                vin_numbers: [...(value.vin_numbers ?? []), ""],
+              })
+            }
+          >
+            Agregar VIN o serie
+          </button>
+        </details>
+        <details>
+          <summary>Medicamentos con registro sanitario</summary>
+          <div className="form-grid">
+            <Field
+              label="Registro sanitario del medicamento"
+              value={value.medicine_registration ?? ""}
+              maxLength={100}
+              onChange={(v) => onChange({ ...value, medicine_registration: v })}
+            />
+            <label className="field">
+              Código oficial de forma farmacéutica
+              <select
+                value={value.pharmaceutical_form ?? ""}
+                onChange={(e) =>
+                  onChange({ ...value, pharmaceutical_form: e.target.value })
+                }
+              >
+                <option value="">Selecciona cuando corresponda…</option>
+                {PHARMACEUTICAL_FORMS.map((form) => (
+                  <option key={form.code} value={form.code}>
+                    {form.code} · {form.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <p>
+            Catálogo oficial de formas farmacéuticas de Hacienda. Confirma por
+            separado la clasificación CABYS y el registro sanitario del
+            medicamento.
+          </p>
+        </details>
+      </details>
+      <details className="billing-disclosure">
+        <summary>Otros impuestos de la línea (si corresponden)</summary>
+        <p>
+          El impuesto al cemento (12) tiene cálculo verificado al 5 %. Los demás
+          regímenes requieren revisión de su base y regla específica antes de
+          emitir.
+        </p>
+        {(value.other_taxes ?? []).map((tax: Row, i: number) => (
+          <div className="form-grid" key={i}>
+            <label className="field">
+              Otro impuesto {i + 1}
+              <select
+                value={tax.code}
+                onChange={(e) =>
+                  onChange({
+                    ...value,
+                    other_taxes: value.other_taxes.map((t: Row, n: number) =>
+                      n === i
+                        ? {
+                            ...t,
+                            code: e.target.value,
+                            rate: e.target.value === "12" ? "5" : t.rate,
+                          }
+                        : t,
+                    ),
+                  })
+                }
+              >
+                <option value="12">12 · Impuesto al cemento (5 %)</option>
+                {tax.code !== "12" && (
+                  <option value={tax.code}>
+                    {tax.code} · Requiere revisión tributaria
+                  </option>
+                )}
+              </select>
+            </label>
+            <label className="field">
+              Tarifa de otro impuesto {i + 1}
+              <input readOnly value={tax.rate ?? "5"} />
+            </label>
+            {tax.code === "99" && (
+              <Field
+                label={`Descripción de otro impuesto ${i + 1}`}
+                value={tax.other_description ?? ""}
+                maxLength={100}
+                onChange={(v) =>
+                  onChange({
+                    ...value,
+                    other_taxes: value.other_taxes.map((t: Row, n: number) =>
+                      n === i ? { ...t, other_description: v } : t,
+                    ),
+                  })
+                }
+              />
+            )}
+            <button
+              type="button"
+              className="button secondary"
+              onClick={() =>
+                onChange({
+                  ...value,
+                  other_taxes: value.other_taxes.filter(
+                    (_: Row, n: number) => n !== i,
+                  ),
+                })
+              }
+            >
+              Quitar otro impuesto {i + 1}
+            </button>
+          </div>
+        ))}
+        <button
+          type="button"
+          className="button secondary"
+          disabled={(value.other_taxes?.length ?? 0) >= 10}
+          onClick={() =>
+            onChange({
+              ...value,
+              other_taxes: [
+                ...(value.other_taxes ?? []),
+                { code: "12", rate: "5", other_description: "" },
+              ],
+            })
+          }
+        >
+          Agregar impuesto al cemento
+        </button>
+      </details>
     </div>
   );
 }

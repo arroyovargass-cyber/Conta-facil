@@ -9,6 +9,12 @@ import {
 import { CredentialForm } from "../hacienda/CredentialForm";
 import { useAlive } from "../billing/common";
 import "./company.css";
+import {
+  companyFormSubmission,
+  companyValidationMessage,
+  companyValidationTab,
+  companyApiErrorTab,
+} from "./company-form";
 type Row = Record<string, any>;
 const tabs = [
   "Información general",
@@ -77,7 +83,8 @@ export function CompanyWorkspace({
     generation = useRef(0),
     credentialContext = useRef(""),
     submitLock = useRef(false),
-    operation = useRef(crypto.randomUUID());
+    operation = useRef(crypto.randomUUID()),
+    persistedActivityCount = useRef(company.activities?.length ?? 0);
   const [canManage, setCanManage] = useState(false),
     [ready, setReady] = useState(false),
     [detailReady, setDetailReady] = useState(false),
@@ -113,7 +120,9 @@ export function CompanyWorkspace({
               "/company-administration/" + tenantId,
             );
             if (!current || seq !== generation.current) return;
-            setValue(fromRow(result.item));
+            const saved = fromRow(result.item);
+            persistedActivityCount.current = saved.activities.length;
+            setValue(saved);
             setVersion(result.item.configuration_version);
             setSequences(result.sequences);
           } else {
@@ -246,7 +255,9 @@ export function CompanyWorkspace({
   );
   function apply(row: Row, seqs: Row[] = []) {
     setDetailReady(true);
-    setValue(fromRow(row));
+    const saved = fromRow(row);
+    persistedActivityCount.current = saved.activities.length;
+    setValue(saved);
     setId(row.id);
     setVersion(row.configuration_version);
     setSequences(seqs);
@@ -257,6 +268,7 @@ export function CompanyWorkspace({
     setDetailReady(true);
     generation.current++;
     operation.current = crypto.randomUUID();
+    persistedActivityCount.current = 0;
     const next = blank();
     next.legal_name = "";
     next.identification = "";
@@ -295,13 +307,18 @@ export function CompanyWorkspace({
     setError("");
     const seq = generation.current;
     try {
-      const parsed = companyInput.safeParse(value);
-      if (!parsed.success)
+      const candidate = companyFormSubmission(
+        value,
+        persistedActivityCount.current,
+      );
+      setValue(candidate);
+      const parsed = companyInput.safeParse(candidate);
+      if (!parsed.success) {
+        setTab(companyValidationTab(parsed.error.issues[0].path));
         throw new Error(
-          parsed.error.issues
-            .map((i) => i.message + " (" + i.path.join(".") + ")")
-            .join(" "),
+          parsed.error.issues.map(companyValidationMessage).join(" "),
         );
+      }
       const body = id
         ? { ...parsed.data, expected_version: version }
         : { ...parsed.data, operation_id: operation.current };
@@ -314,7 +331,11 @@ export function CompanyWorkspace({
       apply(r.item, r.sequences ?? []);
       await onSaved(r.item.id);
     } catch (e: any) {
-      if (alive.current && seq === generation.current) setError(e.message);
+      if (alive.current && seq === generation.current) {
+        setError(e.message);
+        const errorTab = companyApiErrorTab(e.message);
+        if (errorTab !== null) setTab(errorTab);
+      }
     } finally {
       submitLock.current = false;
       if (alive.current) setBusy(false);
@@ -646,6 +667,9 @@ export function CompanyWorkspace({
               {lookup?.available && (
                 <div className="company-lookup">
                   <p>Resultado para revisar: {lookup.recipient?.name}</p>
+                  {lookup.situation?.state && (
+                    <p>Estado tributario informado: {lookup.situation.state}</p>
+                  )}
                   <button
                     type="button"
                     className="text-button"
@@ -674,6 +698,7 @@ export function CompanyWorkspace({
                         key={a.code}
                         disabled={
                           !editing ||
+                          a.active !== true ||
                           value.activities.some((v) => v.code === a.code)
                         }
                         onClick={() =>
@@ -689,20 +714,26 @@ export function CompanyWorkspace({
                           ])
                         }
                       >
-                        {a.code} · {a.description}
+                        {a.code} · {a.description} ·{" "}
+                        {a.active === true
+                          ? "Activa"
+                          : a.active === false
+                            ? "Inactiva"
+                            : "Vigencia no confirmada"}
                       </button>
                     ))}
                 </div>
               )}
               <p className="form-hint">
-                La consulta muestra actividades asociadas a la identificación.
-                El catálogo general por descripción requiere una fuente oficial
-                verificable; puedes preparar códigos manualmente.
+                Selecciona una actividad vigente asociada a la identificación.
+                Puedes preparar los datos manualmente si la consulta no está
+                disponible. Los códigos tienen seis caracteres: conserva el
+                punto, por ejemplo 4520.0, sin completar ceros ni sustituirlo.
               </p>
               {value.activities.map((a, i) => (
                 <div className="company-activity" key={i}>
                   <label className="field">
-                    Código de actividad {i + 1}
+                    Código de actividad {i + 1} (6 caracteres)
                     <input
                       value={a.code}
                       disabled={!editing || busy}
@@ -771,6 +802,22 @@ export function CompanyWorkspace({
                     />
                     Activa
                   </label>
+                  {editing && i >= persistedActivityCount.current && (
+                    <button
+                      type="button"
+                      className="button secondary"
+                      aria-label={`Eliminar actividad nueva ${i + 1}`}
+                      disabled={busy}
+                      onClick={() =>
+                        change(
+                          "activities",
+                          value.activities.filter((_, index) => index !== i),
+                        )
+                      }
+                    >
+                      Eliminar actividad nueva
+                    </button>
+                  )}
                 </div>
               ))}
               {editing && (
@@ -863,6 +910,25 @@ export function CompanyWorkspace({
                 )}
               </div>
               <div className="company-options">
+                <label className="company-check">
+                  <input
+                    type="checkbox"
+                    checked={value.configuration.billing.email_delivery_enabled}
+                    disabled={!editing || busy}
+                    onChange={(event) =>
+                      change(
+                        "configuration.billing.email_delivery_enabled",
+                        event.target.checked,
+                      )
+                    }
+                  />
+                  Enviar comprobantes aceptados al correo del cliente
+                </label>
+                <p>
+                  Requiere correo del receptor y servicio de entrega
+                  configurado. La dirección de envío por sí sola no activa las
+                  entregas.
+                </p>
                 {documentTypes.map((t) => (
                   <label className="company-check" key={t}>
                     <input
@@ -870,7 +936,7 @@ export function CompanyWorkspace({
                       checked={value.configuration.billing.documents.includes(
                         t,
                       )}
-                      disabled={!editing || busy}
+                      disabled={!editing || busy || !["FE", "TE"].includes(t)}
                       onChange={(e) =>
                         change(
                           "configuration.billing.documents",
@@ -883,6 +949,9 @@ export function CompanyWorkspace({
                       }
                     />
                     {docs[t]}
+                    {!["FE", "TE"].includes(t)
+                      ? " · pendiente de implementación fiscal"
+                      : ""}
                   </label>
                 ))}
               </div>

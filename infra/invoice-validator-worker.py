@@ -1,14 +1,20 @@
-"""Bounded full official FE schema validation; no signature trust or issuance claim."""
+"""Bounded full official FE/TE schema validation; no signature trust or issuance claim."""
 import base64, hashlib, io, json, pathlib, re, resource, socket, sys
 import importlib.util
 ROOT=pathlib.Path(__file__).resolve().parents[1]
 spec=importlib.util.spec_from_file_location('diagnostic',ROOT/'infra/xml-validator-worker.py')
 diagnostic=importlib.util.module_from_spec(spec);spec.loader.exec_module(diagnostic)
 BASE=ROOT/'docs/reference/hacienda/v4.4'
-MANIFEST_HASH='d4f65a9887c63fdaa10461ed106c3a16ba0172d36be03620d8e6aac3cca94474'
+MANIFEST_HASH='f2a60d6fdd046a3fd34aa98784e2eb04018d5d6ac7bc9067228f259e69d09490'
 def validate(content):
     import xmlschema
-    diagnostic.inspect_input(content)
+    # The bounded parser checks the complete input, including DTD/entity rejection.
+    # Only the two exact official root/namespace pairs enter the schema engine.
+    try:
+        diagnostic.inspect_input(content)
+    except diagnostic.InputFailure as e:
+        if str(e)!='XML_DOCUMENT_UNSUPPORTED': raise
+        diagnostic.inspect_input(content,'https://cdn.comprobanteselectronicos.go.cr/xml-schemas/v4.4/tiqueteElectronico|TiqueteElectronico')
     if len(content)>1048576: raise ValueError('XML_SIZE_EXCEEDED')
     if xmlschema.__version__!='4.3.2': raise ValueError('XSD_ENGINE_VERSION_MISMATCH')
     raw=(BASE/'manifest.json').read_bytes()
@@ -16,7 +22,10 @@ def validate(content):
     m=json.loads(raw)
     if m['status']!='official-package-revision-confirmed' or not m['runtime_use_allowed']: raise ValueError('XSD_PACKAGE_DISABLED')
     resources=[]
-    entries=[m]+m['dependencies']
+    schemas=[m]+m.get('document_schemas',[])
+    if any(s['status']!='official-package-revision-confirmed' or not s['runtime_use_allowed'] for s in schemas):raise ValueError('XSD_PACKAGE_DISABLED')
+    entries=schemas+[d for s in schemas for d in s['dependencies']]
+    seen=set()
     for item in entries:
         name=item.get('local_file',item.get('file'))
         if not name or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._-]*',name):raise ValueError('XSD_DEPENDENCY_INVALID')
@@ -24,8 +33,10 @@ def validate(content):
         if p.is_symlink():raise ValueError('XSD_INTEGRITY_FAILED')
         b=p.read_bytes()
         if len(b)!=item['bytes'] or hashlib.sha256(b).hexdigest()!=item['sha256']:raise ValueError('XSD_INTEGRITY_FAILED')
+        if name in seen: continue
+        seen.add(name)
         resources.append(xmlschema.XMLResource(b,allow='none',defuse='never' if name=='xmldsig-core-schema.w3c-2002.xsd' else 'always'))
-    # Register dsig first; preserve the original FE schema and all signature requirements.
+    # Register dsig first; preserve both official schemas and every signature requirement.
     schema=xmlschema.XMLSchema11(list(reversed(resources)),allow='none',defuse='always',use_fallback=False)
     source=xmlschema.XMLResource(io.BytesIO(content),allow='none',block='file url',defuse='always')
     for error in schema.iter_errors(source,use_defaults=False,use_location_hints=False):

@@ -1,4 +1,5 @@
-import { beforeAll, afterAll, it, expect } from "vitest";
+import { beforeAll, afterAll, it, expect, vi } from "vitest";
+import { FiscalLookups } from "../../apps/api/src/services/fiscal-lookups";
 import { randomUUID, randomInt } from "node:crypto";
 import { workspace } from "../support/workspace";
 import {
@@ -46,6 +47,24 @@ async function run<T>(fn: (db: pg.PoolClient) => Promise<T>) {
   }
 }
 beforeAll(async () => {
+  vi.spyOn(FiscalLookups.prototype, "cabys").mockImplementation(
+    async (code) => ({
+      available: true,
+      source: "Hacienda",
+      items: [{ code, description: "Catálogo sintético de pruebas" }],
+    }),
+  );
+  vi.spyOn(FiscalLookups.prototype, "recipient").mockImplementation(
+    async (identification) => ({
+      available: true,
+      source: "Hacienda",
+      source_url: "https://api.hacienda.go.cr/fe/ae",
+      recipient: { name: "Contribuyente sintético", identification },
+      activities: [
+        { code: "123456", description: "Actividad sintética", active: true },
+      ],
+    }),
+  );
   f = await workspace({ role: "admin", systemAdmin: true, companies: 2 });
   const t = f.tenants[0];
   const preparer = await workspace();
@@ -197,6 +216,7 @@ beforeAll(async () => {
   );
 });
 afterAll(async () => {
+  vi.restoreAllMocks();
   await f?.pool.end();
 });
 it("fails closed for the global switch without reserving a number", async () => {
@@ -269,7 +289,7 @@ it("rejects incomplete issuer XML data before consuming numbering", async () => 
       run((db) =>
         issuePreparedInvoice(db, row, randomUUID(), f.userId, config),
       ),
-    ).rejects.toThrow("XML");
+    ).rejects.toThrow("provincia");
     expect(
       (
         await f.pool.query(

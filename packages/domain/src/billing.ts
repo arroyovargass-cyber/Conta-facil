@@ -4,6 +4,8 @@ import {
   receiverInput,
   lineFiscalInput,
 } from "./invoice-fiscal";
+import { emissionOptionsInput } from "./emission";
+import { otherChargeInput } from "./invoice-extras";
 const text = z.string().trim().min(1).max(160);
 const optionalText = (max: number) => z.string().trim().max(max).default("");
 export const decimalInput = z
@@ -48,18 +50,23 @@ export const draftLineInput = z
     quantity: positiveDecimal.nullable().default(null),
     unit_price: decimalInput.nullable().default(null),
     fiscal: lineFiscalInput.nullable().default(null),
+    save_catalog_item: z.boolean().default(false),
   })
   .strict();
 export const draftFields = z
   .object({
     customer_id: z.uuid().nullable().default(null),
-    receiver_mode: z.enum(["registered", "occasional"]).default("registered"),
+    receiver_mode: z
+      .enum(["registered", "occasional", "consumer_final"])
+      .default("registered"),
     receiver: receiverInput.optional(),
     save_customer: z.boolean().default(false),
     document_type: z.enum(["FE", "TE"]).default("FE"),
     department_id: z.uuid(),
     currency: z.enum(["CRC", "USD"]),
     notes: optionalText(2000),
+    commercial: emissionOptionsInput.prefault({}),
+    other_charges: z.array(otherChargeInput).max(15).default([]),
     lines: z.array(draftLineInput).max(100),
   })
   .strict();

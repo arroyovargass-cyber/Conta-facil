@@ -412,6 +412,103 @@ describe("emission pipeline fencing and reconciliation", () => {
     ).runBatch();
     expect(h.deps.enqueue).toHaveBeenCalledWith(h.job, "email");
   });
+  it("enqueues customer email from the explicit frozen opt-in with a valid sender address", async () => {
+    const h = harness("pdf");
+    h.doc.hacienda_status = "accepted";
+    h.doc.snapshot.receiver.email = "receiver@example.com";
+    h.doc.snapshot.issuer.configuration.billing = {
+      email_delivery_enabled: true,
+      send_email: "billing@example.com",
+    };
+    await new EmissionPipeline(
+      {} as any,
+      {
+        ...config,
+        SMTP_HOST: "localhost",
+        SMTP_PORT: 2525,
+        SMTP_FROM: "issuer@example.com",
+      } as any,
+      h.deps,
+    ).runBatch();
+    expect(h.deps.enqueue).toHaveBeenCalledWith(h.job, "email");
+    expect(h.doc.email_status).not.toBe("provider_accepted");
+  });
+  it.each([
+    { email_delivery_enabled: false, send_email: true },
+    { send_email: "billing@example.com" },
+  ])(
+    "does not enqueue delivery without explicit opt-in: %j",
+    async (billing) => {
+      const h = harness("pdf");
+      h.doc.hacienda_status = "accepted";
+      h.doc.snapshot.receiver.email = "receiver@example.com";
+      h.doc.snapshot.issuer.configuration.billing = billing;
+      await new EmissionPipeline(
+        {} as any,
+        {
+          ...config,
+          SMTP_HOST: "localhost",
+          SMTP_PORT: 2525,
+          SMTP_FROM: "issuer@example.com",
+        } as any,
+        h.deps,
+      ).runBatch();
+      expect(h.deps.enqueue).not.toHaveBeenCalled();
+    },
+  );
+  it("runs an opted-in email job and only records provider acceptance after the mail result", async () => {
+    const h = harness("email");
+    h.doc.hacienda_status = "accepted";
+    h.doc.email_status = "queued";
+    h.doc.snapshot.receiver.email = "receiver@example.com";
+    h.doc.snapshot.issuer.configuration.billing = {
+      email_delivery_enabled: true,
+      send_email: "billing@example.com",
+    };
+    h.deps.mail = {
+      send: vi.fn(async () => {
+        expect(h.doc.email_status).toBe("processing");
+        return { status: "provider_accepted" };
+      }),
+    };
+    await new EmissionPipeline(
+      {} as any,
+      {
+        ...config,
+        SMTP_HOST: "localhost",
+        SMTP_PORT: 2525,
+        SMTP_FROM: "issuer@example.com",
+      } as any,
+      h.deps,
+    ).runBatch();
+    expect(h.deps.mail.send).toHaveBeenCalledWith(
+      expect.objectContaining({ recipient: "receiver@example.com" }),
+    );
+    expect(h.doc.email_status).toBe("provider_accepted");
+  });
+  it("blocks a direct email job when an explicit opt-out overrides a legacy snapshot", async () => {
+    const h = harness("email");
+    h.doc.hacienda_status = "accepted";
+    h.doc.email_status = "queued";
+    h.doc.snapshot.receiver.email = "receiver@example.com";
+    h.doc.snapshot.issuer.configuration.billing = {
+      email_delivery_enabled: false,
+      send_email: true,
+    };
+    h.deps.mail = { send: vi.fn() };
+    await new EmissionPipeline(
+      {} as any,
+      {
+        ...config,
+        SMTP_HOST: "localhost",
+        SMTP_PORT: 2525,
+        SMTP_FROM: "issuer@example.com",
+      } as any,
+      h.deps,
+    ).runBatch();
+    expect(h.deps.mail.send).not.toHaveBeenCalled();
+    expect(h.deps.store.update).not.toHaveBeenCalled();
+  });
   it("routes production jobs through production credentials, token client and reception without claiming STAG", async () => {
     const h = harness();
     h.job.environment = h.doc.environment = "production";
