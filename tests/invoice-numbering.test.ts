@@ -23,6 +23,27 @@ it("formats FE branch, terminal and sequence as exactly twenty digits", () => {
     }),
   ).toBe("99999999019999999999");
 });
+it("keeps explicitly selected TE numbering separate with official document code 04", () => {
+  expect(
+    formatInvoiceNumber({
+      branch: "001",
+      terminal: "00001",
+      sequence: 1n,
+      documentType: "TE",
+    }),
+  ).toBe("00100001040000000001");
+  expect(
+    buildInvoiceClave(claveInput({ consecutivo: "00100001040000000001" })),
+  ).toBe("50624112600012345678900100001040000000001100000000");
+  expect(() =>
+    formatInvoiceNumber({
+      branch: "001",
+      terminal: "00001",
+      sequence: 1n,
+      documentType: "NC" as any,
+    }),
+  ).toThrow();
+});
 it("rejects invalid branch, terminal, exhausted or non-bigint sequence", () => {
   for (const change of [
     { branch: "000" },
@@ -94,9 +115,9 @@ it("pads only valid raw national, legal, NITE and DIMEX identifications", () => 
       buildInvoiceClave(claveInput({ issuerIdentification: id })),
     ).toThrow();
 });
-it("rejects malformed and non-FE consecutives, invalid dates and security codes", () => {
+it("rejects malformed and unsupported consecutives, invalid dates and security codes", () => {
   for (const extra of [
-    { consecutivo: "00100001040000000001" },
+    { consecutivo: "00100001030000000001" },
     { consecutivo: "00000001010000000001" },
     { consecutivo: "00100000010000000001" },
     { consecutivo: "00100001010000000000" },

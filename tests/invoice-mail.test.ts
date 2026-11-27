@@ -80,3 +80,16 @@ it("labels the fiscal environment without weakening SMTP transport security", as
   expect(sendMail.mock.calls[1][0].subject).not.toContain("[PRUEBAS]");
   expect(sendMail.mock.calls[1][0].text).toContain("Ambiente de producción");
 });
+it("identifies an explicitly selected ticket and names its attachments consistently", async () => {
+  const sendMail = vi.fn().mockResolvedValue({ accepted: [input.recipient] });
+  const mail = new InvoiceMail({ ...config, transport: { sendMail } });
+  await mail.send({ ...input, documentType: "TE" });
+  const sent = sendMail.mock.calls[0][0];
+  expect(sent.subject).toContain("Tiquete electrónico");
+  expect(sent.text).toContain("tiquete electrónico");
+  expect(sent.attachments.map((a: any) => a.filename)).toEqual([
+    "tiquete.xml",
+    "tiquete.pdf",
+    "respuesta-hacienda.xml",
+  ]);
+});

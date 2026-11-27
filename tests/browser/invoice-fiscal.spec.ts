@@ -48,7 +48,7 @@ test("occasional sale saves an independent recipient and explicit fiscal totals"
       .getByRole("combobox", { name: "Tipo de receptor", exact: true })
       .selectOption("occasional");
     await expect(
-      page.getByLabel("Guardar también como cliente (opcional)"),
+      page.getByLabel("Guardar cliente para futuras facturas"),
     ).not.toBeChecked();
     await page
       .getByLabel("Nombre del receptor", { exact: true })
@@ -88,7 +88,9 @@ test("occasional sale saves an independent recipient and explicit fiscal totals"
     await page
       .getByRole("button", { name: "Guardar borrador", exact: true })
       .click();
-    await expect(page.getByRole("status")).toContainText("Borrador guardado");
+    await expect(
+      page.getByRole("status", { name: "Resultado del borrador" }),
+    ).toContainText("Borrador guardado");
     expect(
       (
         await f.pool.query(

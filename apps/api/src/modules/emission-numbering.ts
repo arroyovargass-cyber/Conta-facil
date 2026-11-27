@@ -34,31 +34,39 @@ export function emissionNumberingRoutes(
   const allowed = async (db: pg.PoolClient, tenant: string) =>
     (
       await db.query(
-        "select private.is_system_administrator() and private.has_access($1,'tax.manage',null) allowed",
+        "select private.is_system_administrator() and private.has_access($1,'tax.manage',null) and private.has_access($1,'invoices.numbering',null) allowed",
         [tenant],
       )
     ).rows[0].allowed;
   app.get(base + "/numbering-options", async (req) => {
     const p = await auth.authenticate(req),
       { tenantId } = params.parse(req.params),
-      { environment } = z
-        .object({ environment: haciendaEnvironmentInput })
+      { environment, document_type } = z
+        .object({
+          environment: haciendaEnvironmentInput,
+          document_type: z.enum(["FE", "TE"]).default("FE"),
+        })
         .strict()
         .parse(req.query ?? {});
     return transaction(p.claims, async (db) => {
       if (!(await allowed(db, tenantId)))
-        return { canConfirm: false, environment, items: [] };
+        return { canConfirm: false, environment, document_type, items: [] };
       const items = (
         await db.query(
           `select b.code branch_code,t.code terminal_code,coalesce(s.last_value,0)::text last_value,
-    coalesce((select max(d.last_value) from public.document_sequences d where d.tenant_id=b.tenant_id and d.branch_id=b.id and d.terminal_id=t.id and d.document_type='FE'),0)::text legacy_floor,s.confirmed_at
+    coalesce((select max(d.last_value) from public.document_sequences d where d.tenant_id=b.tenant_id and d.branch_id=b.id and d.terminal_id=t.id and d.document_type=$3),0)::text legacy_floor,s.confirmed_at
     from public.branches b join public.terminals t on t.tenant_id=b.tenant_id and t.branch_id=b.id
-    left join private.emission_sequences s on s.tenant_id=b.tenant_id and s.environment=$2 and s.branch_code=b.code and s.terminal_code=t.code
+    left join private.emission_sequences s on s.tenant_id=b.tenant_id and s.environment=$2 and s.branch_code=b.code and s.terminal_code=t.code and s.document_type=$3
     where b.tenant_id=$1 and b.active and t.active order by b.code,t.code limit 101`,
-          [tenantId, environment],
+          [tenantId, environment, document_type],
         )
       ).rows;
-      return { canConfirm: true, environment, items: items.slice(0, 100) };
+      return {
+        canConfirm: true,
+        environment,
+        document_type,
+        items: items.slice(0, 100),
+      };
     });
   });
   app.post(base + "/numbering", async (req) => {
@@ -75,6 +83,7 @@ export function emissionNumberingRoutes(
             .refine((s) => s !== "00000"),
           starting_value: z.string().regex(/^(0|[1-9][0-9]{0,9})$/),
           environment: haciendaEnvironmentInput,
+          document_type: z.enum(["FE", "TE"]).default("FE"),
         })
         .strict()
         .parse(req.body);
@@ -87,13 +96,14 @@ export function emissionNumberingRoutes(
       await requirePermission(db, tenantId, "tax.manage");
       try {
         await db.query(
-          "select private.confirm_emission_numbering($1,$2,$3,$4::numeric,$5::text)",
+          "select private.confirm_emission_numbering($1,$2,$3,$4::numeric,$5::text,$6::text)",
           [
             tenantId,
             input.branch_code,
             input.terminal_code,
             input.starting_value,
             input.environment,
+            input.document_type,
           ],
         );
       } catch (e) {
@@ -112,7 +122,11 @@ export function emissionNumberingRoutes(
         throw e;
       }
       await requirePermission(db, tenantId, "tax.manage");
-      return { confirmed: true, environment: input.environment };
+      return {
+        confirmed: true,
+        environment: input.environment,
+        document_type: input.document_type,
+      };
     });
   });
 }

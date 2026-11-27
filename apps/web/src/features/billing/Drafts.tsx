@@ -1,7 +1,9 @@
-import React, { useRef, useState } from "react";
+import React, { useEffect, useId, useRef, useState } from "react";
 import { apiRequest, post } from "../../api/client";
 import { calculateInvoice } from "../../../../../packages/domain/src/invoice-fiscal";
+import { prepareEmission } from "../../../../../packages/domain/src/emission";
 import { subtotal } from "../../../../../packages/domain/src/billing";
+import type { HaciendaEnvironment } from "../../../../../packages/domain/src/hacienda-environment";
 import {
   Field,
   Lookup,
@@ -14,85 +16,291 @@ import {
   fiscalDefaults,
 } from "./common";
 import { FiscalPreview } from "./FiscalPreview";
-function fingerprint(row: Row): string {
+import {
+  commercialDefaults,
+  commercialPayload,
+  IssuerFields,
+  CommercialFields,
+  OtherChargesFields,
+  PaymentFields,
+  InvoiceSummary,
+  netTaxAmount,
+} from "./BillingFields";
+
+export function draftFingerprint(row: Row): string {
   return JSON.stringify({
     receiver_mode: row.receiver_mode,
     receiver: row.receiver,
+    save_customer: row.save_customer ?? false,
     document_type: row.document_type,
-    customer_id: row.customer_id,
+    customer_id: row.customer_id || null,
     department_id: row.department_id,
     currency: row.currency,
     notes: row.notes,
-    lines: row.lines.map((l: Row) => ({
-      catalog_item_id: l.catalog_item_id || null,
-      description: l.description,
-      quantity: l.quantity,
-      unit_price: l.unit_price,
-      fiscal: l.fiscal ?? null,
+    commercial: commercialPayload(row.commercial ?? {}, row.currency),
+    other_charges: row.other_charges ?? [],
+    lines: row.lines.map((line: Row) => ({
+      catalog_item_id: line.catalog_item_id || null,
+      save_catalog_item: line.save_catalog_item ?? false,
+      description: line.description,
+      quantity: line.quantity || null,
+      unit_price: line.unit_price || null,
+      fiscal: line.fiscal ?? null,
     })),
   });
 }
-const blankLine = () => ({
-  fiscal: null,
+const blankLine = (withFiscal = false) => ({
+  fiscal: withFiscal ? fiscalDefaults() : null,
   catalog_item_id: null,
+  save_catalog_item: false,
   description: "",
   quantity: "1",
   unit_price: "0",
 });
-export function Drafts({ base, options }: { base: string; options: Row }) {
-  const list = useListing(base + "/invoice-drafts", "archived", "false"),
+function allows(department: Row | undefined, capability: string): boolean {
+  return Boolean(
+    department && (department[capability] ?? department.can_manage),
+  );
+}
+function newDraft(options: Row, withFiscal = false): Row {
+  const currency =
+    options.issuer?.configuration?.billing?.currency === "USD" ? "USD" : "CRC";
+  const departments = (options.departments ?? []).filter(
+    (d: Row) => d.active && allows(d, "can_create"),
+  );
+  return {
+    receiver_mode: options.permissions?.includes("customers.read")
+      ? "registered"
+      : "occasional",
+    receiver: receiverDefaults(),
+    save_customer: false,
+    document_type: "FE",
+    customer_id: "",
+    department_id: departments.length === 1 ? departments[0].id : "",
+    currency,
+    notes: "",
+    lines: [blankLine(withFiscal)],
+    commercial: commercialDefaults(options, currency),
+    other_charges: [],
+  };
+}
+export function duplicatedDraftFromInvoice(invoice: Row, options: Row): Row {
+  const snapshot = invoice.snapshot,
+    draft = newDraft(options, true),
+    receiver = structuredClone({ ...receiverDefaults(), ...snapshot.receiver });
+  const documentType = invoice.document_type ?? snapshot.document_type ?? "FE";
+  const department = options.departments?.find(
+    (d: Row) =>
+      d.id === invoice.department_id && d.active && allows(d, "can_create"),
+  );
+  return {
+    ...draft,
+    document_type: documentType,
+    receiver_mode:
+      documentType === "TE" && !receiver.name && !receiver.identification
+        ? "consumer_final"
+        : "occasional",
+    customer_id: "",
+    receiver,
+    save_customer: false,
+    department_id: department?.id ?? draft.department_id,
+    currency: snapshot.currency,
+    notes: snapshot.notes ?? "",
+    commercial: {
+      ...commercialDefaults(options, snapshot.currency),
+      ...structuredClone(invoice.options ?? {}),
+      references: [],
+    },
+    other_charges: structuredClone(snapshot.other_charges ?? []),
+    lines: snapshot.lines.map((line: Row) => ({
+      catalog_item_id: null,
+      save_catalog_item: false,
+      description: line.description,
+      quantity: line.quantity,
+      unit_price: line.unit_price,
+      fiscal: line.fiscal ? structuredClone(line.fiscal) : null,
+    })),
+  };
+}
+function fromSaved(item: Row, options: Row, legacyCommercial?: Row): Row {
+  const defaults = commercialDefaults(options, item.currency);
+  const source =
+    item.commercial &&
+    (item.commercial.issuer_activity ||
+      item.commercial.branch_code ||
+      item.commercial.terminal_code ||
+      item.commercial.payment_methods?.length ||
+      item.commercial.sale_condition === "02" ||
+      item.commercial.references?.length)
+      ? item.commercial
+      : (legacyCommercial ?? item.commercial ?? {});
+  const saved: Row = {
+    ...item,
+    customer_id: item.customer_id ?? "",
+    receiver: { ...receiverDefaults(), ...item.customer_snapshot },
+    save_customer: false,
+    lines: item.lines.map((line: Row) => ({
+      ...line,
+      save_catalog_item: false,
+    })),
+    commercial: {
+      ...defaults,
+      ...source,
+      issuer_activity: source.issuer_activity || defaults.issuer_activity,
+      branch_code: source.branch_code || defaults.branch_code,
+      terminal_code: source.terminal_code || defaults.terminal_code,
+      exchange_rate:
+        item.currency === "CRC" ? "1" : (source.exchange_rate ?? ""),
+      credit_days: source.credit_days == null ? "" : String(source.credit_days),
+    },
+    other_charges: item.other_charges ?? [],
+  };
+  return {
+    ...saved,
+    _commercialNeedsSave:
+      JSON.stringify(commercialPayload(saved.commercial, saved.currency)) !==
+      JSON.stringify(commercialPayload(item.commercial ?? {}, item.currency)),
+  };
+}
+type Props = {
+  base: string;
+  options: Row;
+  mode?: "drafts" | "new";
+  environment?: HaciendaEnvironment;
+  initialDraftId?: string;
+  duplicateFromInvoice?: Row | null;
+  preparedInvoice?: Row | null;
+  onPrepared?: (item: Row) => void;
+  onSaved?: (item: Row) => void;
+  onClose?: () => void;
+  onBusyChange?: (busy: boolean) => void;
+};
+
+export function Drafts({
+  base,
+  options,
+  mode = "drafts",
+  environment = "test",
+  initialDraftId,
+  duplicateFromInvoice,
+  preparedInvoice,
+  onPrepared,
+  onSaved,
+  onClose,
+  onBusyChange,
+}: Props) {
+  const list = useListing(
+      base + "/invoice-drafts",
+      "archived",
+      "false",
+      mode === "drafts",
+    ),
     alive = useAlive(),
-    operation = useRef("");
-  const editorGeneration = useRef(0),
-    writing = useRef(false);
-  const [editing, setEditing] = useState<Row | null>(null),
+    operation = useRef(crypto.randomUUID()),
+    editorGeneration = useRef(0),
+    writing = useRef(false),
+    preparationOperation = useRef<{ fingerprint: string; id: string } | null>(
+      null,
+    );
+  const [editing, setEditing] = useState<Row | null>(() =>
+      mode === "new" && !initialDraftId
+        ? duplicateFromInvoice
+          ? duplicatedDraftFromInvoice(duplicateFromInvoice, options)
+          : newDraft(options, true)
+        : null,
+    ),
     [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
     [notice, setNotice] = useState(""),
     [conflict, setConflict] = useState(false),
     [previewGeneration, setPreviewGeneration] = useState(0),
     [savedFingerprint, setSavedFingerprint] = useState(""),
-    [detailLoading, setDetailLoading] = useState(false);
+    [detailLoading, setDetailLoading] = useState(false),
+    [validation, setValidation] = useState<Row | null>(null),
+    [showPreview, setShowPreview] = useState(false),
+    [detailTab, setDetailTab] = useState<"lines" | "charges">("lines"),
+    [reviewInstant] = useState(() => new Date().toISOString());
+  const detailId = useId();
+  const lineTabId = detailId + "-lines-tab",
+    chargeTabId = detailId + "-charges-tab";
+  function detailTabKey(event: React.KeyboardEvent<HTMLButtonElement>) {
+    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+    event.preventDefault();
+    const next =
+      event.key === "Home"
+        ? "lines"
+        : event.key === "End"
+          ? "charges"
+          : detailTab === "lines"
+            ? "charges"
+            : "lines";
+    setDetailTab(next);
+    document
+      .getElementById(next === "lines" ? lineTabId : chargeTabId)
+      ?.focus();
+  }
+  const department = options.departments?.find(
+    (d: Row) => d.id === editing?.department_id,
+  );
+  const canCreate = options.departments?.some(
+    (d: Row) => d.active && allows(d, "can_create"),
+  );
+  const editable = Boolean(
+    editing &&
+    !editing.archived_at &&
+    (editing.id
+      ? allows(department, "can_edit")
+      : editing.department_id
+        ? allows(department, "can_create")
+        : canCreate),
+  );
+  const dirty = Boolean(
+    editing &&
+    (editing._commercialNeedsSave ||
+      draftFingerprint(editing) !== savedFingerprint),
+  );
+  const canPrepare = Boolean(
+    department &&
+    (department.can_prepare ?? department.can_create ?? department.can_manage),
+  );
+  useEffect(() => {
+    onBusyChange?.(busy);
+    return () => onBusyChange?.(false);
+  }, [busy, onBusyChange]);
+
   function invalidateEditor() {
     const generation = ++editorGeneration.current;
     setPreviewGeneration(generation);
-    setDetailLoading(false);
+    setValidation(null);
+    setShowPreview(false);
     return generation;
   }
-  const manageable = (d: string) =>
-    options.departments.some((v: Row) => v.id === d && v.can_manage);
-  const editable =
-    editing &&
-    !editing.archived_at &&
-    (editing.id ? manageable(editing.department_id) : options.canManage);
-  function change(k: string, v: any) {
+  function change(key: string, value: any) {
     invalidateEditor();
-    setEditing((old) => ({ ...old, [k]: v }));
+    setEditing((old) => (old ? { ...old, [key]: value } : old));
   }
   function lineChange(index: number, key: string, value: any) {
     invalidateEditor();
-    setEditing((old) => ({
-      ...old,
-      lines: old!.lines.map((l: Row, i: number) =>
-        i === index ? { ...l, [key]: value } : l,
-      ),
-    }));
+    setEditing((old) =>
+      old
+        ? {
+            ...old,
+            lines: old.lines.map((line: Row, i: number) =>
+              i === index ? { ...line, [key]: value } : line,
+            ),
+          }
+        : old,
+    );
   }
   function create() {
     if (writing.current) return;
     invalidateEditor();
     operation.current = crypto.randomUUID();
-    setEditing({
-      receiver_mode: "registered",
-      receiver: receiverDefaults(),
-      save_customer: false,
-      document_type: "FE",
-      customer_id: "",
-      department_id: "",
-      currency: "CRC",
-      notes: "",
-      lines: [blankLine()],
-    });
+    preparationOperation.current = null;
+    setDetailLoading(false);
+    setEditing(newDraft(options, mode === "new"));
+    setDetailTab("lines");
+    setSavedFingerprint("");
     setError("");
     setNotice("");
     setConflict(false);
@@ -104,20 +312,17 @@ export function Drafts({ base, options }: { base: string; options: Row }) {
     setError("");
     setNotice("");
     setConflict(false);
+    setDetailTab("lines");
     try {
-      const r = await apiRequest(base + "/invoice-drafts/" + id);
+      const response = await apiRequest(base + "/invoice-drafts/" + id);
       if (alive.current && editorGeneration.current === generation) {
-        setSavedFingerprint(
-          fingerprint({
-            ...r.item,
-            receiver: { ...receiverDefaults(), ...r.item.customer_snapshot },
-          }),
+        const item = fromSaved(
+          response.item,
+          options,
+          preparedInvoice?.options,
         );
-        setEditing({
-          ...r.item,
-          receiver: { ...receiverDefaults(), ...r.item.customer_snapshot },
-          save_customer: false,
-        });
+        setSavedFingerprint(draftFingerprint(item));
+        setEditing(item);
       }
     } catch (e: any) {
       if (alive.current && editorGeneration.current === generation)
@@ -127,9 +332,30 @@ export function Drafts({ base, options }: { base: string; options: Row }) {
         setDetailLoading(false);
     }
   }
-  async function save(e: React.FormEvent) {
-    e.preventDefault();
-    if (!editing || busy) return;
+  useEffect(() => {
+    if (initialDraftId) void open(initialDraftId);
+  }, [initialDraftId]);
+
+  async function persist(keepOpen: boolean): Promise<Row | null> {
+    if (!editing || writing.current || !editable) return null;
+    if (
+      preparedInvoice &&
+      (editing.document_type !==
+        (preparedInvoice.document_type ??
+          preparedInvoice.snapshot?.document_type ??
+          "FE") ||
+        editing.department_id !== preparedInvoice.department_id)
+    ) {
+      setError(
+        "Esta preparación conserva su tipo de documento y departamento. Crea un comprobante nuevo para cambiarlos.",
+      );
+      return null;
+    }
+    writing.current = true;
+    const generation = invalidateEditor();
+    setBusy(true);
+    setError("");
+    setNotice("");
     const value = {
       receiver_mode: editing.receiver_mode ?? "registered",
       receiver: editing.receiver,
@@ -139,21 +365,135 @@ export function Drafts({ base, options }: { base: string; options: Row }) {
       department_id: editing.department_id,
       currency: editing.currency,
       notes: editing.notes,
-      lines: editing.lines.map((l: Row) => ({
-        catalog_item_id: l.catalog_item_id || null,
-        description: l.description,
-        quantity: l.quantity || null,
-        unit_price: l.unit_price || null,
-        fiscal: l.fiscal ?? null,
+      commercial: commercialPayload(editing.commercial ?? {}, editing.currency),
+      other_charges: editing.other_charges ?? [],
+      lines: editing.lines.map((line: Row) => ({
+        catalog_item_id: line.catalog_item_id || null,
+        save_catalog_item: line.save_catalog_item ?? false,
+        description: line.description,
+        quantity: line.quantity || null,
+        unit_price: line.unit_price || null,
+        fiscal: line.fiscal ?? null,
       })),
       ...(editing.id
         ? { version: editing.version }
         : { operation_id: operation.current }),
     };
-    await write(value, "Borrador guardado.");
+    try {
+      const response = await post(
+        base + "/invoice-drafts" + (editing.id ? "/" + editing.id : ""),
+        value,
+        editing.id ? "PATCH" : "POST",
+      );
+      if (!alive.current || editorGeneration.current !== generation)
+        return null;
+      const saved = fromSaved(response.item, options);
+      setSavedFingerprint(draftFingerprint(saved));
+      setEditing(keepOpen ? saved : null);
+      setConflict(false);
+      setNotice("Borrador guardado. Sin firma ni envío a Hacienda.");
+      if (mode === "drafts") list.refresh();
+      onSaved?.(response.item);
+      return saved;
+    } catch (e: any) {
+      if (alive.current && editorGeneration.current === generation) {
+        setError(e.message);
+        setConflict(e.status === 409);
+      }
+      return null;
+    } finally {
+      writing.current = false;
+      if (alive.current) setBusy(false);
+    }
   }
-  async function write(value: Row, message: string) {
+  async function save(event: React.FormEvent) {
+    event.preventDefault();
+    await persist(mode === "new");
+  }
+  async function validate() {
     if (!editing || writing.current) return;
+    const saved = editing.id && !dirty ? editing : await persist(true);
+    if (!saved || !alive.current) return;
+    try {
+      const result = prepareEmission({
+        document_type: saved.document_type,
+        currency: saved.currency,
+        receiver: saved.receiver,
+        lines: saved.lines,
+        options: commercialPayload(saved.commercial, saved.currency),
+        other_charges: saved.other_charges,
+      } as any);
+      const issues = [
+        ...(saved.readiness?.issues ?? []),
+        ...result.issues,
+      ].filter(
+        (issue, i, all) =>
+          all.findIndex(
+            (other) => other.code === issue.code && other.path === issue.path,
+          ) === i,
+      );
+      setValidation({ issues });
+      setNotice("");
+    } catch {
+      setError(
+        "Revisa los formatos de los datos comerciales antes de validar la factura.",
+      );
+    }
+  }
+  async function prepare() {
+    if (!editing || writing.current || !canPrepare || (!editable && dirty))
+      return;
+    const saved = editing.id && !dirty ? editing : await persist(true);
+    if (!saved || !alive.current) return;
+    writing.current = true;
+    const generation = editorGeneration.current;
+    setBusy(true);
+    setError("");
+    setNotice("");
+    const payload = {
+      environment,
+      draft_id: saved.id,
+      expected_version: saved.version,
+    };
+    const fingerprint = JSON.stringify({
+      ...payload,
+      prepared_id: preparedInvoice?.id,
+      prepared_version: preparedInvoice?.version,
+    });
+    if (preparationOperation.current?.fingerprint !== fingerprint)
+      preparationOperation.current = { fingerprint, id: crypto.randomUUID() };
+    try {
+      const response = preparedInvoice
+        ? await post(
+            base + "/invoices/" + preparedInvoice.id,
+            {
+              version: preparedInvoice.version,
+              expected_version: saved.version,
+            },
+            "PATCH",
+          )
+        : await post(base + "/invoices", {
+            ...payload,
+            operation_id: preparationOperation.current.id,
+          });
+      if (!alive.current || editorGeneration.current !== generation) return;
+      setNotice(
+        "Preparación guardada. Revisa los requisitos y confirma la emisión por separado.",
+      );
+      onPrepared?.(response.item);
+    } catch (e: any) {
+      if (alive.current && editorGeneration.current === generation) {
+        setError(e.message);
+        setConflict(e.status === 409);
+      }
+    } finally {
+      writing.current = false;
+      if (alive.current) setBusy(false);
+    }
+  }
+  async function archive() {
+    if (!editing?.id || writing.current || !allows(department, "can_delete"))
+      return;
     writing.current = true;
     const generation = invalidateEditor();
     setBusy(true);
@@ -161,14 +501,15 @@ export function Drafts({ base, options }: { base: string; options: Row }) {
     setNotice("");
     try {
       await post(
-        base + "/invoice-drafts" + (editing.id ? "/" + editing.id : ""),
-        value,
-        editing.id ? "PATCH" : "POST",
+        base + "/invoice-drafts/" + editing.id,
+        { version: editing.version, archived: !editing.archived_at },
+        "PATCH",
       );
       if (!alive.current || editorGeneration.current !== generation) return;
+      setNotice(
+        editing.archived_at ? "Borrador restaurado." : "Borrador archivado.",
+      );
       setEditing(null);
-      setConflict(false);
-      setNotice(message);
       list.refresh();
     } catch (e: any) {
       if (alive.current && editorGeneration.current === generation) {
@@ -181,17 +522,12 @@ export function Drafts({ base, options }: { base: string; options: Row }) {
     }
   }
   async function assignReview() {
-    if (
-      !editing?.id ||
-      writing.current ||
-      fingerprint(editing) !== savedFingerprint
-    )
-      return;
-    const generation = editorGeneration.current;
+    if (!editing?.id || dirty || writing.current) return;
     writing.current = true;
     setBusy(true);
     setError("");
     setNotice("");
+    const generation = editorGeneration.current;
     try {
       await post(
         base + "/invoice-drafts/" + editing.id + "/collection-review",
@@ -206,33 +542,41 @@ export function Drafts({ base, options }: { base: string; options: Row }) {
       }
     } finally {
       writing.current = false;
-      if (alive.current && editorGeneration.current === generation)
-        setBusy(false);
+      if (alive.current) setBusy(false);
     }
   }
   const calculation = editing
     ? calculateInvoice(
-        editing.lines.map((l: Row) => ({
-          ...l,
-          quantity: l.quantity || null,
-          unit_price: l.unit_price || null,
-          fiscal: l.fiscal ?? null,
+        editing.lines.map((line: Row) => ({
+          ...line,
+          quantity: line.quantity || null,
+          unit_price: line.unit_price || null,
+          fiscal: line.fiscal ?? null,
         })),
+        editing.other_charges ?? [],
       )
     : null;
-  let amount = "—";
+  const commercial = editing?.commercial ?? {};
+  let commercialAmount: string | null = null;
   try {
-    if (editing) amount = subtotal(editing.lines);
+    if (
+      editing?.lines.length &&
+      editing.lines.every(
+        (line: Row) =>
+          line.quantity && line.unit_price !== null && line.unit_price !== "",
+      )
+    )
+      commercialAmount = subtotal(editing.lines);
   } catch {
-    /* Invalid inputs remain editable; server validates on save. */
+    /* Incomplete decimal entry remains a draft, without partial totals. */
   }
   return (
     <section className="billing-workspace">
       <div className="info-box">
         <strong>Borrador — sin validez tributaria</strong>
         <p>
-          Prepara los datos comerciales. Este documento no se firma ni se envía
-          a Hacienda.
+          Guarda y revisa la factura antes de preparar su emisión. Hacienda
+          confirma la aceptación después del envío.
         </p>
       </div>
       {error && (
@@ -241,395 +585,697 @@ export function Drafts({ base, options }: { base: string; options: Row }) {
         </div>
       )}
       {notice && (
-        <div role="status" className="notice">
+        <div
+          role="status"
+          aria-label="Resultado del borrador"
+          className="notice"
+        >
           {notice}
         </div>
       )}
-      <div className="billing-toolbar">
-        <Field
-          label="Buscar borradores"
-          value={list.search}
-          onChange={list.setSearch}
-          maxLength={100}
-        />
-        <label className="field">
-          Estado de borradores
-          <select
-            aria-label="Estado de borradores"
-            value={list.filter}
-            onChange={(e) => list.setFilter(e.target.value)}
-          >
-            <option value="false">En preparación</option>
-            <option value="true">Archivados</option>
-            <option value="all">Todos</option>
-          </select>
-        </label>
-        {options.canManage && (
-          <button className="button primary" disabled={busy} onClick={create}>
-            Nuevo borrador
-          </button>
-        )}
-      </div>
-      {!options.departments.some((d: Row) => d.active) && (
-        <p>
-          Necesitas un departamento activo y autorizado para crear borradores.
-        </p>
+      {mode === "drafts" && (
+        <div className="billing-toolbar">
+          <Field
+            label="Buscar borradores"
+            value={list.search}
+            onChange={list.setSearch}
+            maxLength={100}
+          />
+          <label className="field">
+            Estado de borradores
+            <select
+              aria-label="Estado de borradores"
+              value={list.filter}
+              onChange={(e) => list.setFilter(e.target.value)}
+            >
+              <option value="false">En preparación</option>
+              <option value="true">Archivados</option>
+              <option value="all">Todos</option>
+            </select>
+          </label>
+          {canCreate && (
+            <button className="button primary" disabled={busy} onClick={create}>
+              Nuevo borrador
+            </button>
+          )}
+        </div>
       )}
+      {!canCreate && (
+        <p>Necesitas un departamento activo y permiso para crear facturas.</p>
+      )}
+      {detailLoading && <p>Cargando borrador…</p>}
       {editing && (
-        <form className="billing-editor" onSubmit={save}>
-          <h2>{editing.id ? "Detalle del borrador" : "Nuevo borrador"}</h2>
-          <fieldset disabled={busy || !editable}>
-            <div className="form-grid">
-              <label className="field">
-                Tipo de receptor
-                <select
-                  value={editing.receiver_mode ?? "registered"}
-                  onChange={(e) => {
-                    change("receiver_mode", e.target.value);
-                    change("customer_id", "");
-                    change("receiver", receiverDefaults());
-                    change("save_customer", false);
-                  }}
-                >
-                  <option value="registered">Cliente registrado</option>
-                  <option value="occasional">
-                    Venta rápida / cliente ocasional
-                  </option>
-                </select>
-              </label>
-              <label className="field">
-                Tipo de documento
-                <select
-                  value={editing.document_type ?? "FE"}
-                  onChange={(e) => change("document_type", e.target.value)}
-                >
-                  <option value="FE">Factura electrónica (preparación)</option>
-                  <option value="TE">Tiquete electrónico (preparación)</option>
-                </select>
-              </label>
-              {(editing.receiver_mode ?? "registered") === "registered" && (
-                <Lookup
-                  base={base + "/customers"}
-                  label="Cliente"
-                  value={editing.customer_id}
-                  current={
-                    editing.customer_id
-                      ? {
-                          id: editing.customer_id,
-                          name:
-                            editing.customer_snapshot?.name ??
-                            editing.customer_name ??
-                            "Cliente seleccionado",
-                        }
-                      : undefined
-                  }
-                  onChange={(id, row) => {
-                    change("customer_id", id);
-                    change("customer_name", row?.name);
-                    if (row)
-                      change(
-                        "receiver",
-                        Object.fromEntries(
-                          Object.keys(receiverDefaults()).map((k) => [
-                            k,
-                            row[k] ??
-                              receiverDefaults()[
-                                k as keyof ReturnType<typeof receiverDefaults>
-                              ],
-                          ]),
-                        ),
-                      );
-                  }}
-                />
-              )}
-              <label className="field">
-                Departamento
-                <select
-                  required
-                  aria-label="Departamento"
-                  value={editing.department_id}
-                  onChange={(e) => change("department_id", e.target.value)}
-                >
-                  <option value="">Selecciona…</option>
-                  {options.departments
-                    .filter(
-                      (d: Row) =>
-                        d.id === editing.department_id ||
-                        (d.active && d.can_manage),
-                    )
-                    .map((d: Row) => (
-                      <option key={d.id} value={d.id}>
-                        {d.name}
-                        {!d.active ? " (inactivo)" : ""}
-                      </option>
-                    ))}
-                </select>
-              </label>
-              <label className="field">
-                Moneda del borrador
-                <select
-                  aria-label="Moneda del borrador"
-                  value={editing.currency}
-                  onChange={(e) => {
-                    if (editing.lines.some((l: Row) => l.catalog_item_id)) {
-                      setError(
-                        "Retira las referencias a productos antes de cambiar la moneda.",
-                      );
-                      return;
-                    }
-                    change("currency", e.target.value);
-                  }}
-                >
-                  <option>CRC</option>
-                  <option>USD</option>
-                </select>
-              </label>
-            </div>
-            <h3>Receptor de este borrador</h3>
-            <p>
-              Estos datos se conservan en el borrador. Puedes completar la
-              información fiscal después.
-            </p>
-            <ReceiverFields
-              value={editing.receiver ?? receiverDefaults()}
-              onChange={(v) => change("receiver", v)}
-              base={base}
+        <form className="billing-editor" onSubmit={save} noValidate>
+          <div className="billing-editor-heading">
+            <h2>
+              {preparedInvoice
+                ? "Editar preparación"
+                : mode === "new"
+                  ? "Nueva factura"
+                  : editing.id
+                    ? "Detalle del borrador"
+                    : "Nuevo borrador"}
+            </h2>
+            <span className="billing-state">
+              {dirty ? "Borrador con cambios" : "Borrador guardado"}
+            </span>
+          </div>
+          <fieldset disabled={busy || detailLoading || !editable}>
+            <IssuerFields
+              options={options}
+              value={commercial}
+              onChange={(v) => change("commercial", v)}
             />
-            {editing.receiver_mode === "occasional" &&
-              options.permissions?.includes("customers.manage") &&
-              options.permissions?.includes("customers.read") && (
-                <label className="billing-check">
-                  <input
-                    type="checkbox"
-                    checked={Boolean(editing.save_customer)}
-                    onChange={(e) => change("save_customer", e.target.checked)}
-                  />
-                  Guardar también como cliente (opcional)
-                </label>
-              )}
-            <p>
-              Los precios unitarios excluyen impuestos. Configura cada
-              tratamiento y tarifa explícitamente.
-            </p>
-            {editing.lines.map((l: Row, index: number) => (
-              <div className="billing-line" key={index}>
-                <h3>Línea {index + 1}</h3>
-                <Lookup
-                  base={base + "/catalog-items"}
-                  label={"Producto de línea " + (index + 1)}
-                  value={l.catalog_item_id ?? ""}
-                  current={
-                    l.catalog_item_id
-                      ? { id: l.catalog_item_id, name: l.description }
-                      : undefined
-                  }
-                  compatible={(r) => r.currency === editing.currency}
-                  onChange={(id, row) => {
-                    invalidateEditor();
-                    setEditing((old) => ({
-                      ...old,
-                      lines: old!.lines.map((line: Row, i: number) =>
-                        i === index
+            <CommercialFields
+              currency={editing.currency}
+              documentType={editing.document_type ?? "FE"}
+              notes={editing.notes ?? ""}
+              value={commercial}
+              instant={reviewInstant}
+              lockDocumentType={Boolean(preparedInvoice)}
+              onChange={(v) => change("commercial", v)}
+              onNotes={(v) => change("notes", v)}
+              onDocumentType={(v) => {
+                invalidateEditor();
+                setEditing((old) =>
+                  old
+                    ? {
+                        ...old,
+                        document_type: v,
+                        ...(v === "FE" && old.receiver_mode === "consumer_final"
+                          ? { receiver_mode: "occasional" }
+                          : {}),
+                      }
+                    : old,
+                );
+              }}
+              onCurrency={(v) => {
+                if (editing.lines.some((line: Row) => line.catalog_item_id)) {
+                  setError(
+                    "Retira las referencias a productos antes de cambiar la moneda.",
+                  );
+                  return;
+                }
+                invalidateEditor();
+                setEditing((old) =>
+                  old
+                    ? {
+                        ...old,
+                        currency: v,
+                        commercial: {
+                          ...old.commercial,
+                          exchange_rate: v === "CRC" ? "1" : "",
+                        },
+                      }
+                    : old,
+                );
+              }}
+            />
+            <section
+              className="billing-section"
+              aria-labelledby="billing-receiver-title"
+            >
+              <h3 id="billing-receiver-title">Datos del receptor</h3>
+              <div className="form-grid">
+                <label className="field">
+                  Tipo de receptor
+                  <select
+                    value={editing.receiver_mode ?? "registered"}
+                    onChange={(e) => {
+                      const selected = e.target.value;
+                      invalidateEditor();
+                      setEditing((old) =>
+                        old
                           ? {
-                              ...line,
-                              catalog_item_id: id || null,
-                              ...(row
-                                ? {
-                                    description: row.description,
-                                    unit_price: row.unit_price,
-                                    fiscal: row.tax_defaults
-                                      ? {
-                                          ...fiscalDefaults(),
-                                          ...row.tax_defaults,
-                                          cabys:
-                                            row.cabys ||
-                                            row.tax_defaults.cabys ||
-                                            "",
-                                          unit:
-                                            row.unit ||
-                                            row.tax_defaults.unit ||
-                                            "",
-                                        }
-                                      : row.cabys || row.unit
-                                        ? {
-                                            ...fiscalDefaults(),
-                                            cabys: row.cabys || "",
-                                            unit: row.unit || "",
-                                          }
-                                        : null,
-                                  }
+                              ...old,
+                              receiver_mode: selected,
+                              customer_id: "",
+                              receiver: receiverDefaults(),
+                              save_customer: false,
+                              ...(selected === "consumer_final"
+                                ? { document_type: "TE" }
                                 : {}),
                             }
-                          : line,
-                      ),
-                    }));
-                  }}
-                />
-                <div className="form-grid">
-                  <Field
-                    label={"Descripción de línea " + (index + 1)}
-                    value={l.description}
-                    onChange={(v) => lineChange(index, "description", v)}
-                  />
-                  <Field
-                    label={"Cantidad de línea " + (index + 1)}
-                    value={l.quantity ?? ""}
-                    onChange={(v) => lineChange(index, "quantity", v)}
-                    maxLength={15}
-                  />
-                  <Field
-                    label={"Precio de línea " + (index + 1)}
-                    value={l.unit_price ?? ""}
-                    onChange={(v) => lineChange(index, "unit_price", v)}
-                    maxLength={15}
-                  />
-                </div>
-                <label className="billing-check">
-                  <input
-                    type="checkbox"
-                    checked={Boolean(l.fiscal)}
-                    onChange={(e) =>
-                      lineChange(
-                        index,
-                        "fiscal",
-                        e.target.checked ? fiscalDefaults() : null,
-                      )
-                    }
-                  />
-                  Configurar impuestos y descuentos de línea {index + 1}
+                          : old,
+                      );
+                    }}
+                  >
+                    <option
+                      value="registered"
+                      disabled={
+                        !options.permissions?.includes("customers.read")
+                      }
+                    >
+                      Cliente registrado
+                    </option>
+                    <option value="occasional">
+                      Cliente nuevo o no recurrente
+                    </option>
+                    <option
+                      value="consumer_final"
+                      disabled={Boolean(
+                        preparedInvoice &&
+                        (preparedInvoice.document_type ??
+                          preparedInvoice.snapshot?.document_type ??
+                          "FE") !== "TE",
+                      )}
+                    >
+                      Consumidor final mediante tiquete electrónico
+                    </option>
+                  </select>
                 </label>
-                {l.fiscal && (
-                  <FiscalFields
-                    value={l.fiscal}
-                    onChange={(v) => lineChange(index, "fiscal", v)}
-                    base={base}
-                    receiverExoneration={editing.receiver?.exoneration}
+                <label className="field">
+                  Departamento
+                  <select
+                    aria-label="Departamento"
+                    disabled={Boolean(preparedInvoice)}
+                    value={editing.department_id}
+                    onChange={(e) => change("department_id", e.target.value)}
+                  >
+                    <option value="">Selecciona…</option>
+                    {options.departments
+                      .filter(
+                        (d: Row) =>
+                          d.id === editing.department_id ||
+                          (d.active &&
+                            allows(d, editing.id ? "can_edit" : "can_create")),
+                      )
+                      .map((d: Row) => (
+                        <option key={d.id} value={d.id}>
+                          {d.name}
+                          {!d.active ? " (inactivo)" : ""}
+                        </option>
+                      ))}
+                  </select>
+                </label>
+                {editing.receiver_mode === "registered" && (
+                  <Lookup
+                    base={base + "/customers"}
+                    label="Cliente"
+                    value={editing.customer_id ?? ""}
+                    current={
+                      editing.customer_id
+                        ? {
+                            id: editing.customer_id,
+                            name:
+                              editing.receiver?.name || "Cliente seleccionado",
+                          }
+                        : undefined
+                    }
+                    onChange={(id, row) => {
+                      invalidateEditor();
+                      setEditing((old) =>
+                        old
+                          ? {
+                              ...old,
+                              customer_id: id,
+                              receiver: row
+                                ? Object.fromEntries(
+                                    Object.entries(receiverDefaults()).map(
+                                      ([key, defaultValue]) => [
+                                        key,
+                                        row[key] ?? defaultValue,
+                                      ],
+                                    ),
+                                  )
+                                : receiverDefaults(),
+                            }
+                          : old,
+                      );
+                    }}
                   />
                 )}
-                <LineTotals
-                  line={l}
-                  index={index}
-                  currency={editing.currency}
-                />
+              </div>
+              {editing.receiver_mode === "consumer_final" ? (
+                <p>
+                  Has elegido explícitamente un tiquete electrónico para
+                  consumidor final. Se omite el receptor y no se crea un
+                  cliente.
+                </p>
+              ) : (
+                <>
+                  <p>
+                    Los datos incompletos pueden guardarse como borrador. La
+                    validación aplica las condiciones de la factura o del
+                    tiquete elegido.
+                  </p>
+                  <ReceiverFields
+                    value={editing.receiver ?? receiverDefaults()}
+                    onChange={(v) => change("receiver", v)}
+                    base={base}
+                  />
+                  {editing.receiver_mode === "occasional" &&
+                    options.permissions?.includes("customers.manage") &&
+                    options.permissions?.includes("customers.read") && (
+                      <label className="billing-check">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(editing.save_customer)}
+                          onChange={(e) =>
+                            change("save_customer", e.target.checked)
+                          }
+                        />
+                        Guardar cliente para futuras facturas
+                      </label>
+                    )}
+                </>
+              )}
+            </section>
+          </fieldset>
+          <div
+            role="tablist"
+            aria-label="Detalle de la factura"
+            className="tabs billing-detail-tabs"
+          >
+            <button
+              type="button"
+              role="tab"
+              id={lineTabId}
+              aria-controls={detailId + "-lines-panel"}
+              aria-selected={detailTab === "lines"}
+              tabIndex={detailTab === "lines" ? 0 : -1}
+              className={detailTab === "lines" ? "selected" : ""}
+              disabled={busy || detailLoading}
+              onClick={() => setDetailTab("lines")}
+              onKeyDown={detailTabKey}
+            >
+              Líneas de detalle
+            </button>
+            <button
+              type="button"
+              role="tab"
+              id={chargeTabId}
+              aria-controls={detailId + "-charges-panel"}
+              aria-selected={detailTab === "charges"}
+              tabIndex={detailTab === "charges" ? 0 : -1}
+              className={detailTab === "charges" ? "selected" : ""}
+              disabled={busy || detailLoading}
+              onClick={() => setDetailTab("charges")}
+              onKeyDown={detailTabKey}
+            >
+              Otros cargos
+            </button>
+          </div>
+          <fieldset disabled={busy || detailLoading || !editable}>
+            <div
+              role="tabpanel"
+              id={detailId + "-lines-panel"}
+              aria-labelledby={lineTabId}
+              hidden={detailTab !== "lines"}
+              tabIndex={0}
+              className="billing-detail-panel"
+            >
+              <section
+                className="billing-section"
+                aria-labelledby="billing-lines-title"
+              >
+                <h3 id="billing-lines-title">
+                  Líneas de productos y servicios
+                </h3>
+                <p>
+                  Los precios unitarios son antes de impuestos. Puedes agregar
+                  un producto o servicio sin guardarlo en el catálogo.
+                </p>
+                {editing.lines.map((line: Row, index: number) => (
+                  <div className="billing-line" key={index}>
+                    <h4>Línea {index + 1}</h4>
+                    {options.permissions?.includes("catalog.read") && (
+                      <Lookup
+                        base={base + "/catalog-items"}
+                        label={"Producto de línea " + (index + 1)}
+                        value={line.catalog_item_id ?? ""}
+                        current={
+                          line.catalog_item_id
+                            ? {
+                                id: line.catalog_item_id,
+                                name: line.description,
+                              }
+                            : undefined
+                        }
+                        compatible={(r) => r.currency === editing.currency}
+                        onChange={(id, row) => {
+                          invalidateEditor();
+                          setEditing((old) =>
+                            old
+                              ? {
+                                  ...old,
+                                  lines: old.lines.map((l: Row, i: number) =>
+                                    i === index
+                                      ? {
+                                          ...l,
+                                          catalog_item_id: id || null,
+                                          save_catalog_item: false,
+                                          ...(row
+                                            ? {
+                                                description: row.description,
+                                                unit_price: row.unit_price,
+                                                fiscal:
+                                                  row.tax_defaults ||
+                                                  row.cabys ||
+                                                  row.unit
+                                                    ? {
+                                                        ...fiscalDefaults(),
+                                                        ...row.tax_defaults,
+                                                        internal_code:
+                                                          row.code ?? "",
+                                                        cabys:
+                                                          row.cabys ||
+                                                          row.tax_defaults
+                                                            ?.cabys ||
+                                                          "",
+                                                        unit:
+                                                          row.unit ||
+                                                          row.tax_defaults
+                                                            ?.unit ||
+                                                          "",
+                                                      }
+                                                    : null,
+                                              }
+                                            : {}),
+                                        }
+                                      : l,
+                                  ),
+                                }
+                              : old,
+                          );
+                        }}
+                      />
+                    )}
+                    <div className="form-grid">
+                      <Field
+                        label={"Descripción de línea " + (index + 1)}
+                        value={line.description}
+                        onChange={(v) => lineChange(index, "description", v)}
+                      />
+                      <Field
+                        label={"Cantidad de línea " + (index + 1)}
+                        value={line.quantity ?? ""}
+                        onChange={(v) => lineChange(index, "quantity", v)}
+                        maxLength={15}
+                      />
+                      <Field
+                        label={"Precio de línea " + (index + 1)}
+                        value={line.unit_price ?? ""}
+                        onChange={(v) => lineChange(index, "unit_price", v)}
+                        maxLength={15}
+                      />
+                    </div>
+                    <label className="billing-check">
+                      <input
+                        type="checkbox"
+                        checked={Boolean(line.fiscal)}
+                        onChange={(e) =>
+                          lineChange(
+                            index,
+                            "fiscal",
+                            e.target.checked ? fiscalDefaults() : null,
+                          )
+                        }
+                      />
+                      Configurar impuestos y descuentos de línea {index + 1}
+                    </label>
+                    {line.fiscal && (
+                      <FiscalFields
+                        value={line.fiscal}
+                        onChange={(v) => lineChange(index, "fiscal", v)}
+                        base={base}
+                        documentType={editing.document_type}
+                        receiverExoneration={editing.receiver?.exoneration}
+                        onCabysSelected={(row) => {
+                          invalidateEditor();
+                          setEditing((old) =>
+                            old
+                              ? {
+                                  ...old,
+                                  lines: old.lines.map((l: Row, i: number) =>
+                                    i === index
+                                      ? {
+                                          ...l,
+                                          description:
+                                            l.description || row.description,
+                                          fiscal: {
+                                            ...l.fiscal,
+                                            cabys: row.code,
+                                          },
+                                        }
+                                      : l,
+                                  ),
+                                }
+                              : old,
+                          );
+                        }}
+                      />
+                    )}
+                    {options.permissions?.includes("catalog.manage") &&
+                      !line.catalog_item_id && (
+                        <label className="billing-check">
+                          <input
+                            type="checkbox"
+                            checked={Boolean(line.save_catalog_item)}
+                            onChange={(e) => {
+                              invalidateEditor();
+                              setEditing((old) =>
+                                old
+                                  ? {
+                                      ...old,
+                                      lines: old.lines.map(
+                                        (l: Row, i: number) =>
+                                          i === index
+                                            ? {
+                                                ...l,
+                                                save_catalog_item:
+                                                  e.target.checked,
+                                                fiscal: e.target.checked
+                                                  ? {
+                                                      ...fiscalDefaults(),
+                                                      ...l.fiscal,
+                                                    }
+                                                  : l.fiscal,
+                                              }
+                                            : l,
+                                      ),
+                                    }
+                                  : old,
+                              );
+                            }}
+                          />
+                          Guardar producto o servicio de línea {index + 1} para
+                          futuras facturas
+                        </label>
+                      )}
+                    <LineTotals
+                      line={line}
+                      calculated={
+                        calculation?.status === "complete"
+                          ? calculation.lines[index]
+                          : null
+                      }
+                      index={index}
+                      currency={editing.currency}
+                    />
+                    <div className="billing-actions">
+                      <button
+                        type="button"
+                        className="button secondary"
+                        disabled={editing.lines.length >= 100}
+                        onClick={() =>
+                          change("lines", [
+                            ...editing.lines,
+                            {
+                              catalog_item_id: line.catalog_item_id ?? null,
+                              save_catalog_item: false,
+                              description: line.description,
+                              quantity: line.quantity,
+                              unit_price: line.unit_price,
+                              fiscal: line.fiscal
+                                ? structuredClone(line.fiscal)
+                                : null,
+                            },
+                          ])
+                        }
+                      >
+                        Duplicar línea {index + 1}
+                      </button>
+                      <button
+                        type="button"
+                        className="button secondary"
+                        onClick={() => {
+                          invalidateEditor();
+                          setEditing((old) =>
+                            old
+                              ? {
+                                  ...old,
+                                  lines: old.lines.map((l: Row, i: number) =>
+                                    i === index ? blankLine(mode === "new") : l,
+                                  ),
+                                }
+                              : old,
+                          );
+                        }}
+                      >
+                        Limpiar línea {index + 1}
+                      </button>
+                      <button
+                        type="button"
+                        className="button secondary"
+                        disabled={editing.lines.length === 1}
+                        onClick={() =>
+                          change(
+                            "lines",
+                            editing.lines.filter(
+                              (_: Row, i: number) => i !== index,
+                            ),
+                          )
+                        }
+                      >
+                        Quitar línea {index + 1}
+                      </button>
+                    </div>
+                  </div>
+                ))}
                 <button
                   type="button"
                   className="button secondary"
-                  disabled={editing.lines.length === 1}
+                  disabled={editing.lines.length >= 100}
                   onClick={() =>
-                    change(
-                      "lines",
-                      editing.lines.filter((_: Row, i: number) => i !== index),
-                    )
+                    change("lines", [
+                      ...editing.lines,
+                      blankLine(mode === "new"),
+                    ])
                   }
                 >
-                  Quitar línea {index + 1}
+                  Añadir línea
                 </button>
-              </div>
-            ))}
-            <button
-              type="button"
-              className="button secondary"
-              disabled={editing.lines.length >= 100}
-              onClick={() => change("lines", [...editing.lines, blankLine()])}
+              </section>
+            </div>
+            <div
+              role="tabpanel"
+              id={detailId + "-charges-panel"}
+              aria-labelledby={chargeTabId}
+              hidden={detailTab !== "charges"}
+              tabIndex={0}
+              className="billing-detail-panel"
             >
-              Añadir línea
-            </button>
-            <Field
-              label="Observaciones"
-              value={editing.notes}
-              onChange={(v) => change("notes", v)}
-              maxLength={2000}
+              <OtherChargesFields
+                value={editing.other_charges ?? []}
+                onChange={(v) => change("other_charges", v)}
+                calculation={calculation}
+              />
+            </div>
+            <PaymentFields
+              value={commercial.payment_methods ?? []}
+              saleCondition={commercial.sale_condition}
+              currency={editing.currency}
+              total={
+                calculation?.status === "complete"
+                  ? calculation.total
+                  : undefined
+              }
+              onChange={(v) =>
+                change("commercial", { ...commercial, payment_methods: v })
+              }
             />
           </fieldset>
-          <div className="billing-subtotal">
-            <span>Importe de líneas antes de impuestos</span>
-            <strong>
-              {editing.currency} {amount}
-            </strong>
-          </div>
-          {calculation?.status === "complete" ? (
-            <div
+          {calculation?.status === "blocked" && commercialAmount !== null && (
+            <aside
               className="fiscal-preview-panel"
-              role="region"
-              aria-label="Totales calculados del borrador"
+              aria-label="Importe comercial sin impuestos"
             >
-              <h3>Totales calculados del borrador</h3>
-              <dl className="fiscal-preview-totals">
-                {[
-                  ["Importe antes de descuentos", calculation.beforeDiscount],
-                  ["Descuentos", calculation.discounts],
-                  ["Base", calculation.subtotal],
-                  ["Impuestos antes de exoneración", calculation.tax],
-                  ["Exoneraciones", calculation.exonerations],
-                  ["Total", calculation.total],
-                ].map(([label, v]) => (
-                  <div key={label}>
-                    <dt>{label}</dt>
-                    <dd>
-                      {editing.currency} {v}
-                    </dd>
-                  </div>
-                ))}
-              </dl>
-              <div className="billing-table">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Tarifa</th>
-                      <th>Base</th>
-                      <th>Impuesto antes de exoneración</th>
-                      <th>Exoneración</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {calculation.groups.map((g, i) => (
-                      <tr key={i}>
-                        <td>
-                          {g.tariff_code} ({g.rate} %)
-                        </td>
-                        <td>{g.base}</td>
-                        <td>{g.tax}</td>
-                        <td>{g.exoneration}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          ) : (
-            <div className="info-box">
-              <strong>Preparación fiscal incompleta</strong>
-              <ul>
-                {calculation?.issues.map((issue, i) => (
-                  <li key={i}>
-                    {issue.path ? issue.path + ": " : ""}
-                    {issue.message}
-                  </li>
-                ))}
-              </ul>
-              <p>Puedes guardar este borrador y completar los datos después.</p>
-            </div>
+              <p>
+                Importe antes de descuentos e impuestos:{" "}
+                <strong>
+                  {editing.currency} {commercialAmount}
+                </strong>
+              </p>
+              <p>
+                El total fiscal sigue pendiente hasta completar las líneas y su
+                clasificación tributaria.
+              </p>
+            </aside>
+          )}
+          <InvoiceSummary
+            calculation={calculation}
+            currency={editing.currency}
+          />
+          {showPreview && (
+            <section
+              className="fiscal-preview-panel"
+              aria-label="Vista previa de la factura"
+            >
+              <h3>Vista previa — sin validez tributaria</h3>
+              <p>
+                {options.issuer?.legal_name || "Emisor pendiente"} ·{" "}
+                {editing.document_type === "TE"
+                  ? "Tiquete electrónico"
+                  : "Factura electrónica"}
+              </p>
+              <p>
+                Receptor:{" "}
+                {editing.receiver_mode === "consumer_final"
+                  ? "Consumidor final"
+                  : editing.receiver?.name || "Por completar"}
+              </p>
+              {editing.lines.map((line: Row, i: number) => (
+                <p key={i}>
+                  {line.quantity} × {line.description || "Sin descripción"} ·{" "}
+                  {editing.currency} {line.unit_price} antes de impuestos
+                </p>
+              ))}
+              <p>
+                Total:{" "}
+                {calculation?.status === "complete"
+                  ? `${editing.currency} ${calculation.total}`
+                  : "Pendiente de cálculo"}
+              </p>
+              <p>
+                Sin clave ni consecutivo asignados. Esta vista no valida el XML,
+                firma ni envía a Hacienda.
+              </p>
+            </section>
+          )}
+          {validation && (
+            <section className="info-box" aria-label="Resultado de validación">
+              <h3>
+                {validation.issues.length
+                  ? "Pendiente de validación"
+                  : "Datos de la factura revisados"}
+              </h3>
+              {validation.issues.length ? (
+                <ul>
+                  {validation.issues.map((issue: Row, i: number) => (
+                    <li key={i}>{issue.message}</li>
+                  ))}
+                </ul>
+              ) : (
+                <p>Sin observaciones fiscales o comerciales en estos datos.</p>
+              )}
+              <p>
+                La preparación verificará además la configuración del emisor y
+                la disponibilidad de emisión. El XML y la respuesta de Hacienda
+                se verifican en sus respectivas etapas.
+              </p>
+            </section>
           )}
           {editing.id &&
-            fingerprint(editing) === savedFingerprint &&
+            !dirty &&
+            !validation &&
             editing.readiness?.issues?.length > 0 && (
-              <div className="info-box">
-                <h3>Datos pendientes del receptor y documento</h3>
+              <details className="billing-disclosure">
+                <summary>Datos pendientes del borrador</summary>
                 <ul>
                   {editing.readiness.issues.map((issue: Row, i: number) => (
                     <li key={i}>{issue.message}</li>
                   ))}
                 </ul>
-                <p>Este borrador no se emite ni se envía a Hacienda.</p>
-              </div>
+              </details>
             )}
-          {editing.id && !editing.lines.some((l: Row) => l.fiscal) && (
+          {editing.id && !editing.lines.some((line: Row) => line.fiscal) && (
             <FiscalPreview
               key={editing.id + ":" + previewGeneration}
               base={base}
               draftId={editing.id}
               version={editing.version}
-              dirty={fingerprint(editing) !== savedFingerprint}
+              dirty={dirty}
               disabled={busy || detailLoading}
               generation={previewGeneration}
               isCurrent={(generation) =>
@@ -638,171 +1284,234 @@ export function Drafts({ base, options }: { base: string; options: Row }) {
               onConflict={() => setConflict(true)}
             />
           )}
-          <div className="billing-actions">
-            {editing.id && (
+          <section
+            className="billing-section"
+            aria-label="Guardado, validación y emisión"
+          >
+            <h3>Guardado, validación y emisión</h3>
+            <p>
+              Una preparación guardada todavía no es un comprobante emitido. La
+              firma y el envío requieren una confirmación de emisión.
+            </p>
+            <div className="billing-actions">
+              {editable && (
+                <button
+                  className="button primary"
+                  disabled={busy || detailLoading}
+                >
+                  {busy ? "Guardando…" : "Guardar borrador"}
+                </button>
+              )}
               <button
                 type="button"
                 className="button secondary"
-                disabled={busy || fingerprint(editing) !== savedFingerprint}
-                onClick={() =>
-                  window.open(
-                    "/api" + base + "/invoice-drafts/" + editing.id + "/print",
-                    "_blank",
-                    "noopener",
-                  )
-                }
+                disabled={busy || detailLoading}
+                onClick={() => setShowPreview((v) => !v)}
               >
-                Imprimir borrador sin validez tributaria
+                Vista previa
               </button>
-            )}
-            {editing.id &&
-              !editing.archived_at &&
-              options.departments.some(
-                (d: Row) =>
-                  d.id === editing.department_id &&
-                  d.can_assign &&
-                  d.can_manage,
-              ) && (
+              <button
+                type="button"
+                className="button secondary"
+                disabled={busy || detailLoading || !editable}
+                onClick={() => void validate()}
+              >
+                Validar factura
+              </button>
+              {mode === "new" && (
+                <button
+                  type="button"
+                  className="button primary"
+                  disabled={
+                    busy || detailLoading || !canPrepare || (!editable && dirty)
+                  }
+                  onClick={() => void prepare()}
+                >
+                  {preparedInvoice
+                    ? "Actualizar preparación"
+                    : "Guardar preparación"}
+                </button>
+              )}
+              {mode === "new" && !canPrepare && (
+                <p>
+                  Tu usuario necesita permiso de preparación para generar o
+                  actualizar el comprobante.
+                </p>
+              )}
+              {mode === "new" && canPrepare && !editable && dirty && (
+                <p>
+                  El borrador tiene datos pendientes de guardar. Solicita su
+                  actualización a una persona con permiso de edición antes de
+                  prepararlo.
+                </p>
+              )}
+              {editing.id && (
                 <button
                   type="button"
                   className="button secondary"
-                  disabled={
-                    busy ||
-                    detailLoading ||
-                    fingerprint(editing) !== savedFingerprint
+                  disabled={busy || dirty}
+                  onClick={() =>
+                    window.open(
+                      "/api" +
+                        base +
+                        "/invoice-drafts/" +
+                        editing.id +
+                        "/print",
+                      "_blank",
+                      "noopener",
+                    )
                   }
-                  onClick={() => void assignReview()}
                 >
-                  Asignar revisión a Cuentas por cobrar
+                  Imprimir borrador sin validez tributaria
                 </button>
               )}
-            {editable && (
-              <button className="button primary" disabled={busy}>
-                {busy ? "Guardando…" : "Guardar borrador"}
-              </button>
-            )}
-            {editing.id && manageable(editing.department_id) && (
-              <button
-                type="button"
-                className="button secondary"
-                disabled={busy}
-                onClick={() =>
-                  void write(
-                    {
-                      version: editing.version,
-                      archived: !editing.archived_at,
-                    },
-                    editing.archived_at
-                      ? "Borrador restaurado."
-                      : "Borrador archivado.",
-                  )
-                }
-              >
-                {editing.archived_at
-                  ? "Restaurar borrador"
-                  : "Archivar borrador"}
-              </button>
-            )}
-            <button
-              type="button"
-              className="button secondary"
-              disabled={busy}
-              onClick={() => {
-                invalidateEditor();
-                setEditing(null);
-                setError("");
-                setConflict(false);
-              }}
-            >
-              Cerrar borrador
-            </button>
-            {conflict && editing.id && (
-              <button
-                type="button"
-                className="button secondary"
-                disabled={busy}
-                onClick={() => void open(editing.id)}
-              >
-                Recargar registro
-              </button>
-            )}
-          </div>
-        </form>
-      )}
-      {list.error && (
-        <div role="alert" className="alert">
-          {list.error}
-        </div>
-      )}
-      {list.loading && <p>Cargando borradores…</p>}
-      <div className="billing-table">
-        <table>
-          <thead>
-            <tr>
-              <th>Cliente</th>
-              <th>Fecha</th>
-              <th>Moneda</th>
-              <th>Estado</th>
-              <th>Acciones</th>
-            </tr>
-          </thead>
-          <tbody>
-            {list.rows.map((r) => (
-              <tr key={r.id}>
-                <td>{r.customer_snapshot?.name || "Receptor por completar"}</td>
-                <td>{new Date(r.created_at).toLocaleDateString("es-CR")}</td>
-                <td>{r.currency}</td>
-                <td>{r.archived_at ? "Archivado" : "Borrador"}</td>
-                <td>
+              {editing.id &&
+                !editing.archived_at &&
+                department?.can_assign &&
+                allows(department, "can_edit") && (
                   <button
+                    type="button"
+                    className="button secondary"
+                    disabled={busy || dirty}
+                    onClick={() => void assignReview()}
+                  >
+                    Asignar revisión a Cuentas por cobrar
+                  </button>
+                )}
+              {mode === "drafts" &&
+                editing.id &&
+                allows(department, "can_delete") && (
+                  <button
+                    type="button"
                     className="button secondary"
                     disabled={busy}
-                    onClick={() => void open(r.id)}
+                    onClick={() => void archive()}
                   >
-                    Abrir borrador
+                    {editing.archived_at
+                      ? "Restaurar borrador"
+                      : "Archivar borrador"}
                   </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      {!list.loading && !list.rows.length && !list.error && (
-        <p>No hay borradores para estos filtros.</p>
+                )}
+              <button
+                type="button"
+                className="button secondary"
+                disabled={busy}
+                onClick={() => {
+                  invalidateEditor();
+                  setEditing(null);
+                  setError("");
+                  setConflict(false);
+                  onClose?.();
+                }}
+              >
+                Cerrar borrador
+              </button>
+              {conflict && editing.id && (
+                <button
+                  type="button"
+                  className="button secondary"
+                  disabled={busy}
+                  onClick={() => void open(editing.id)}
+                >
+                  Recargar registro
+                </button>
+              )}
+            </div>
+          </section>
+        </form>
       )}
-      {list.next !== null && (
-        <button
-          className="button secondary"
-          disabled={list.loading}
-          onClick={() => void list.loadMore()}
-        >
-          Cargar más borradores
-        </button>
+      {mode === "drafts" && (
+        <>
+          {list.error && (
+            <div role="alert" className="alert">
+              {list.error}
+            </div>
+          )}
+          {list.loading && <p>Cargando borradores…</p>}
+          <div className="billing-table">
+            <table>
+              <thead>
+                <tr>
+                  <th>Cliente</th>
+                  <th>Fecha</th>
+                  <th>Moneda</th>
+                  <th>Estado</th>
+                  <th>Acciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                {list.rows.map((row) => (
+                  <tr key={row.id}>
+                    <td>
+                      {row.receiver_mode === "consumer_final"
+                        ? "Consumidor final"
+                        : row.customer_snapshot?.name ||
+                          "Receptor por completar"}
+                    </td>
+                    <td>
+                      {new Date(row.created_at).toLocaleDateString("es-CR", {
+                        timeZone: "America/Costa_Rica",
+                      })}
+                    </td>
+                    <td>{row.currency}</td>
+                    <td>{row.archived_at ? "Archivado" : "Borrador"}</td>
+                    <td>
+                      <button
+                        className="button secondary"
+                        disabled={busy}
+                        onClick={() => void open(row.id)}
+                      >
+                        Abrir borrador
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {!list.loading && !list.rows.length && !list.error && (
+            <p>No hay borradores para estos filtros.</p>
+          )}
+          {list.next !== null && (
+            <button
+              className="button secondary"
+              disabled={list.loading}
+              onClick={() => void list.loadMore()}
+            >
+              Cargar más borradores
+            </button>
+          )}
+        </>
       )}
     </section>
   );
 }
 
 function LineTotals({
+  calculated,
   line,
   index,
   currency,
 }: {
+  calculated: Row | null;
   line: Row;
   index: number;
   currency: string;
 }) {
-  const calculated = calculateInvoice([
-    {
-      ...line,
-      quantity: line.quantity || null,
-      unit_price: line.unit_price || null,
-      fiscal: line.fiscal ?? null,
-    },
-  ]);
-  if (calculated.status !== "complete")
+  if (!calculated) {
+    const single = calculateInvoice([
+      {
+        ...line,
+        quantity: line.quantity || null,
+        unit_price: line.unit_price || null,
+        fiscal: line.fiscal ?? null,
+      },
+    ]);
+    if (single.status === "complete") calculated = single.lines[0];
+  }
+  if (!calculated)
     return (
-      <p role="status">
+      <p>
         Totales de línea {index + 1} pendientes: completa los datos y el
         tratamiento fiscal.
       </p>
@@ -814,19 +1523,33 @@ function LineTotals({
     >
       <dl className="fiscal-preview-totals">
         {[
-          ["Base después de descuento", calculated.subtotal],
-          ["IVA antes de exoneración", calculated.tax],
-          ["Exoneración", calculated.exonerations],
+          ["Monto bruto", calculated.beforeDiscount],
+          ["Descuento calculado", calculated.discount],
+          ["Subtotal de línea", calculated.base],
+          ["Base imponible", calculated.tax_base ?? calculated.base],
+          ["Impuestos antes de exoneraciones", calculated.tax],
+          ["Exoneración", calculated.exoneration],
+          [
+            "Impuesto neto",
+            netTaxAmount(calculated.tax, calculated.exoneration),
+          ],
           ["Total línea " + (index + 1), calculated.total],
-        ].map(([label, v]) => (
+        ].map(([label, amount]) => (
           <div key={label}>
             <dt>{label}</dt>
             <dd>
-              {currency} {v}
+              {currency} {amount}
             </dd>
           </div>
         ))}
       </dl>
+      {calculated.taxes?.map((tax: Row, i: number) => (
+        <p key={i}>
+          Impuesto {tax.code} · tarifa {tax.tariff_code || "—"} · {tax.rate} % ·
+          monto {currency} {tax.amount} · exonerado {currency} {tax.exoneration}{" "}
+          · neto {currency} {netTaxAmount(tax.amount, tax.exoneration)}
+        </p>
+      ))}
     </section>
   );
 }

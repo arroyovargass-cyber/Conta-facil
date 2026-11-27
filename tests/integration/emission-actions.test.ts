@@ -26,12 +26,22 @@ async function invoice(state: any = {}) {
   ).rows[0];
   return (
     await f.pool.query(
-      "insert into public.electronic_invoices(tenant_id,draft_id,draft_version,department_id,snapshot,options,created_by,operation_id,request_hash,document_status,issued_by,signature_status,transmission_status,hacienda_status,email_status) values($1,$2,1,$3,$4,'{}',$5,$6,$7,'issued',$5,$8,$9,$10,$11) returning *",
+      "insert into public.electronic_invoices(tenant_id,draft_id,draft_version,department_id,snapshot,options,created_by,operation_id,request_hash,document_status,issued_by,signature_status,transmission_status,hacienda_status,email_status) values($1,$2,1,$3,$4,'{}',$5,$6,$7,'issued',$12,$8,$9,$10,$11) returning *",
       [
         f.tenants[0],
         draft.id,
         dep,
-        { issuer: { configuration: { billing: { send_email: true } } } },
+        {
+          issuer: {
+            configuration: {
+              billing: {
+                email_delivery_enabled: true,
+                send_email: "emisor@example.test",
+              },
+            },
+          },
+          receiver: { email: "cliente@example.test" },
+        },
         f.userId,
         randomUUID(),
         "a".repeat(64),
@@ -39,6 +49,7 @@ async function invoice(state: any = {}) {
         state.transmission ?? "queued",
         state.hacienda ?? "pending",
         state.email ?? "not_queued",
+        state.issuer ?? f.userId,
       ],
     )
   ).rows[0];
@@ -346,6 +357,114 @@ it("serializes two first email resends when no email job exists", async () => {
       )
     ).rows[0].email_dispatch_id,
   ).toBe(row.email_dispatch_id);
+});
+it("allows a scoped manual resend without issuance authority and fences its actual requester", async () => {
+  const prior = await workspace();
+  try {
+    const i = await invoice({
+      issuer: prior.userId,
+      transmission: "sent",
+      hacienda: "accepted",
+      email: "provider_accepted",
+    });
+    for (const kind of ["signed_xml", "hacienda_response", "pdf"]) {
+      const bytes = Buffer.from("SYNTHETIC " + kind);
+      await f.pool.query(
+        "insert into private.invoice_artifacts(tenant_id,invoice_id,kind,content,sha256) values($1,$2,$3,$4,$5)",
+        [
+          f.tenants[0],
+          i.id,
+          kind,
+          bytes,
+          createHash("sha256").update(bytes).digest("hex"),
+        ],
+      );
+    }
+    await f.pool.query(
+      "delete from public.role_permissions where tenant_id=$1 and permission='invoices.emit'",
+      [f.tenants[0]],
+    );
+    const response = await request(i.id, {
+      operation_id: randomUUID(),
+      action: "resend_email",
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    const sid = (
+      await f.pool.query(
+        "select auth_session_id from private.sessions where user_id=$1 and expires_at>now() limit 1",
+        [f.userId],
+      )
+    ).rows[0].auth_session_id;
+    const restricted = await f.pool.connect();
+    try {
+      await restricted.query("begin");
+      await restricted.query("set local role conta_facil_api");
+      await restricted.query(
+        "select set_config('request.jwt.claims',$1,true)",
+        [JSON.stringify({ sub: f.userId, aal: "aal2", session_id: sid })],
+      );
+      expect(
+        (
+          await restricted.query(
+            "select has_column_privilege(current_user,'public.electronic_invoices','signature_status','UPDATE') allowed",
+          )
+        ).rows[0].allowed,
+      ).toBe(true);
+      await expect(
+        restricted.query(
+          "update public.electronic_invoices set signature_status='pending' where id=$1",
+          [i.id],
+        ),
+      ).rejects.toMatchObject({ code: "42501" });
+    } finally {
+      await restricted.query("rollback");
+      restricted.release();
+    }
+    const job = (
+      await f.pool.query(
+        "update private.emission_jobs set status='leased',lease_token=gen_random_uuid(),lease_until=now()+interval '1 minute' where invoice_id=$1 returning *",
+        [i.id],
+      )
+    ).rows[0];
+    expect(job).toMatchObject({
+      request_origin: "manual",
+      requested_by: f.userId,
+    });
+    expect(
+      (
+        await f.pool.query(
+          "select id from private.emission_job_document($1,$2)",
+          [job.id, job.lease_token],
+        )
+      ).rows[0].id,
+    ).toBe(i.id);
+    await f.pool.query(
+      "delete from public.role_permissions where tenant_id=$1 and permission='invoices.email'",
+      [f.tenants[0]],
+    );
+    expect(
+      (
+        await f.pool.query(
+          "select id from private.emission_job_document($1,$2)",
+          [job.id, job.lease_token],
+        )
+      ).rows,
+    ).toEqual([]);
+    expect(
+      (
+        await request(i.id, {
+          operation_id: randomUUID(),
+          action: "resend_email",
+        })
+      ).statusCode,
+    ).toBe(403);
+  } finally {
+    await f.pool.query(
+      "insert into public.role_permissions select r.tenant_id,r.id,p.code from public.roles r cross join public.permission_catalog p where r.tenant_id=$1 and r.code='admin' and p.code in('invoices.emit','invoices.email') on conflict do nothing",
+      [f.tenants[0]],
+    );
+    await prior.pool.end();
+  }
 });
 it("blocks requests from an expired interactive session", async () => {
   const i = await invoice({ transmission: "sent" });

@@ -11,6 +11,7 @@ export const CUSTOMER_COLUMNS = [
   "identification",
   "email",
   "phone",
+  "phone_country_code",
   "address",
   "active",
   "trade_name",

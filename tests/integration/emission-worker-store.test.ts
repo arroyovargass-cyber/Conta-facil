@@ -158,6 +158,13 @@ it("limits fenced patches by job kind and requires response evidence", async () 
     ).signature_status,
   ).toBe("signed");
   const query = await job("query");
+  // A queued document is not eligible for a response query. Once sent, the
+  // existing evidence fence must still reject an unproved final status.
+  expect(await store.update(query, { hacienda_status: "accepted" })).toBeNull();
+  await f.pool.query(
+    "update public.electronic_invoices set transmission_status='sent' where id=$1",
+    [invoice],
+  );
   await expect(
     store.update(query, { hacienda_status: "accepted" }),
   ).rejects.toThrow("HACIENDA_RESPONSE_REQUIRED");

@@ -80,5 +80,33 @@
     "source_url": "https://www.hacienda.go.cr/docs/FacturaElectronica_V4.4.xsd.xml",
     "status": "official-download-revision-unconfirmed"
   },
-  "source_origin": "anonymous_official_download_byte_identical_to_upload"
+  "source_origin": "anonymous_official_download_byte_identical_to_upload",
+  "document_schemas": [
+    {
+      "document_type": "TE",
+      "root": "TiqueteElectronico",
+      "retrieved_on": "2026-11-26",
+      "status": "official-package-revision-confirmed",
+      "source_url": "https://www.hacienda.go.cr/docs/TiqueteElectronico_V4.4.xsd",
+      "file": "TiqueteElectronico.downloaded-20261126.xsd",
+      "bytes": 117940,
+      "sha256": "d7783baf818f316596d0b58b17481be689595982a248d98102d707f72967ae6e",
+      "target_namespace": "https://cdn.comprobanteselectronicos.go.cr/xml-schemas/v4.4/tiqueteElectronico",
+      "declared_version": "4.4",
+      "minimum_xsd_version": "1.1",
+      "dependencies": [
+        {
+          "namespace": "http://www.w3.org/2000/09/xmldsig#",
+          "schemaLocation": "../../xmldsig-core-schema.xsd",
+          "local_file": "xmldsig-core-schema.w3c-2002.xsd",
+          "bytes": 10293,
+          "sha256": "35cf8197da812c85e40d57891b35c94187569ed474a2dac813ce5090dafcd35c",
+          "source_url": "https://www.w3.org/TR/2002/REC-xmldsig-core-20020212/xmldsig-core-schema.xsd",
+          "mapping": "Explicit offline namespace mapping; W3C bytes, not Hacienda-hosted bytes; original relative import unavailable"
+        }
+      ],
+      "runtime_use_allowed": true,
+      "source_origin": "anonymous_official_download_tls_verified"
+    }
+  ]
 }

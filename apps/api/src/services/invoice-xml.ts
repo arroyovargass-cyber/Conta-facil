@@ -6,12 +6,14 @@ import {
 } from "../../../../packages/domain/src/emission";
 import {
   calculateInvoice,
-  IVA_TARIFFS,
   type ReceiverInput,
   type InvoiceLineInput,
 } from "../../../../packages/domain/src/invoice-fiscal";
+import type { OtherChargeInput } from "../../../../packages/domain/src/invoice-extras";
 export type InvoiceXmlInput = {
   snapshot: {
+    document_type?: "FE" | "TE";
+    calculation_version?: string;
     issuer: {
       legal_name: string;
       trade_name: string;
@@ -25,6 +27,7 @@ export type InvoiceXmlInput = {
     receiver: ReceiverInput;
     currency: "CRC" | "USD";
     lines: InvoiceLineInput[];
+    other_charges?: OtherChargeInput[];
     totals: ReturnType<typeof calculateInvoice>;
     notes?: string;
   };
@@ -34,8 +37,64 @@ export type InvoiceXmlInput = {
   issued_at: string;
   software_provider_id: string;
 };
-const NS =
-  "https://cdn.comprobanteselectronicos.go.cr/xml-schemas/v4.4/facturaElectronica";
+const PROFILES = {
+  FE: {
+    root: "FacturaElectronica",
+    code: "01",
+    namespace:
+      "https://cdn.comprobanteselectronicos.go.cr/xml-schemas/v4.4/facturaElectronica",
+  },
+  TE: {
+    root: "TiqueteElectronico",
+    code: "04",
+    namespace:
+      "https://cdn.comprobanteselectronicos.go.cr/xml-schemas/v4.4/tiqueteElectronico",
+  },
+} as const;
+
+/** Historical FE snapshots retain their original financial shape and bytes. */
+export function frozenInvoiceCalculation(s: InvoiceXmlInput["snapshot"]) {
+  if (
+    s.calculation_version !== undefined &&
+    !["fe-iva-v1-line-half-up-5", "billing44-v2-line-half-up-5"].includes(
+      s.calculation_version,
+    )
+  )
+    return null;
+  const calculated = calculateInvoice(s.lines, s.other_charges ?? []);
+  if (calculated.status !== "complete") return null;
+  if (isDeepStrictEqual(calculated, s.totals)) return calculated;
+  // The pre-workspace calculation had no tax arrays, charge totals or summary.
+  // Only snapshots without the new document discriminator can use that shape.
+  if (
+    s.document_type === undefined &&
+    !s.other_charges?.length &&
+    s.calculation_version !== "billing44-v2-line-half-up-5"
+  ) {
+    const legacy = {
+      status: calculated.status,
+      beforeDiscount: calculated.beforeDiscount,
+      discounts: calculated.discounts,
+      subtotal: calculated.subtotal,
+      tax: calculated.tax,
+      exonerations: calculated.exonerations,
+      total: calculated.total,
+      groups: calculated.groups,
+      lines: calculated.lines.map(
+        ({ beforeDiscount, discount, base, tax, exoneration, total }) => ({
+          beforeDiscount,
+          discount,
+          base,
+          tax,
+          exoneration,
+          total,
+        }),
+      ),
+    };
+    if (isDeepStrictEqual(legacy, s.totals)) return calculated;
+  }
+  return null;
+}
 function fail(message: string): never {
   throw new Error(`INVOICE_XML_INVALID: ${message}`);
 }
@@ -79,15 +138,16 @@ function money(n: bigint) {
     (n / 100000n).toString() + "." + (n % 100000n).toString().padStart(5, "0")
   );
 }
-function identity(type: string, id: string) {
+function identity(type: string, id: string, name = "Identificacion") {
   const re: Record<string, RegExp> = {
     "01": /^\d{9}$/,
     "02": /^\d{10}$/,
     "03": /^\d{11,12}$/,
     "04": /^\d{10}$/,
+    "05": /^[\p{L}\p{N}]{1,20}$/u,
   };
   if (!re[type]?.test(id)) fail("Unsupported identification");
-  return wrap("Identificacion", el("Tipo", type) + el("Numero", id));
+  return wrap(name, el("Tipo", type) + el("Numero", id));
 }
 function location(l: any, address: string) {
   if (
@@ -110,37 +170,68 @@ function location(l: any, address: string) {
   );
 }
 // Phone is optional: only preserve an explicit international country code, never invent one.
-function phone(value: string) {
+function phone(value: string, explicitCountry?: string) {
   if (!value) return "";
-  const m = /^\+(\d{1,3})[ -](\d{1,20})$/.exec(value);
-  return m
-    ? wrap("Telefono", el("CodigoPais", m[1]) + el("NumTelefono", m[2]))
-    : "";
+  const m = /^\+(\d{1,3})[ -]([\d -]+)$/.exec(value),
+    country = m?.[1] ?? explicitCountry,
+    number = (m?.[2] ?? value).replace(/[ -]/g, "");
+  if (
+    !country ||
+    !/^\d{1,3}$/.test(country) ||
+    !/^\d{1,20}$/.test(number) ||
+    BigInt(number) < 100n
+  )
+    return "";
+  if (m && explicitCountry && m[1] !== explicitCountry)
+    fail("Conflicting phone country code");
+  return wrap(
+    "Telefono",
+    el("CodigoPais", country) + el("NumTelefono", number),
+  );
 }
 export function generateInvoiceXml(input: InvoiceXmlInput): string {
   const { snapshot: s, consecutivo, clave, issued_at } = input,
     issuer = s.issuer,
-    r = s.receiver;
+    r = s.receiver,
+    documentType = s.document_type ?? "FE";
+  if (documentType !== "FE" && documentType !== "TE")
+    fail("Unsupported document type");
+  const profile = PROFILES[documentType];
   if (!["CRC", "USD"].includes(s.currency)) fail("Unsupported currency");
   const p = prepareEmission({
-    document_type: "FE",
+    document_type: documentType,
     currency: s.currency,
     receiver: r,
     lines: s.lines,
+    other_charges: s.other_charges ?? [],
     options: input.options,
   });
-  if (p.issues.length || p.totals.status !== "complete")
-    fail(p.issues.map((x) => x.code).join(", "));
-  const t = p.totals,
+  // Existing frozen documents remain reproducible. Issuance readiness always
+  // blocks this unresolved treatment, including legacy preparations; this
+  // exception only preserves bytes for snapshots predating the new profile.
+  const issues = p.issues.filter(
+    (issue) =>
+      !(
+        issue.code === "IVA_RETURN_ELIGIBILITY_UNVERIFIED" &&
+        s.document_type === undefined &&
+        s.calculation_version !== "billing44-v2-line-half-up-5"
+      ),
+  );
+  if (issues.length || p.totals.status !== "complete")
+    fail(issues.map((x) => x.code).join(", "));
+  const t = frozenInvoiceCalculation(s),
     o = p.options;
-  if (!isDeepStrictEqual(t, s.totals)) fail("Frozen calculation mismatch");
+  if (!t) fail("Frozen calculation mismatch");
   if (
     !/^\d{20}$/.test(consecutivo) ||
-    consecutivo.slice(8, 10) !== "01" ||
+    consecutivo.slice(8, 10) !== profile.code ||
     !consecutivo.startsWith(o.branch_code + o.terminal_code) ||
     /^0+$/.test(consecutivo.slice(10))
   )
-    fail("Invalid FE consecutivo");
+    fail("Invalid document consecutivo");
+  // Issuer IDs remain restricted to the supported national identification types.
+  if (!["01", "02", "03", "04"].includes(issuer.identification_type))
+    fail("Unsupported issuer identification");
   identity(issuer.identification_type, issuer.identification);
   if (
     !/^\d{50}$/.test(clave) ||
@@ -161,35 +252,11 @@ export function generateInvoiceXml(input: InvoiceXmlInput): string {
   if (!/^\d{9,12}$/.test(input.software_provider_id))
     fail("Software provider required");
   if (!z.email().safeParse(issuer.contact_email).success) fail("Issuer email");
-  const buckets = Array<bigint>(8).fill(0n);
   const detail = s.lines
     .map((line, i) => {
       const f = line.fiscal!,
-        a = t.lines[i],
-        rate = IVA_TARIFFS[f.tariff_code].rate;
+        a = t.lines[i];
       text(line.description!, 3, 200, "line description");
-      const base = Number(f.cabys[0]) >= 5 ? 0 : 4,
-        gross = scaled(a.beforeDiscount);
-      // Annex pp50–52: CABYS0–4 goods,5–9 services; tariff01/11 NoSujeto.
-      if (f.treatment === "exonerated") {
-        const tax = scaled(a.tax),
-          relief = scaled(a.exoneration);
-        if (tax === 0n) fail("Exoneration has no tax");
-        // Exact five-decimal allocation only: rounding of summary proportions is not a verified policy.
-        if ((gross * relief) % tax !== 0n)
-          fail("EXONERATION_SUMMARY_PRECISION_UNVERIFIED");
-        const exempt = (gross * relief) / tax;
-        buckets[base] += gross - exempt;
-        buckets[base + 2] += exempt;
-      } else
-        buckets[
-          base +
-            (f.tariff_code === "01" || f.tariff_code === "11"
-              ? 3
-              : f.treatment === "exempt"
-                ? 1
-                : 0)
-        ] += gross;
       const e = f.exoneration;
       const relief = e
         ? wrap(
@@ -220,26 +287,46 @@ export function generateInvoiceXml(input: InvoiceXmlInput): string {
         "LineaDetalle",
         el("NumeroLinea", i + 1) +
           el("CodigoCABYS", f.cabys) +
+          (f.commercial_codes ?? [])
+            .map((code) =>
+              wrap(
+                "CodigoComercial",
+                el("Tipo", code.type) + el("Codigo", code.code),
+              ),
+            )
+            .join("") +
           el(
             "Cantidad",
             line.quantity!.replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, ""),
           ) +
           el("UnidadMedida", f.unit) +
+          (documentType === "FE"
+            ? optional("TipoTransaccion", f.transaction_type)
+            : "") +
           optional("UnidadMedidaComercial", f.commercial_unit) +
           el("Detalle", line.description) +
+          (f.vin_numbers ?? [])
+            .map((vin) => el("NumeroVINoSerie", vin))
+            .join("") +
+          optional("RegistroMedicamento", f.medicine_registration) +
+          optional("FormaFarmaceutica", f.pharmaceutical_form) +
           el("PrecioUnitario", money(scaled(line.unit_price!))) +
           el("MontoTotal", a.beforeDiscount) +
           discount +
           el("SubTotal", a.base) +
-          el("BaseImponible", a.base) +
-          wrap(
-            "Impuesto",
-            el("Codigo", "01") +
-              el("CodigoTarifaIVA", f.tariff_code) +
-              el("Tarifa", rate) +
-              el("Monto", a.tax) +
-              relief,
-          ) +
+          el("BaseImponible", a.tax_base) +
+          a.taxes
+            .map((tax) =>
+              wrap(
+                "Impuesto",
+                el("Codigo", tax.code) +
+                  optional("CodigoTarifaIVA", tax.tariff_code) +
+                  el("Tarifa", tax.rate) +
+                  el("Monto", tax.amount) +
+                  (tax.code === "01" ? relief : ""),
+              ),
+            )
+            .join("") +
           el("ImpuestoAsumidoEmisorFabrica", "0.00000") +
           el("ImpuestoNeto", money(scaled(a.tax) - scaled(a.exoneration))) +
           el("MontoTotalLinea", a.total),
@@ -256,15 +343,64 @@ export function generateInvoiceXml(input: InvoiceXmlInput): string {
     "TotalMercExonerada",
     "TotalMercNoSujeta",
   ];
+  const buckets = [t.summary.services, t.summary.goods].flatMap((group) => [
+    group.taxable,
+    group.exempt,
+    group.exonerated,
+    group.non_subject,
+  ]);
+  const otherCharges = t.charges
+    .map((charge) =>
+      wrap(
+        "OtrosCargos",
+        el("TipoDocumentoOC", charge.code) +
+          optional("TipoDocumentoOTROS", charge.other_description) +
+          (charge.third_party_type && charge.third_party_identification
+            ? identity(
+                charge.third_party_type,
+                charge.third_party_identification,
+                "IdentificacionTercero",
+              )
+            : "") +
+          optional("NombreTercero", charge.third_party_name) +
+          el("Detalle", charge.description) +
+          (charge.mode === "percentage"
+            ? el("PorcentajeOC", charge.percentage)
+            : "") +
+          el("MontoCargo", charge.calculated_amount),
+      ),
+    )
+    .join("");
+  const earliestReference = new Date(issued_at);
+  earliestReference.setUTCFullYear(earliestReference.getUTCFullYear() - 10);
+  const references = o.references
+    .map((reference) => {
+      const when = Date.parse(reference.issue_date);
+      if (when < earliestReference.getTime() || when > Date.parse(issued_at))
+        fail("REFERENCE_DATE_OUT_OF_RANGE");
+      return wrap(
+        "InformacionReferencia",
+        el("TipoDocIR", reference.document_type) +
+          optional("TipoDocRefOTRO", reference.document_other) +
+          optional("Numero", reference.number) +
+          el("FechaEmisionIR", reference.issue_date) +
+          optional("Codigo", reference.code) +
+          optional("CodigoReferenciaOTRO", reference.code_other) +
+          optional("Razon", reference.reason),
+      );
+    })
+    .join("");
   const summary =
     wrap(
       "CodigoTipoMoneda",
       el("CodigoMoneda", s.currency) +
         el("TipoCambio", money(scaled(o.exchange_rate))),
     ) +
-    fields.map((name, i) => el(name, money(buckets[i]))).join("") +
+    fields.map((name, i) => el(name, buckets[i])).join("") +
     ["TotalGravado", "TotalExento", "TotalExonerado", "TotalNoSujeto"]
-      .map((name, i) => el(name, money(buckets[i] + buckets[i + 4])))
+      .map((name, i) =>
+        el(name, money(scaled(buckets[i]) + scaled(buckets[i + 4]))),
+      )
       .join("") +
     el("TotalVenta", t.beforeDiscount) +
     el("TotalDescuentos", t.discounts) +
@@ -274,7 +410,7 @@ export function generateInvoiceXml(input: InvoiceXmlInput): string {
         wrap(
           "TotalDesgloseImpuesto",
           el("Codigo", g.tax_code) +
-            el("CodigoTarifaIVA", g.tariff_code) +
+            optional("CodigoTarifaIVA", g.tariff_code) +
             el(
               "TotalMontoImpuesto",
               money(scaled(g.tax) - scaled(g.exoneration)),
@@ -283,22 +419,29 @@ export function generateInvoiceXml(input: InvoiceXmlInput): string {
       )
       .join("") +
     el("TotalImpuesto", money(scaled(t.tax) - scaled(t.exonerations))) +
+    (scaled(t.ivaReturned) > 0n ? el("TotalIVADevuelto", t.ivaReturned) : "") +
+    (scaled(t.otherCharges) > 0n
+      ? el("TotalOtrosCargos", t.otherCharges)
+      : "") +
     o.payment_methods
       .map((m) =>
         wrap(
           "MedioPago",
           el("TipoMedioPago", m.code) +
+            optional("MedioPagoOtros", m.other_description) +
             el("TotalMedioPago", money(scaled(m.amount))),
         ),
       )
       .join("") +
     el("TotalComprobante", t.total);
   return (
-    `<?xml version="1.0" encoding="UTF-8"?><FacturaElectronica xmlns="${NS}">` +
+    `<?xml version="1.0" encoding="UTF-8"?><${profile.root} xmlns="${profile.namespace}">` +
     el("Clave", clave) +
     el("ProveedorSistemas", input.software_provider_id) +
     el("CodigoActividadEmisor", o.issuer_activity) +
-    optional("CodigoActividadReceptor", r.economic_activity) +
+    (documentType === "FE"
+      ? optional("CodigoActividadReceptor", r.economic_activity)
+      : "") +
     el("NumeroConsecutivo", consecutivo) +
     el("FechaEmision", issued_at) +
     wrap(
@@ -316,25 +459,36 @@ export function generateInvoiceXml(input: InvoiceXmlInput): string {
           text(issuer.contact_email, 3, 160, "issuer email"),
         ),
     ) +
-    wrap(
-      "Receptor",
-      el("Nombre", r.name) +
-        identity(r.identification_type, r.identification) +
-        optional(
-          "NombreComercial",
-          r.trade_name ? text(r.trade_name, 3, 80, "receiver trade name") : "",
-        ) +
-        location(r, r.address) +
-        phone(r.phone) +
-        optional("CorreoElectronico", r.email),
-    ) +
+    (documentType === "FE" || r.name
+      ? wrap(
+          "Receptor",
+          el("Nombre", r.name) +
+            (r.identification_type && r.identification
+              ? identity(r.identification_type, r.identification)
+              : "") +
+            optional(
+              "NombreComercial",
+              r.trade_name
+                ? text(r.trade_name, 3, 80, "receiver trade name")
+                : "",
+            ) +
+            (r.domicile === "domestic" ? location(r, r.address) : "") +
+            (r.domicile === "foreign"
+              ? optional("OtrasSenasExtranjero", r.foreign_address)
+              : "") +
+            phone(r.phone, r.phone_country_code) +
+            optional("CorreoElectronico", r.email),
+        )
+      : "") +
     el("CondicionVenta", o.sale_condition) +
     (o.credit_days ? el("PlazoCredito", o.credit_days) : "") +
-    wrap("DetalleServicio", detail) +
+    (detail ? wrap("DetalleServicio", detail) : "") +
+    otherCharges +
     wrap("ResumenFactura", summary) +
+    references +
     (s.notes
       ? wrap("Otros", el("OtroTexto", text(s.notes, 1, 500, "notes")))
       : "") +
-    "</FacturaElectronica>"
+    `</${profile.root}>`
   );
 }

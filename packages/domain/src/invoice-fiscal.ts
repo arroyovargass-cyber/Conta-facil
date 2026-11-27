@@ -1,4 +1,12 @@
 import { HACIENDA_UNITS } from "./hacienda-units";
+import { isEconomicActivityCode } from "./economic-activity";
+import { isPharmaceuticalFormCode } from "./pharmaceutical-forms";
+import {
+  CHARGE_ONLY_CODES,
+  OTHER_CHARGE_CODES,
+  otherChargeInput,
+  type OtherChargeInput,
+} from "./invoice-extras";
 import { z } from "zod";
 const text = (max: number) => z.string().trim().max(max).default("");
 const decimal = z.string().regex(/^\d{1,13}(?:\.\d{1,5})?$/);
@@ -25,6 +33,7 @@ export const receiverFiscalInput = z
     requires_email: z.boolean().default(false),
     foreign_address: text(300),
     economic_activity: text(6),
+    phone_country_code: text(3),
     province: text(1),
     canton: text(2),
     district: text(2),
@@ -56,16 +65,39 @@ export const lineFiscalInput = z
     cabys: text(13),
     unit: text(15),
     commercial_unit: text(20),
+    internal_code: text(20),
+    commercial_codes: z
+      .array(z.object({ type: text(2), code: text(20) }).strict())
+      .max(5)
+      .default([]),
+    transaction_type: text(2),
+    vin_numbers: z.array(z.string().trim().max(17)).max(1000).default([]),
+    medicine_registration: text(100),
+    pharmaceutical_form: text(3),
     treatment: z
       .enum(["pending", "taxable", "exempt", "exonerated", "non_subject"])
       .default("pending"),
     tax_code: z.literal("01").default("01"),
     tariff_code: text(2),
     discount_amount: decimal.default("0"),
+    discount_mode: z.enum(["amount", "percentage"]).default("amount"),
+    discount_percentage: z.union([z.literal(""), decimal]).default("0"),
     discount_code: text(2),
     discount_reason: text(80),
     discount_other: text(100),
     exoneration: exonerationInput.nullable().default(null),
+    other_taxes: z
+      .array(
+        z
+          .object({
+            code: text(2),
+            rate: z.union([z.literal(""), decimal]).default(""),
+            other_description: text(100),
+          })
+          .strict(),
+      )
+      .max(999)
+      .default([]),
   })
   .strict();
 export type FiscalLineInput = z.infer<typeof lineFiscalInput>;
@@ -95,11 +127,35 @@ export type InvoiceFiscalIssue = {
   path?: string;
   message: string;
 };
-type Amounts = {
+export type CalculatedTax = {
+  code: string;
+  tariff_code: string;
+  rate: string;
+  base: string;
+  amount: string;
+  exoneration: string;
+};
+export type CalculatedOtherCharge = OtherChargeInput & {
+  calculated_amount: string;
+};
+export type TreatmentSummary = {
+  taxable: string;
+  exempt: string;
+  exonerated: string;
+  non_subject: string;
+};
+export type InvoiceSummary = {
+  services: TreatmentSummary;
+  goods: TreatmentSummary;
+  totals: TreatmentSummary;
+};
+export type Amounts = {
   beforeDiscount: string;
   discount: string;
   base: string;
+  tax_base: string;
   tax: string;
+  taxes: CalculatedTax[];
   exoneration: string;
   total: string;
 };
@@ -120,7 +176,11 @@ export type InvoiceCalculation =
       subtotal: string;
       tax: string;
       exonerations: string;
+      otherCharges: string;
+      ivaReturned: string;
       total: string;
+      charges: CalculatedOtherCharge[];
+      summary: InvoiceSummary;
       groups: Group[];
       lines: Amounts[];
     };
@@ -136,6 +196,7 @@ function formatted(v: bigint) {
 }
 export function calculateInvoice(
   lines: InvoiceLineInput[],
+  otherCharges: OtherChargeInput[] = [],
 ): InvoiceCalculation {
   const issues: InvoiceFiscalIssue[] = [];
   const add = (code: string, message: string, path?: string) =>
@@ -143,7 +204,76 @@ export function calculateInvoice(
   // User-confirmed accounting policy: half up at each line; document totals sum rounded lines.
   const round = (n: bigint, d: bigint, _path: string): bigint =>
     n / d + ((n % d) * 2n >= d ? 1n : 0n);
-  if (lines.length < 1 || lines.length > 100)
+  const charges: CalculatedOtherCharge[] = [];
+  let chargeTotal = 0n;
+  if (otherCharges.length > 15)
+    add(
+      "OTHER_CHARGE_COUNT",
+      "Se permiten hasta quince cargos.",
+      "other_charges",
+    );
+  for (const [index, input] of otherCharges.slice(0, 15).entries()) {
+    const path = `other_charges.${index}`,
+      parsed = otherChargeInput.safeParse(input);
+    if (!parsed.success) {
+      add("OTHER_CHARGE_INVALID", "Revise los campos del cargo.", path);
+      continue;
+    }
+    const charge = parsed.data;
+    if (!OTHER_CHARGE_CODES.some((c) => c.code === charge.code))
+      add(
+        "OTHER_CHARGE_CODE_INVALID",
+        "Seleccione el código oficial del cargo.",
+        path + ".code",
+      );
+    let amount = 0n;
+    if (charge.mode === "percentage") {
+      // Annex p49 defines percentage points, but no universal calculation base.
+      if (!charge.percentage || !charge.percentage_base) {
+        add(
+          "OTHER_CHARGE_PERCENTAGE_BASE_REQUIRED",
+          "Indique el porcentaje y su base comercial explícita.",
+          path,
+        );
+        continue;
+      }
+      if (scaled(charge.percentage) > 999999999n) {
+        add(
+          "OTHER_CHARGE_PERCENTAGE_LIMIT",
+          "El porcentaje admite hasta cuatro enteros y cinco decimales.",
+          path + ".percentage",
+        );
+        continue;
+      }
+      amount = round(
+        scaled(charge.percentage_base) * scaled(charge.percentage),
+        100n * S,
+        path,
+      );
+    } else if (charge.amount) amount = scaled(charge.amount);
+    if (amount <= 0n) {
+      add(
+        "OTHER_CHARGE_AMOUNT_REQUIRED",
+        "El monto del cargo debe ser mayor que cero.",
+        path + ".amount",
+      );
+      continue;
+    }
+    if (amount > MAX) {
+      add("AMOUNT_LIMIT", "El cargo supera el límite monetario.", path);
+      continue;
+    }
+    chargeTotal += amount;
+    charges.push({ ...charge, calculated_amount: formatted(amount) });
+  }
+  if (
+    lines.length > 100 ||
+    (lines.length === 0 &&
+      (!charges.length ||
+        charges.some(
+          (c) => !(CHARGE_ONLY_CODES as readonly string[]).includes(c.code),
+        )))
+  )
     add("INVALID_LINE_COUNT", "Se requieren entre una y cien líneas.", "lines");
   const output: Amounts[] = [],
     groups = new Map<
@@ -158,6 +288,10 @@ export function calculateInvoice(
       }
     >();
   const sums = [0n, 0n, 0n, 0n, 0n, 0n];
+  const summary = {
+    services: { taxable: 0n, exempt: 0n, exonerated: 0n, non_subject: 0n },
+    goods: { taxable: 0n, exempt: 0n, exonerated: 0n, non_subject: 0n },
+  };
   for (const [index, line] of lines.slice(0, 100).entries()) {
     const path = `lines.${index}`;
     const parsed = lineFiscalInput.safeParse(line.fiscal);
@@ -213,11 +347,29 @@ export function calculateInvoice(
       continue;
     }
     const gross = round(
-        scaled(line.quantity) * scaled(line.unit_price),
-        S,
-        path,
-      ),
-      discount = scaled(f.discount_amount),
+      scaled(line.quantity) * scaled(line.unit_price),
+      S,
+      path,
+    );
+    if (
+      f.discount_mode === "percentage" &&
+      (!f.discount_percentage || scaled(f.discount_percentage) > 100n * S)
+    ) {
+      add(
+        "DISCOUNT_PERCENTAGE_INVALID",
+        "Ingrese un porcentaje de descuento entre cero y cien.",
+        path + ".fiscal.discount_percentage",
+      );
+      continue;
+    }
+    const discount =
+        f.discount_mode === "percentage"
+          ? round(
+              gross * scaled(f.discount_percentage),
+              100n * S,
+              path + ".discount",
+            )
+          : scaled(f.discount_amount),
       base = gross - discount;
     if (discount > 0n && ["01", "02", "03"].includes(f.discount_code)) {
       add(
@@ -235,8 +387,59 @@ export function calculateInvoice(
       );
       continue;
     }
-    const rate = scaled(t.rate),
-      tax = round(base * rate, 100n * S, path + ".tax");
+    let cement = 0n;
+    const extraTaxes: CalculatedTax[] = [];
+    const seenTaxes = new Set<string>();
+    for (const [taxIndex, otherTax] of f.other_taxes.entries()) {
+      const taxPath = path + `.fiscal.other_taxes.${taxIndex}`;
+      if (seenTaxes.has(otherTax.code)) {
+        add(
+          "OTHER_TAX_DUPLICATE",
+          "No duplique el impuesto de la línea.",
+          taxPath,
+        );
+        continue;
+      }
+      seenTaxes.add(otherTax.code);
+      if (otherTax.code !== "12") {
+        add(
+          "OTHER_TAX_REGIME_UNSUPPORTED",
+          "La base legal y los datos específicos de este impuesto deben verificarse antes de calcularlo.",
+          taxPath,
+        );
+        continue;
+      }
+      if (!otherTax.rate || scaled(otherTax.rate) !== 5n * S) {
+        add(
+          "CEMENT_TAX_RATE_INVALID",
+          "El impuesto al cemento utiliza la tarifa oficial del cinco por ciento.",
+          taxPath + ".rate",
+        );
+        continue;
+      }
+      // Annex pp38,44: cement12 = net subtotal × 5%; it increases the IVA base.
+      cement = round(base * 5n, 100n, taxPath);
+      extraTaxes.push({
+        code: "12",
+        tariff_code: "",
+        rate: "5",
+        base: formatted(base),
+        amount: formatted(cement),
+        exoneration: formatted(0n),
+      });
+    }
+    if (f.treatment === "exonerated" && f.other_taxes.length) {
+      add(
+        "EXONERATION_OTHER_TAX_SUMMARY_UNVERIFIED",
+        "La proporción exonerada con otros impuestos requiere verificación normativa.",
+        path + ".fiscal",
+      );
+      continue;
+    }
+    const taxBase = base + cement,
+      rate = scaled(t.rate),
+      vat = round(taxBase * rate, 100n * S, path + ".tax"),
+      tax = vat + cement;
     let relief = 0n;
     if (f.treatment === "exonerated") {
       if (!f.exoneration) {
@@ -260,7 +463,7 @@ export function calculateInvoice(
         );
         continue;
       }
-      relief = round(base * exemptRate, 100n * S, path + ".exoneration");
+      relief = round(taxBase * exemptRate, 100n * S, path + ".exoneration");
     } else if (f.exoneration) {
       add(
         "EXONERATION_TREATMENT_MISMATCH",
@@ -269,9 +472,17 @@ export function calculateInvoice(
       );
       continue;
     }
+    if (f.treatment === "exonerated" && vat === 0n) {
+      add(
+        "EXONERATION_SUMMARY_ZERO_TAX",
+        "La proporción exonerada no puede determinarse cuando el IVA de la línea redondea a cero.",
+        path + ".fiscal.exoneration",
+      );
+      continue;
+    }
     const total = base + tax - relief,
       values = [gross, discount, base, tax, relief, total];
-    if (values.some((v) => v > MAX || v < 0n)) {
+    if ([...values, taxBase, cement].some((v) => v > MAX || v < 0n)) {
       add("AMOUNT_LIMIT", "El importe supera el límite monetario.", path);
       continue;
     }
@@ -280,25 +491,50 @@ export function calculateInvoice(
       beforeDiscount: formatted(gross),
       discount: formatted(discount),
       base: formatted(base),
+      tax_base: formatted(taxBase),
       tax: formatted(tax),
+      taxes: [
+        {
+          code: f.tax_code,
+          tariff_code: f.tariff_code,
+          rate: t.rate,
+          base: formatted(taxBase),
+          amount: formatted(vat),
+          exoneration: formatted(relief),
+        },
+        ...extraTaxes,
+      ],
       exoneration: formatted(relief),
       total: formatted(total),
     });
-    const key = f.tax_code + ":" + f.tariff_code,
-      g = groups.get(key) ?? {
-        tax_code: f.tax_code,
-        tariff_code: f.tariff_code,
-        rate: t.rate,
-        base: 0n,
-        tax: 0n,
-        exoneration: 0n,
-      };
-    g.base += base;
-    g.tax += tax;
-    g.exoneration += relief;
-    groups.set(key, g);
+    for (const calculatedTax of output[output.length - 1].taxes) {
+      const key = calculatedTax.code + ":" + calculatedTax.tariff_code,
+        g = groups.get(key) ?? {
+          tax_code: calculatedTax.code,
+          tariff_code: calculatedTax.tariff_code,
+          rate: calculatedTax.rate,
+          base: 0n,
+          tax: 0n,
+          exoneration: 0n,
+        };
+      g.base += scaled(calculatedTax.base);
+      g.tax += scaled(calculatedTax.amount);
+      g.exoneration += scaled(calculatedTax.exoneration);
+      groups.set(key, g);
+    }
+    const bucket = Number(f.cabys[0]) >= 5 ? summary.services : summary.goods;
+    if (f.treatment === "exonerated") {
+      // Annex pp50–52: gross sale × (exoneration amount / gross IVA).
+      // Apply the confirmed five-decimal half-up policy to this line partition only.
+      const exonerated = round(gross * relief, vat, path + ".summary");
+      bucket.exonerated += exonerated;
+      bucket.taxable += gross - exonerated;
+    } else if (["01", "11"].includes(f.tariff_code))
+      bucket.non_subject += gross;
+    else if (f.treatment === "exempt") bucket.exempt += gross;
+    else bucket.taxable += gross;
   }
-  if (sums.some((v) => v > MAX))
+  if ([...sums, chargeTotal, sums[5] + chargeTotal].some((v) => v > MAX))
     add("AMOUNT_LIMIT", "La suma del documento supera el límite monetario.");
   if (issues.length) return { status: "blocked", issues };
   return {
@@ -308,7 +544,24 @@ export function calculateInvoice(
     subtotal: formatted(sums[2]),
     tax: formatted(sums[3]),
     exonerations: formatted(sums[4]),
-    total: formatted(sums[5]),
+    otherCharges: formatted(chargeTotal),
+    ivaReturned: formatted(0n),
+    total: formatted(sums[5] + chargeTotal),
+    charges,
+    summary: {
+      services: Object.fromEntries(
+        Object.entries(summary.services).map(([k, v]) => [k, formatted(v)]),
+      ) as TreatmentSummary,
+      goods: Object.fromEntries(
+        Object.entries(summary.goods).map(([k, v]) => [k, formatted(v)]),
+      ) as TreatmentSummary,
+      totals: Object.fromEntries(
+        Object.entries(summary.services).map(([k, v]) => [
+          k,
+          formatted(v + summary.goods[k as keyof typeof summary.goods]),
+        ]),
+      ) as TreatmentSummary,
+    },
     groups: [...groups.values()].map((g) => ({
       ...g,
       base: formatted(g.base),
@@ -322,13 +575,35 @@ export function validateInvoiceForIssuance(input: {
   document_type: "FE" | "TE";
   receiver: ReceiverInput;
   lines: InvoiceLineInput[];
+  other_charges?: OtherChargeInput[];
 }): InvoiceFiscalIssue[] {
-  const result = calculateInvoice(input.lines),
+  const result = calculateInvoice(input.lines, input.other_charges),
     issues: InvoiceFiscalIssue[] =
       result.status === "blocked" ? [...result.issues] : [];
   const add = (code: string, message: string, path: string) =>
     issues.push({ code, message, path });
   const r = input.receiver;
+  const hasReceiver = [
+    r.name,
+    r.identification_type,
+    r.identification,
+    r.email,
+    r.phone,
+    r.address,
+    r.trade_name,
+    r.foreign_address,
+    r.province,
+    r.canton,
+    r.district,
+    r.neighborhood,
+    r.phone_country_code,
+  ].some(Boolean);
+  if (input.document_type === "TE" && hasReceiver && !r.name)
+    add(
+      "RECEIVER_NAME_MISSING",
+      "Complete el nombre del receptor incluido en el tiquete.",
+      "receiver.name",
+    );
   if (
     (r.name.length > 0 && r.name.length < 3) ||
     r.name.length > 100 ||
@@ -358,6 +633,52 @@ export function validateInvoiceForIssuance(input: {
       "INVALID_RECEIVER_IDENTIFICATION_TYPE",
       "Seleccione un tipo de identificación oficial.",
       "receiver.identification_type",
+    );
+  if (
+    input.document_type === "TE" &&
+    Boolean(r.identification_type) !== Boolean(r.identification)
+  )
+    add(
+      "RECEIVER_IDENTIFICATION_INCOMPLETE",
+      "Complete ambos campos de identificación u omítalos del tiquete.",
+      "receiver.identification",
+    );
+  // Annex receiver identification rules and note4 (pp22–23,69).
+  const receiverIdentificationPatterns: Record<string, RegExp> = {
+    "01": /^[1-9]\d{8}$/,
+    "02": /^\d{10}$/,
+    "03": /^[1-9]\d{10,11}$/,
+    "04": /^\d{10}$/,
+    "05": /^[\p{L}\p{N}]{1,20}$/u,
+  };
+  if (
+    r.identification &&
+    receiverIdentificationPatterns[r.identification_type] &&
+    !receiverIdentificationPatterns[r.identification_type].test(
+      r.identification,
+    )
+  )
+    add(
+      "RECEIVER_IDENTIFICATION_INVALID",
+      "El número debe respetar el formato del tipo de identificación seleccionado, sin guiones ni ceros iniciales para cédula física o DIMEX.",
+      "receiver.identification",
+    );
+  // Foreign05 is allowed in TE. FE05 requires sale12, outside the supported01/02 profile.
+  // Non-contributor06 is restricted to the issuer of a purchase invoice (note4).
+  if (
+    r.identification_type === "06" ||
+    (input.document_type === "FE" && r.identification_type === "05")
+  )
+    add(
+      "RECEIVER_IDENTIFICATION_CONTEXT_UNSUPPORTED",
+      "El tipo de identificación requiere un contexto de comprobante o condición de venta que esta preparación no admite.",
+      "receiver.identification_type",
+    );
+  if (r.phone_country_code && !/^\d{1,3}$/.test(r.phone_country_code))
+    add(
+      "RECEIVER_PHONE_COUNTRY_INVALID",
+      "El código de país debe tener entre uno y tres dígitos.",
+      "receiver.phone_country_code",
     );
   if (input.document_type === "FE" && r.domicile === "unspecified")
     add(
@@ -389,12 +710,13 @@ export function validateInvoiceForIssuance(input: {
       "receiver.foreign_address",
     );
   if (
+    input.document_type === "FE" &&
     (r.requires_activity || r.economic_activity) &&
-    !/^\d{6}$/.test(r.economic_activity)
+    !isEconomicActivityCode(r.economic_activity)
   )
     add(
       "RECEIVER_ACTIVITY_MISSING",
-      "Confirme la actividad económica de seis dígitos requerida para este receptor.",
+      "Confirme la actividad económica de seis caracteres requerida para este receptor.",
       "receiver.economic_activity",
     );
   if (r.requires_email && !r.email)
@@ -404,7 +726,8 @@ export function validateInvoiceForIssuance(input: {
       "receiver.email",
     );
   for (const [i, line] of input.lines.entries()) {
-    const f = line.fiscal,
+    const parsedFiscal = lineFiscalInput.safeParse(line.fiscal),
+      f = parsedFiscal.success ? parsedFiscal.data : null,
       path = `lines.${i}`;
     if (!line.description?.trim())
       add(
@@ -412,7 +735,54 @@ export function validateInvoiceForIssuance(input: {
         "Complete el detalle de la línea.",
         path + ".description",
       );
+    else if (
+      line.description.trim().length < 3 ||
+      line.description.trim().length > 200
+    )
+      add(
+        "DESCRIPTION_FISCAL_LIMIT",
+        "El detalle fiscal debe tener entre tres y doscientos caracteres.",
+        path + ".description",
+      );
     if (!f) continue;
+    for (const [codeIndex, commercial] of f.commercial_codes.entries())
+      if (!/^(0[1-4]|99)$/.test(commercial.type) || !commercial.code)
+        add(
+          "COMMERCIAL_CODE_INVALID",
+          "Complete el código comercial y su tipo oficial.",
+          path + `.fiscal.commercial_codes.${codeIndex}`,
+        );
+    if (input.document_type === "FE" && f.transaction_type) {
+      if (!/^(0[1-9]|1[0-3])$/.test(f.transaction_type))
+        add(
+          "TRANSACTION_TYPE_INVALID",
+          "Seleccione un tipo de transacción oficial.",
+          path + ".fiscal.transaction_type",
+        );
+      else if (f.transaction_type !== "01")
+        add(
+          "TRANSACTION_TREATMENT_UNSUPPORTED",
+          "El tratamiento especial de esta transacción requiere verificación antes de emitir.",
+          path + ".fiscal.transaction_type",
+        );
+    }
+    if (f.vin_numbers.some((vin) => !vin))
+      add(
+        "VIN_INCOMPLETE",
+        "Complete cada número VIN o serie incluido en la línea.",
+        path + ".fiscal.vin_numbers",
+      );
+    // Annex pp28–29: a registered medicine requires a pharmaceutical form.
+    // The catalog verifies the supplied form, without inferring CABYS applicability.
+    if (
+      (f.medicine_registration || f.pharmaceutical_form) &&
+      !isPharmaceuticalFormCode(f.pharmaceutical_form)
+    )
+      add(
+        "PHARMACEUTICAL_FORM_INVALID",
+        "Seleccione la forma farmacéutica del catálogo oficial, conservando su código exacto.",
+        path + ".fiscal.pharmaceutical_form",
+      );
     if (!/^\d{13}$/.test(f.cabys))
       add(
         "CABYS_MISSING",
@@ -432,8 +802,10 @@ export function validateInvoiceForIssuance(input: {
         path + ".fiscal.commercial_unit",
       );
     if (
-      decimal.safeParse(f.discount_amount).success &&
-      scaled(f.discount_amount) > 0n && // Annex v4.4 note 20 supplies codes 01–09 and 99.
+      ((f.discount_mode === "percentage" &&
+        f.discount_percentage &&
+        scaled(f.discount_percentage) > 0n) ||
+        (f.discount_mode === "amount" && scaled(f.discount_amount) > 0n)) && // Annex v4.4 note 20 supplies codes 01–09 and 99.
       (!/^(0[1-9]|99)$/.test(f.discount_code) ||
         f.discount_reason.length < 3 ||
         (f.discount_code === "99" && f.discount_other.length < 5))
@@ -467,6 +839,62 @@ export function validateInvoiceForIssuance(input: {
           "EXONERATION_AUTHORIZATION_UNVERIFIED",
           "La autorización de esta compra requiere verificación antes de emitir.",
           path + ".fiscal.exoneration.document_type",
+        );
+    }
+  }
+  for (const [i, value] of (input.other_charges ?? []).entries()) {
+    const parsed = otherChargeInput.safeParse(value),
+      path = `other_charges.${i}`;
+    if (!parsed.success) continue;
+    const c = parsed.data;
+    if (!c.description)
+      add(
+        "OTHER_CHARGE_DESCRIPTION_MISSING",
+        "Describa el cargo.",
+        path + ".description",
+      );
+    if (c.code === "99" && c.other_description.length < 5)
+      add(
+        "OTHER_CHARGE_OTHER_DESCRIPTION_MISSING",
+        "Describa el tipo de otros cargos con al menos cinco caracteres.",
+        path + ".other_description",
+      );
+    if (
+      c.code === "04" ||
+      c.third_party_type ||
+      c.third_party_identification ||
+      c.third_party_name
+    ) {
+      const identificationPatterns: Record<string, RegExp> = {
+        "01": /^[1-9]\d{8}$/,
+        "02": /^\d{10}$/,
+        "03": /^[1-9]\d{10,11}$/,
+        "04": /^\d{10}$/,
+        "05": /^[\p{L}\p{N}]{1,20}$/u,
+        "06": /^.{1,20}$/,
+      };
+      if (
+        ((c.code === "04" ||
+          c.third_party_type ||
+          c.third_party_identification) &&
+          !identificationPatterns[c.third_party_type]?.test(
+            c.third_party_identification,
+          )) ||
+        ((c.code === "04" || c.third_party_name) &&
+          c.third_party_name.length < 5)
+      )
+        add(
+          "OTHER_CHARGE_THIRD_PARTY_MISSING",
+          "Complete identificación oficial y nombre del tercero que vende o presta lo cobrado.",
+          path,
+        );
+      // Annex pp48–49 explicitly exempts foreign nonresidents05 from registration.
+      // Non-contributor06 has a separately restricted FEC context (note4), not FE/TE.
+      if (c.third_party_type === "06")
+        add(
+          "OTHER_CHARGE_THIRD_PARTY_CONTEXT_UNSUPPORTED",
+          "El tipo No Contribuyente corresponde a un contexto de factura de compra distinto de FE o TE.",
+          path + ".third_party_identification",
         );
     }
   }

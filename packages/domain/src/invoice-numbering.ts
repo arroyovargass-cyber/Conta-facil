@@ -1,9 +1,13 @@
-/** FE (01) numbering layout from the v4.4 annex, note 3. */
+/** FE (01) / TE (04) numbering layout from the v4.4 annex, note 3. */
 export function formatInvoiceNumber(input: {
   branch: string;
   terminal: string;
   sequence: bigint;
+  documentType?: "FE" | "TE";
 }): string {
+  const documentType = input.documentType ?? "FE";
+  if (documentType !== "FE" && documentType !== "TE")
+    throw new Error("Tipo de comprobante no soportado");
   if (
     typeof input.branch !== "string" ||
     !/^[0-9]{3}$/.test(input.branch) ||
@@ -22,10 +26,10 @@ export function formatInvoiceNumber(input: {
     input.sequence > 9999999999n
   )
     throw new Error("Consecutivo fuera de rango");
-  return `${input.branch}${input.terminal}01${input.sequence.toString().padStart(10, "0")}`;
+  return `${input.branch}${input.terminal}${documentType === "TE" ? "04" : "01"}${input.sequence.toString().padStart(10, "0")}`;
 }
 
-/** Builds a normal-situation national FE clave; security is supplied by the caller. */
+/** Builds a normal-situation national FE/TE clave; security is supplied by the caller. */
 export function buildInvoiceClave(input: {
   consecutivo: string;
   issuerIdentification: string;
@@ -34,13 +38,14 @@ export function buildInvoiceClave(input: {
 }): string {
   if (
     typeof input.consecutivo !== "string" ||
-    !/^[0-9]{8}01[0-9]{10}$/.test(input.consecutivo)
+    !/^[0-9]{8}(01|04)[0-9]{10}$/.test(input.consecutivo)
   )
-    throw new Error("Consecutivo FE inválido");
+    throw new Error("Consecutivo FE/TE inválido");
   formatInvoiceNumber({
     branch: input.consecutivo.slice(0, 3),
     terminal: input.consecutivo.slice(3, 8),
     sequence: BigInt(input.consecutivo.slice(10)),
+    documentType: input.consecutivo.slice(8, 10) === "04" ? "TE" : "FE",
   });
   if (
     typeof input.issuerIdentification !== "string" ||

@@ -94,7 +94,7 @@ Ver [operación y recuperación de bóveda](docs/runbooks/hacienda-vault.md) y
 - [Entorno restringido](docs/runbooks/local-setup.md)
 - [Respaldo y recuperación](docs/runbooks/backup-restore.md)
 
-No se publicó una interfaz aislada: el despliegue funcional necesita API Node, Supabase, SMTP, HTTPS y gestión de secretos configurados. Existe un proyecto separado de Supabase de pruebas; la aplicación todavía no está publicada en línea. No se añadieron servicios de pago en esta fase.
+El despliegue funcional usa API Node, Supabase, HTTPS y gestión de secretos. El sitio de pruebas está publicado; su activación fiscal y la entrega SMTP requieren configurar cada empresa y ambiente. Las ampliaciones pendientes de publicación se documentan en la [matriz de cierre](docs/development/billing44-closeout.md). No se añadieron servicios de pago.
 
 ## Despliegue de pruebas aprobado
 

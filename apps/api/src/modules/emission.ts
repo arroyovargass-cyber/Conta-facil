@@ -13,7 +13,8 @@ import {
 } from "../../../../packages/domain/src/emission";
 import { receiverInput } from "../../../../packages/domain/src/invoice-fiscal";
 import { scoped, requirePermission, HttpError } from "../db";
-import { found, ids, page, pattern } from "./billing-common";
+import { found, ids } from "./billing-common";
+import { invoiceHistoryQuery, listInvoiceHistory } from "./invoice-history";
 import type { identity } from "./identity";
 import { receiverLocationIssues } from "../services/receiver-location";
 import { haciendaEnvironmentInput } from "../../../../packages/domain/src/hacienda-environment";
@@ -22,7 +23,7 @@ const prepareInput = z
     operation_id: z.uuid(),
     draft_id: z.uuid(),
     expected_version: z.int().positive(),
-    options: emissionOptionsInput,
+    options: emissionOptionsInput.optional(),
     environment: haciendaEnvironmentInput,
   })
   .strict();
@@ -34,6 +35,31 @@ const issueInput = z
   })
   .strict();
 const issue = (code: string, message: string) => ({ code, message });
+const requestHash = (value: unknown) =>
+  createHash("sha256").update(JSON.stringify(value)).digest("hex");
+function historicalPrepareHashes(input: z.infer<typeof prepareInput>) {
+  if (
+    !input.options ||
+    input.options.references.length ||
+    input.options.payment_methods.some((m) => m.other_description)
+  )
+    return [];
+  const { references: _references, ...options } = input.options;
+  const legacy = {
+    ...input,
+    options: {
+      ...options,
+      payment_methods: options.payment_methods.map(
+        ({ other_description: _description, ...method }) => method,
+      ),
+    },
+  };
+  const { environment: _environment, ...withoutEnvironment } = legacy;
+  return [
+    requestHash(legacy),
+    ...(input.environment === "test" ? [requestHash(withoutEnvironment)] : []),
+  ];
+}
 async function decorate(db: pg.PoolClient, row: any, config: AppConfig) {
   return { ...row, readiness: await emissionReadiness(db, row, config) };
 }
@@ -57,6 +83,7 @@ async function snapshotFromDraft(
       currency: draft.currency,
       receiver,
       lines: draft.lines,
+      other_charges: draft.other_charges ?? [],
       options: options,
     });
   const preparation_issues = await receiverLocationIssues(receiver);
@@ -82,13 +109,15 @@ async function snapshotFromDraft(
     );
   const snapshot = {
     issuer,
+    document_type: draft.document_type,
     receiver,
     currency: draft.currency,
     lines: draft.lines,
+    other_charges: draft.other_charges ?? [],
     totals: result.totals,
     notes: draft.notes,
     prices_include_tax: false,
-    calculation_version: "fe-iva-v1-line-half-up-5",
+    calculation_version: "billing44-v2-line-half-up-5",
     preparation_issues,
   };
 
@@ -104,27 +133,8 @@ export function emissionRoutes(
   app.get(base, async (req) => {
     const p = await auth.authenticate(req);
     const { tenantId } = ids.parse(req.params),
-      q = z
-        .object({
-          search: z.string().max(100).default(""),
-          cursor: z.coerce.number().int().min(0).max(1000000).default(0),
-          environment: haciendaEnvironmentInput,
-        })
-        .strict()
-        .parse(req.query ?? {});
-    return scoped(pool, p.claims, async (db) =>
-      page(
-        (
-          await db.query(
-            `select id,version,draft_id,draft_version,department_id,environment,document_status,signature_status,transmission_status,hacienda_status,email_status,created_at,
- jsonb_build_object('receiver',jsonb_build_object('name',snapshot->'receiver'->>'name'),'currency',snapshot->>'currency','totals',jsonb_build_object('total',snapshot->'totals'->>'total','status',snapshot->'totals'->>'status')) snapshot
- from public.electronic_invoices where tenant_id=$1 and environment=$4 and (snapshot->'receiver'->>'name' ilike $2 or id::text ilike $2) order by created_at desc,id limit 51 offset $3`,
-            [tenantId, pattern(q.search), q.cursor, q.environment],
-          )
-        ).rows,
-        q.cursor,
-      ),
-    );
+      q = invoiceHistoryQuery.parse(req.query ?? {});
+    return scoped(pool, p.claims, (db) => listInvoiceHistory(db, tenantId, q));
   });
   app.get(base + "/:id", async (req) => {
     const p = await auth.authenticate(req);
@@ -241,11 +251,16 @@ export function emissionRoutes(
       await db.query("select set_config('request.jwt.claims',$1,true)", [
         JSON.stringify(p.claims),
       ]);
-      // Serialize a source conversion even when the caller retries with a new operation UUID.
+      // Serialize a source conversion without requiring draft-edit authority.
+      // The single SELECT below reads a coherent draft + lines snapshot; the
+      // expected version pins the copy the caller requested to prepare.
+      await db.query("select pg_advisory_xact_lock(hashtextextended($1,0))", [
+        `${tenantId.toLowerCase()}:prepare:${input.draft_id.toLowerCase()}`,
+      ]);
       const draft = found(
         (
           await db.query(
-            "select d.*,coalesce((select jsonb_agg(to_jsonb(l)||jsonb_build_object('quantity',l.quantity::text,'unit_price',l.unit_price::text) order by l.position) from public.invoice_draft_lines l where l.tenant_id=d.tenant_id and l.draft_id=d.id),'[]'::jsonb) lines from public.invoice_drafts d where d.tenant_id=$1 and d.id=$2 for update of d",
+            "select d.*,coalesce((select jsonb_agg(to_jsonb(l)||jsonb_build_object('quantity',l.quantity::text,'unit_price',l.unit_price::text) order by l.position) from public.invoice_draft_lines l where l.tenant_id=d.tenant_id and l.draft_id=d.id),'[]'::jsonb) lines from public.invoice_drafts d where d.tenant_id=$1 and d.id=$2",
             [tenantId, input.draft_id],
           )
         ).rows[0],
@@ -253,17 +268,13 @@ export function emissionRoutes(
       await requirePermission(
         db,
         tenantId,
-        "invoices.manage",
+        "invoices.prepare",
         draft.department_id,
       );
-      const hash = createHash("sha256")
-        .update(JSON.stringify(input))
-        .digest("hex");
+      const hash = requestHash(input);
       // Previous test requests were hashed before environment was part of the contract.
       const { environment: _environment, ...legacyInput } = input;
-      const legacyHash = createHash("sha256")
-        .update(JSON.stringify(legacyInput))
-        .digest("hex");
+      const legacyHash = requestHash(legacyInput);
       const replay = (
         await db.query(
           "select * from public.electronic_invoices where tenant_id=$1 and created_by=$2 and operation_id=$3",
@@ -274,6 +285,7 @@ export function emissionRoutes(
         if (
           replay.environment !== input.environment ||
           (replay.request_hash !== hash &&
+            !historicalPrepareHashes(input).includes(replay.request_hash) &&
             !(
               input.environment === "test" && replay.request_hash === legacyHash
             ))
@@ -296,10 +308,10 @@ export function emissionRoutes(
           409,
           "Restaura el borrador antes de preparar la factura.",
         );
-      if (draft.document_type !== "FE")
+      if (!["FE", "TE"].includes(draft.document_type))
         throw new HttpError(
           400,
-          "Este módulo admite factura electrónica nacional.",
+          "Este módulo admite factura y tiquete electrónico nacional.",
         );
       const old = (
         await db.query(
@@ -317,9 +329,11 @@ export function emissionRoutes(
           JSON.stringify(emissionOptionsInput.parse(old.options)) !==
           JSON.stringify(
             emissionOptionsInput.parse({
-              ...input.options,
+              ...(input.options ?? draft.commercial ?? {}),
               exchange_rate:
-                draft.currency === "CRC" ? "1" : input.options.exchange_rate,
+                draft.currency === "CRC"
+                  ? "1"
+                  : (input.options ?? draft.commercial ?? {}).exchange_rate,
             }),
           )
         )
@@ -335,12 +349,12 @@ export function emissionRoutes(
         db,
         tenantId,
         draft,
-        input.options,
+        emissionOptionsInput.parse(input.options ?? draft.commercial ?? {}),
       );
       await db.query("reset role");
       const row = (
         await db.query(
-          "insert into public.electronic_invoices(tenant_id,draft_id,draft_version,department_id,snapshot,options,created_by,operation_id,request_hash,environment) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) returning *",
+          "insert into public.electronic_invoices(tenant_id,draft_id,draft_version,department_id,snapshot,options,created_by,operation_id,request_hash,environment,document_type) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) returning *",
           [
             tenantId,
             draft.id,
@@ -352,13 +366,14 @@ export function emissionRoutes(
             input.operation_id,
             hash,
             input.environment,
+            draft.document_type,
           ],
         )
       ).rows[0];
       await requirePermission(
         db,
         tenantId,
-        "invoices.manage",
+        "invoices.prepare",
         draft.department_id,
       );
       const item = await decorate(db, row, config);
@@ -377,7 +392,7 @@ export function emissionRoutes(
         .object({
           version: z.int().positive(),
           expected_version: z.int().positive(),
-          options: emissionOptionsInput,
+          options: emissionOptionsInput.optional(),
         })
         .strict()
         .parse(req.body),
@@ -400,7 +415,7 @@ export function emissionRoutes(
       await requirePermission(
         db,
         tenantId,
-        "invoices.manage",
+        "invoices.prepare",
         old.department_id,
       );
       if (old.version !== input.version)
@@ -431,18 +446,18 @@ export function emissionRoutes(
         );
       if (
         draft.archived_at ||
-        draft.document_type !== "FE" ||
+        draft.document_type !== old.document_type ||
         draft.department_id !== old.department_id
       )
         throw new HttpError(
           409,
-          "El origen debe ser un borrador FE activo del mismo departamento.",
+          "El origen debe ser un borrador activo del mismo tipo y departamento.",
         );
       const { snapshot, result } = await snapshotFromDraft(
         db,
         tenantId,
         draft,
-        input.options,
+        emissionOptionsInput.parse(input.options ?? draft.commercial ?? {}),
       );
       await db.query("reset role");
       const row = (

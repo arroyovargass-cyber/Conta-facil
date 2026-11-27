@@ -71,6 +71,26 @@ describe("bounded real XAdES EPES", () => {
     expect(verifyInvoiceSignature(signed, material.certificatePem)).toBe(true);
     expect(signed).toContain("SigningCertificate>");
   });
+  it("signs the exact TE root/namespace pair and rejects crossed FE/TE profiles", () => {
+    const ticket = xml
+      .replaceAll("FacturaElectronica", "TiqueteElectronico")
+      .replace("/facturaElectronica", "/tiqueteElectronico");
+    const signed = signInvoiceXml(ticket, material);
+    expect(verifyInvoiceSignature(signed, material.certificatePem)).toBe(true);
+    expect(
+      verifyInvoiceSignature(
+        signed.replace("2260", "2261"),
+        material.certificatePem,
+      ),
+    ).toBe(false);
+    for (const bad of [
+      ticket.replace("/tiqueteElectronico", "/facturaElectronica"),
+      ticket.replaceAll("TiqueteElectronico", "FacturaElectronica"),
+    ])
+      expect(() => signInvoiceXml(bad, material)).toThrow(
+        "Unsupported invoice root",
+      );
+  });
   it("rejects tampered document, properties, external references and duplicates", () => {
     const signed = signInvoiceXml(xml, material);
     for (const changed of [

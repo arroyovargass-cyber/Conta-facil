@@ -138,6 +138,7 @@ for (const owner of [true, false]) {
         ).toBeVisible();
         expect(payload).toEqual({
           environment: "test",
+          document_type: "FE",
           branch_code: "001",
           terminal_code: "00001",
           starting_value: "125",
@@ -176,6 +177,7 @@ for (const owner of [true, false]) {
         ).toBeVisible();
         expect(payload).toEqual({
           environment: "production",
+          document_type: "FE",
           branch_code: "001",
           terminal_code: "00001",
           starting_value: "405",

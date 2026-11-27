@@ -316,14 +316,35 @@ test("production preparation and issuance keep the document environment and requ
       document_type: "FE",
       archived_at: null,
       customer_snapshot: { name: "Venta autorizada" },
+      receiver_mode: "occasional",
+      customer_id: null,
+      department_id: department,
+      notes: "",
+      lines: [],
+      commercial: {},
+      other_charges: [],
       currency: "CRC",
     };
     await page.route("**/api/companies/*/invoice-drafts**", async (route) => {
-      await route.fulfill({
-        json: new URL(route.request().url()).pathname.endsWith(draftId)
-          ? { item: draft }
-          : { items: [draft], nextCursor: null },
-      });
+      const request = route.request();
+      if (request.method() === "PATCH") {
+        const body = request.postDataJSON();
+        await route.fulfill({
+          json: {
+            item: {
+              ...draft,
+              ...body,
+              version: 2,
+              customer_snapshot: body.receiver,
+            },
+          },
+        });
+      } else
+        await route.fulfill({
+          json: new URL(request.url()).pathname.endsWith(draftId)
+            ? { item: draft }
+            : { items: [draft], nextCursor: null },
+        });
     });
     await page.route("**/api/companies/*/invoices**", async (route) => {
       const request = route.request();
@@ -363,12 +384,23 @@ test("production preparation and issuance keep the document environment and requ
     });
     await login(page, fixture);
     await nav(page, "Facturación");
-    await page.getByLabel("Borrador nacional FE").selectOption(draftId);
-    await page.getByLabel("Sucursal (3 dígitos)").fill("001");
+    await page
+      .getByRole("button", { name: "Nueva factura", exact: true })
+      .click();
+    await page
+      .getByLabel("Observaciones", { exact: true })
+      .fill("Cambios exclusivos de Pruebas");
     await page.getByRole("button", { name: "Producción", exact: true }).click();
-    await expect(page.getByLabel("Borrador nacional FE")).toHaveValue("");
-    await expect(page.getByLabel("Sucursal (3 dígitos)")).toHaveValue("");
-    await page.getByLabel("Borrador nacional FE").selectOption(draftId);
+    await expect(page.getByLabel("Observaciones", { exact: true })).toHaveCount(
+      0,
+    );
+    await page.getByText("Preparar desde borrador", { exact: true }).click();
+    await page
+      .getByRole("combobox", { name: "Borrador nacional FE o TE", exact: true })
+      .selectOption(draftId);
+    await expect(page.getByLabel("Observaciones", { exact: true })).toHaveValue(
+      "",
+    );
     await page
       .getByRole("button", { name: "Guardar preparación", exact: true })
       .click();
@@ -381,7 +413,7 @@ test("production preparation and issuance keep the document environment and requ
     await expect(detail).not.toContainText("STAG");
     await detail
       .getByRole("button", {
-        name: "Revisar emisión en producción",
+        name: "Facturar en producción",
         exact: true,
       })
       .click();

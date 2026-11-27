@@ -15,6 +15,23 @@ const options = (extra = {}) =>
     payment_methods: [{ code: "01", amount: "2260" }],
     ...extra,
   });
+it("blocks unresolved 4% service IVA refunds on cards while preserving cash sales", () => {
+  const value = input();
+  value.lines[0].fiscal.cabys = "8399000000000";
+  value.lines[0].fiscal.tariff_code = "04";
+  value.options = options({
+    payment_methods: [{ code: "02", amount: "2080" }],
+  });
+  expect(prepareEmission(value).issues).toContainEqual(
+    expect.objectContaining({ code: "IVA_RETURN_ELIGIBILITY_UNVERIFIED" }),
+  );
+  value.options = options({
+    payment_methods: [{ code: "01", amount: "2080" }],
+  });
+  expect(prepareEmission(value).issues).not.toContainEqual(
+    expect.objectContaining({ code: "IVA_RETURN_ELIGIBILITY_UNVERIFIED" }),
+  );
+});
 const input = (extra = {}) => ({
   document_type: "FE",
   currency: "CRC" as const,
@@ -55,6 +72,7 @@ it("preserves incomplete preparation with bounded strict fields", () => {
     branch_code: "",
     terminal_code: "",
     issuer_activity: "",
+    references: [],
   });
   expect(
     emissionOptionsInput.parse({ payment_methods: [{ code: "", amount: "" }] })
@@ -180,8 +198,8 @@ it("allows ordinary credit without payments but requires a positive bounded term
     }),
   ).toContain("PAYMENT_TOTAL_MISMATCH");
 });
-it("blocks TE, non-national receivers and incomplete fiscal preparation", () => {
-  expect(codes({ document_type: "TE" })).toContain("DOCUMENT_TYPE_UNSUPPORTED");
+it("allows explicit TE and blocks non-national FE receivers and incomplete fiscal preparation", () => {
+  expect(codes({ document_type: "TE" })).toEqual([]);
   expect(
     codes({ receiver: receiverInput.parse({ domicile: "foreign" }) }),
   ).toContain("NATIONAL_RECEIVER_REQUIRED");
@@ -201,8 +219,87 @@ it("blocks TE, non-national receivers and incomplete fiscal preparation", () => 
   for (const change of [
     { branch_code: "000" },
     { terminal_code: "00000" },
-    { issuer_activity: "abc123" },
+    { issuer_activity: "abc12" },
   ])
     expect(codes({ options: options(change) }).length).toBeGreaterThan(0);
   expect(codes({ lines: [] })).toContain("INVALID_LINE_COUNT");
+});
+
+it("prepares an explicit consumer TE and preserves six-character dotted activities", () => {
+  expect(
+    codes({
+      document_type: "TE",
+      receiver: receiverInput.parse({}),
+      options: options({ issuer_activity: "4520.0" }),
+    }),
+  ).toEqual([]);
+  expect(codes({ document_type: "NC" })).toContain("DOCUMENT_TYPE_UNSUPPORTED");
+});
+
+it("reconciles payments to the total including frozen other charges", () => {
+  const result = prepareEmission(
+    input({
+      other_charges: [
+        { code: "08", mode: "amount", amount: "10", description: "Depósito" },
+      ],
+      options: options({ payment_methods: [{ code: "01", amount: "2270" }] }),
+    }),
+  );
+  expect(result.issues).toEqual([]);
+  expect(result.totals).toMatchObject({
+    status: "complete",
+    otherCharges: "10.00000",
+    total: "2270.00000",
+  });
+});
+
+it("requires the official description for payment99 without making complete ordinary payments change", () => {
+  expect(
+    codes({
+      options: options({
+        payment_methods: [
+          { code: "99", amount: "2260", other_description: "Acuerdo de pago" },
+        ],
+      }),
+    }),
+  ).toEqual([]);
+  for (const other_description of ["", "abcd"])
+    expect(
+      codes({
+        options: options({
+          payment_methods: [{ code: "99", amount: "2260", other_description }],
+        }),
+      }),
+    ).toContain("PAYMENT_OTHER_DETAILS_MISSING");
+});
+
+it("preserves incomplete references but requires official conditions before issuance", () => {
+  const reference = {
+    document_type: "01",
+    number: "5".repeat(50),
+    issue_date: "2026-01-01T12:00:00-06:00",
+    code: "04",
+    reason: "Documento relacionado",
+  };
+  expect(codes({ options: options({ references: [reference] }) })).toEqual([]);
+  for (const change of [
+    { document_type: "16" },
+    { document_type: "09" },
+    { document_type: "99", document_other: "Otro" },
+    { number: "123" },
+    { code: "17" },
+    { code: "99", code_other: "Otro" },
+    { reason: "ab" },
+    { issue_date: "2026-01-01" },
+  ])
+    expect(
+      codes({ options: options({ references: [{ ...reference, ...change }] }) })
+        .length,
+    ).toBeGreaterThan(0);
+  expect(emissionOptionsInput.safeParse({ references: [{}] }).success).toBe(
+    true,
+  );
+  expect(codes({ options: options({ references: [{}] }) })).toContain(
+    "REFERENCE_DETAILS_MISSING",
+  );
 });

@@ -313,6 +313,61 @@ it("preserves legacy activities while completing unrelated company fields", asyn
   expect(saved.statusCode, saved.body).toBe(200);
   expect(saved.json().item.activities[0].code).toBe("legacy-1");
 });
+it("creates and updates exact CIIU4 activity codes without removing their periods", async () => {
+  const made = await request("/company-administration", "POST", {
+    ...payload(),
+    activities: [
+      {
+        code: "4520.0",
+        name: "Actividad declarada de prueba",
+        primary: true,
+        source_url: "https://api.hacienda.go.cr/fe/ae",
+      },
+    ],
+  });
+  expect(made.statusCode, made.body).toBe(200);
+  const item = made.json().item;
+  expect(item.activities[0].code).toBe("4520.0");
+  const input = Object.fromEntries(
+    [
+      "legal_name",
+      "trade_name",
+      "person_type",
+      "identification_type",
+      "identification",
+      "contact_email",
+      "phone",
+      "address",
+      "active",
+      "configuration",
+      "activities",
+    ].map((key) => [key, item[key]]),
+  );
+  const saved = await request("/company-administration/" + item.id, "PATCH", {
+    ...input,
+    expected_version: item.configuration_version,
+    activities: [
+      { ...item.activities[0], primary: false },
+      { code: "4100.0", name: "Segunda actividad declarada", primary: true },
+    ],
+  });
+  expect(saved.statusCode, saved.body).toBe(200);
+  expect(
+    saved
+      .json()
+      .item.activities.map((activity: { code: string }) => activity.code),
+  ).toEqual(["4100.0", "4520.0"]);
+  const malformed = await request(
+    "/company-administration/" + item.id,
+    "PATCH",
+    {
+      ...input,
+      expected_version: saved.json().item.configuration_version,
+      activities: [{ code: "45200.0", name: "Código inválido", primary: true }],
+    },
+  );
+  expect(malformed.statusCode, malformed.body).toBe(400);
+});
 it("handles five simultaneous creates without exhausting the runtime pool", async () => {
   const stamp = Date.now() % 800000;
   const replies = await Promise.all(
