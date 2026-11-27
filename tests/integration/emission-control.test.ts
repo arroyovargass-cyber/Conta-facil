@@ -460,8 +460,18 @@ it("workers authorize the actual issuer when the preparer is a different user", 
     [row.tenant_id, f.userId],
   );
   try {
+    // Tenant grants do not restrict the explicit platform owner role.
+    expect((await read())[0].id).toBe(row.id);
+    await f.pool.query(
+      "delete from private.platform_operators where user_id=$1",
+      [f.userId],
+    );
     expect(await read()).toEqual([]);
   } finally {
+    await f.pool.query(
+      "insert into private.platform_operators(user_id) values($1) on conflict do nothing",
+      [f.userId],
+    );
     await f.pool.query(
       "insert into public.role_permissions(tenant_id,role_id,permission) select tenant_id,role_id,'invoices.emit' from public.membership_roles where tenant_id=$1 and user_id=$2 on conflict do nothing",
       [row.tenant_id, f.userId],

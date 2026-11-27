@@ -178,7 +178,13 @@ it("enrolls real TOTP and allows shared-company access", async () => {
       .json()
       .items.map((i: any) => i.id)
       .sort(),
-  ).toEqual([tenantA, tenantB].sort());
+  ).toEqual(expect.arrayContaining([tenantA, tenantB]));
+  expect(r.json().items).toHaveLength(
+    Number(
+      (await pool.query("select count(*) n from public.tenants where active"))
+        .rows[0].n,
+    ),
+  );
   const raw = await pool.query(
     "select encrypted_tokens from private.sessions where user_id=$1 order by last_seen desc limit 1",
     [adminId],

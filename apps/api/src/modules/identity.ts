@@ -223,7 +223,7 @@ export function identity(pool: pg.Pool, config: AppConfig) {
     app.get("/api/auth/session", async (req) => {
       const p = await authenticate(req);
       const r = await pool.query(
-        "select name from public.profiles where id=$1",
+        "select p.name,o.role_code as platform_role from public.profiles p left join private.platform_operators o on o.user_id=p.id where p.id=$1",
         [p.userId],
       );
       const csrf = csrfForSession(req.cookies.cf_session!, config.SESSION_KEY);
@@ -239,7 +239,11 @@ export function identity(pool: pg.Pool, config: AppConfig) {
       const auth = await authClient(p);
       const factors = await auth.auth.mfa.listFactors();
       return {
-        user: { id: p.userId, name: r.rows[0].name },
+        user: {
+          id: p.userId,
+          name: r.rows[0].name,
+          platform_role: r.rows[0].platform_role ?? null,
+        },
         csrf,
         aal: p.claims.aal,
         mfaRequired: isAdmin.rows[0].required,

@@ -263,12 +263,19 @@ it("requires HTTPS outside automated tests even with a verified inspector", asyn
     await development.close();
   }
 });
-it("denies Hacienda metadata and mutations after permission revocation", async () => {
+it("denies Hacienda metadata and mutations after platform authority and tenant permissions are revoked", async () => {
   await f.pool.query(
     "delete from public.role_permissions where tenant_id=$1 and permission in('hacienda.read','hacienda.credentials.manage')",
     [f.tenants[1]],
   );
   try {
+    expect((await request("", "GET", undefined, f.tenants[1])).statusCode).toBe(
+      200,
+    );
+    await f.pool.query(
+      "delete from private.platform_operators where user_id=$1",
+      [f.userId],
+    );
     expect((await request("", "GET", undefined, f.tenants[1])).statusCode).toBe(
       403,
     );
@@ -277,6 +284,10 @@ it("denies Hacienda metadata and mutations after permission revocation", async (
         .statusCode,
     ).toBe(403);
   } finally {
+    await f.pool.query(
+      "insert into private.platform_operators(user_id) values($1) on conflict do nothing",
+      [f.userId],
+    );
     await f.pool.query(
       "insert into public.role_permissions select tenant_id,id,p from public.roles cross join unnest(array['hacienda.read','hacienda.credentials.manage']) p where tenant_id=$1 and code='admin' on conflict do nothing",
       [f.tenants[1]],

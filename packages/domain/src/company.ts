@@ -23,6 +23,11 @@ export const documentTypes = [
   "FEE",
   "REP",
 ] as const;
+/** Organizational defaults for new companies; never an emission-counter confirmation. */
+export const initialBillingLocation = {
+  branch_code: "001",
+  terminal_code: "00001",
+} as const;
 const location = z
   .object({
     province: text(1).default(""),
@@ -219,7 +224,22 @@ export const createCompanyInput = base
         "Selecciona tipo de persona e identificación para la nueva empresa.",
       path: ["identification_type"],
     },
-  );
+  )
+  .transform((value) => ({
+    ...value,
+    configuration: {
+      ...value.configuration,
+      billing: {
+        ...value.configuration.billing,
+        branch_code:
+          value.configuration.billing.branch_code ||
+          initialBillingLocation.branch_code,
+        terminal_code:
+          value.configuration.billing.terminal_code ||
+          initialBillingLocation.terminal_code,
+      },
+    },
+  }));
 export const updateCompanyInput = base
   .extend({ expected_version: z.number().int().positive() })
   .superRefine(validate);

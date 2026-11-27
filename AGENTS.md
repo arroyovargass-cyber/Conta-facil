@@ -72,4 +72,14 @@ Consultar solo las áreas necesarias y comprobar que este mapa sigue vigente.
 - Entregar un resumen breve: hallazgo, archivos afectados, corrección, pruebas con resultados reales, riesgos y pendientes. Identificar el commit o versión revisada, estado de Graphify y si fue necesario usar GitHub como respaldo.
 - Distinguir explícitamente lo implementado, lo probado, lo desplegado y lo validado oficialmente. No afirmar que se realizaron acciones no ejecutadas.
 
+## 8. Plataforma global y propietario
+
+- Toda funcionalidad general, corrección o módulo se desarrolla para la plataforma completa. Las empresas existentes y futuras reciben el mismo código según sus permisos y configuración; no condicionar funciones a una empresa o cuenta codificada en el frontend.
+- Separar funciones generales, configuración empresarial, datos fiscales/contables y autorizaciones individuales. Los catálogos públicos verificables se comparten; clientes, credenciales, certificados, documentos y consecutivos permanecen aislados.
+- El propietario tiene el rol de plataforma `SUPER_ADMIN_GLOBAL`, persistido en el registro privado de operadores y vinculado a su identificador autenticado. Su autorización no requiere membresías ni roles empresariales y no puede ser modificada por administradores de empresa o usuarios secundarios.
+- No aceptar el rol global desde formularios, parámetros del cliente ni `user_metadata`. No concederlo a otros usuarios. Mantener MFA, validación de sesión y revocación, RLS, auditoría, documentos definitivos inmutables y comprobaciones tributarias también para el propietario.
+- El alta de empresa debe inicializar atómicamente la estructura general disponible con datos propios e idempotencia. Nunca copiar secretos, movimientos, impuestos supuestos o numeraciones de otra empresa. Los requisitos fiscales que necesitan confirmación real permanecen pendientes y visibles.
+- Probar cada cambio transversal en una empresa existente y otra nueva, con propietario global sin membresía, administrador secundario y usuario limitado. Verificar operaciones de botones, aislamiento, configuración independiente y persistencia tras cierre/reingreso; no basta su apariencia.
+- Los módulos contables, estados financieros, recepción automática y otros perfiles fiscales pendientes deben identificarse como tales. Un permiso global no convierte un módulo ausente en una función operativa.
+
 Las herramientas, reglas de seguridad y autorizaciones efectivas del entorno prevalecen sobre este documento. Si un agente no lee AGENTS.md automáticamente, incluir una referencia explícita en su prompt de trabajo.

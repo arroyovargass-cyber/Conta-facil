@@ -28,7 +28,10 @@ async function login(
   await expect(
     page.getByRole("heading", { name: "¿Con cuál empresa trabajamos?" }),
   ).toBeVisible();
-  await page.getByRole("button", { name: /Empresa Norte/ }).click();
+  await page
+    .getByRole("button", { name: /Empresa Norte/ })
+    .filter({ hasText: fixture.tag })
+    .click();
   await expect(
     page.getByRole("heading", { name: "Tu empresa, en orden." }),
   ).toBeVisible();
@@ -165,7 +168,10 @@ test("finds later-page records in server search and keeps company scopes separat
     const menu = page.getByRole("button", { name: "Abrir menú", exact: true });
     if (await menu.isVisible()) await menu.click();
     await page.locator(".company-select").click();
-    await page.getByRole("button", { name: /Empresa Sur/ }).click();
+    await page
+      .getByRole("button", { name: /Empresa Sur/ })
+      .filter({ hasText: fixture.tag })
+      .click();
     await navigate(page, "Estructura organizativa");
     await expect(
       page.getByRole("cell", { name: "Solo Sur", exact: true }),
@@ -227,7 +233,10 @@ test("never shows the previous user company list after logout and a new login", 
     };
     await page.goto("/");
     await enter(old);
-    await page.getByRole("button", { name: /Empresa Norte/ }).click();
+    await page
+      .getByRole("button", { name: /Empresa Norte/ })
+      .filter({ hasText: old.tag })
+      .click();
     await expect(
       page.getByRole("heading", { name: "Tu empresa, en orden." }),
     ).toBeVisible();

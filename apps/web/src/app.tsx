@@ -742,7 +742,11 @@ export function App() {
             </span>
             <span>
               <strong>{session.user.name}</strong>
-              <small>Sesión protegida</small>
+              <small title={session.user.platform_role ?? undefined}>
+                {session.user.platform_role === "SUPER_ADMIN_GLOBAL"
+                  ? "Superadministrador global"
+                  : "Sesión protegida"}
+              </small>
             </span>
             <LogOut size={16} />
           </button>
@@ -1658,8 +1662,7 @@ export function App() {
                                 "Consultar reportes e indicadores",
                               "invoices.create":
                                 "Crear nuevos borradores (MFA)",
-                              "invoices.edit":
-                                "Modificar borradores (MFA)",
+                              "invoices.edit": "Modificar borradores (MFA)",
                               "invoices.delete":
                                 "Archivar y restaurar borradores (MFA)",
                               "invoices.manage":

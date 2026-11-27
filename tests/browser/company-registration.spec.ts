@@ -22,7 +22,10 @@ async function login(
     .fill(totp(await page.locator("details code").innerText()));
   await page.getByRole("button", { name: "Verificar y continuar" }).click();
   if (!selectCompany) return;
-  await page.getByRole("button", { name: /Empresa Norte/ }).click();
+  await page
+    .getByRole("button", { name: /Empresa Norte/ })
+    .filter({ hasText: f.tag })
+    .click();
   const menu = page.getByRole("button", { name: "Abrir menú", exact: true });
   if (await menu.isVisible()) await menu.click();
   await page
@@ -34,14 +37,13 @@ test("owner creates and reopens a basic company with six configuration tabs", as
   page,
 }) => {
   const f = await workspace({ role: "admin", companies: 2, systemAdmin: true });
+  const createdName = "Empresa del formulario " + f.tag;
   try {
     await login(page, f);
     await page
       .getByRole("button", { name: "Nueva empresa", exact: true })
       .click();
-    await page
-      .getByLabel("Razón social *", { exact: true })
-      .fill("Empresa del formulario");
+    await page.getByLabel("Razón social *", { exact: true }).fill(createdName);
     await page
       .getByRole("combobox", { name: "Tipo de persona *", exact: true })
       .selectOption("legal");
@@ -59,9 +61,9 @@ test("owner creates and reopens a basic company with six configuration tabs", as
     ).toBeVisible();
     await page.reload();
     await expect(
-      page.getByRole("button", { name: /Empresa del formulario/ }),
+      page.getByRole("button", { name: new RegExp(createdName) }),
     ).toBeVisible();
-    await page.getByRole("button", { name: /Empresa del formulario/ }).click();
+    await page.getByRole("button", { name: new RegExp(createdName) }).click();
     const menu = page.getByRole("button", { name: "Abrir menú", exact: true });
     if (await menu.isVisible()) await menu.click();
     await page
@@ -70,7 +72,7 @@ test("owner creates and reopens a basic company with six configuration tabs", as
       .click();
     await expect(
       page.getByLabel("Razón social *", { exact: true }),
-    ).toHaveValue("Empresa del formulario");
+    ).toHaveValue(createdName);
     await expect(page.getByRole("tab")).toHaveCount(6);
     await page
       .getByRole("button", { name: "Editar empresa", exact: true })
@@ -153,7 +155,9 @@ test("owner can reopen an inactive company when no active companies remain", asy
     await page.getByRole("button", { name: "Verificar y continuar" }).click();
     await page
       .getByRole("button", {
-        name: /Administrar inactiva: Empresa de prueba Norte/,
+        name: new RegExp(
+          "Administrar inactiva: Empresa de prueba Norte.*" + f.tag,
+        ),
       })
       .click();
     await expect(
